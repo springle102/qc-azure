@@ -1140,11 +1140,12 @@ function getSheetValue(row, headerIndex, key, fieldOverride = null) {
 }
 
 function isDecorativeGoogleSheetRow(row, headerIndex, fieldOverride = null) {
-  const populatedCells = row.filter((cell) => String(cell ?? '').trim()).length;
-  if (populatedCells === 0) return true;
   const seriesId = getSheetValue(row, headerIndex, 'seriesId', fieldOverride);
   const chapterNumber = getSheetValue(row, headerIndex, 'chapterNumber');
-  return populatedCells === 1 && !seriesId && !chapterNumber;
+  // Tabs contain instructions, price tables, and helper rows in addition to
+  // deadline records. A row without either key is not a deadline row and must
+  // not block reconciliation of deleted deadlines.
+  return !seriesId && !chapterNumber;
 }
 
 function isIncompleteGoogleSheetRow(row, headerIndex, fieldOverride = null) {
