@@ -450,6 +450,10 @@
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), 0 0 20px rgba(59, 130, 246, 0.2);
 }
 
+:root:not([data-theme='light']) .kpi-card:hover {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.42), 0 7px 20px rgba(59, 130, 246, 0.22);
+}
+
 .kpi-card::before {
   content: '';
   position: absolute;
