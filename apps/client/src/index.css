@@ -1,0 +1,266 @@
+/* ==========================================================================
+   Webtoon QC Platform - Design System
+   Palette: Electric Blue Gradients & Obsidian Black
+   ========================================================================== */
+
+:root {
+  /* Obsidian & Deep Blue Space */
+  --bg-darkest: #050811;
+  --bg-darker: #070c18;
+  --bg-surface: #0c1427;
+  --bg-card: rgba(13, 22, 42, 0.75);
+  --bg-card-hover: rgba(18, 30, 58, 0.85);
+  --bg-glass: rgba(15, 23, 42, 0.65);
+
+  /* Primary Blue Gradients */
+  --grad-primary: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 50%, #06b6d4 100%);
+  --grad-primary-hover: linear-gradient(135deg, #2563eb 0%, #60a5fa 50%, #22d3ee 100%);
+  --grad-blue-dark: linear-gradient(180deg, rgba(30, 58, 138, 0.35) 0%, rgba(15, 23, 42, 0.6) 100%);
+  --grad-card-border: linear-gradient(135deg, rgba(59, 130, 246, 0.45) 0%, rgba(6, 182, 212, 0.2) 50%, rgba(255, 255, 255, 0.05) 100%);
+  --grad-text: linear-gradient(135deg, #ffffff 30%, #93c5fd 100%);
+  --grad-cyan-glow: linear-gradient(135deg, #38bdf8 0%, #3b82f6 100%);
+
+  /* Neon & Accent Colors */
+  --blue-glow: #3b82f6;
+  --cyan-accent: #06b6d4;
+  --cyan-bright: #38bdf8;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-sub: #64748b;
+  --border-subtle: rgba(59, 130, 246, 0.16);
+  --border-bright: rgba(59, 130, 246, 0.38);
+
+  /* Status Colors */
+  --status-critical: #f43f5e;
+  --status-high: #fb923c;
+  --status-medium: #facc15;
+  --status-low: #38bdf8;
+  --status-success: #10b981;
+
+  /* Typography */
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background-color: var(--bg-darkest);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Ambient Radial Glow on Dark Background */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 15%;
+  width: 60vw;
+  height: 40vh;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.15) 0%, rgba(6, 182, 212, 0.04) 50%, transparent 80%);
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  bottom: 0;
+  right: 10%;
+  width: 50vw;
+  height: 50vh;
+  background: radial-gradient(circle, rgba(29, 78, 216, 0.12) 0%, transparent 70%);
+  filter: blur(90px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 1;
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-darker);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.35);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.6);
+}
+
+/* Utilities */
+.text-gradient {
+  background: var(--grad-text);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-blue {
+  background: var(--grad-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.glass-panel {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  transition: all 0.25s ease;
+}
+
+.glass-panel:hover {
+  border-color: var(--border-bright);
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5), 0 0 20px rgba(59, 130, 246, 0.15);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.6; filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.4)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 20px rgba(6, 182, 212, 0.8)); }
+}
+
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateX(30px) scale(0.95); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.fade-in {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+/* Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.badge-role-admin {
+  background: rgba(168, 85, 247, 0.18);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+}
+
+.badge-role-qc {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.45);
+}
+
+.badge-role-freelancer {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+/* Priority Badges */
+.badge-priority-khan-cap {
+  background: rgba(244, 63, 94, 0.2);
+  color: #fda4af;
+  border: 1px solid rgba(244, 63, 94, 0.5);
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.25);
+}
+.badge-priority-cao {
+  background: rgba(251, 146, 60, 0.18);
+  color: #fdba74;
+  border: 1px solid rgba(251, 146, 60, 0.4);
+}
+.badge-priority-trung-binh {
+  background: rgba(59, 130, 246, 0.18);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+}
+.badge-priority-thap {
+  background: rgba(100, 116, 139, 0.2);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+/* Status Badges */
+.badge-status-cho-nhan {
+  background: rgba(148, 163, 184, 0.18);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+.badge-status-dang-thuc-hien {
+  background: rgba(59, 130, 246, 0.22);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.25);
+}
+.badge-status-cho-qc-duyet {
+  background: rgba(234, 179, 8, 0.2);
+  color: #fde047;
+  border: 1px solid rgba(234, 179, 8, 0.45);
+}
+.badge-status-can-sua-loi {
+  background: rgba(239, 68, 68, 0.22);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.3);
+}
+.badge-status-hoan-thanh {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+
+/* Severity Badges */
+.badge-severity-critical {
+  background: rgba(225, 29, 72, 0.25);
+  color: #fda4af;
+  border: 1px solid rgba(225, 29, 72, 0.6);
+  box-shadow: 0 0 14px rgba(225, 29, 72, 0.35);
+}
+.badge-severity-high {
+  background: rgba(249, 115, 22, 0.22);
+  color: #fdba74;
+  border: 1px solid rgba(249, 115, 22, 0.5);
+}
+.badge-severity-medium {
+  background: rgba(234, 179, 8, 0.2);
+  color: #fde047;
+  border: 1px solid rgba(234, 179, 8, 0.45);
+}
+.badge-severity-low {
+  background: rgba(56, 189, 248, 0.2);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+}

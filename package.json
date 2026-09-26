@@ -1,0 +1,13 @@
+{
+  "name": "qc-webtoon-ycomm",
+  "version": "1.0.0",
+  "description": "Hệ thống quản lý QC Webtoon chuyên nghiệp cho Y-COMM Studio (React + Node.js)",
+  "scripts": {
+    "dev:client": "cd apps/client && npm run dev",
+    "dev:server": "cd apps/server && npm run dev",
+    "build:client": "cd apps/client && npm run build"
+  },
+  "keywords": ["webtoon", "qc", "ycomm", "react", "nodejs"],
+  "author": "Y-COMM",
+  "license": "ISC"
+}
