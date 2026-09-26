@@ -1819,10 +1819,15 @@
 }
 
 .task-status-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
   color: var(--text-sub);
   font-size: 17px;
-  line-height: 0.75;
+  line-height: 1;
   transition: transform 0.2s ease;
 }
 
@@ -2755,6 +2760,16 @@
   background: rgba(37, 99, 235, 0.06);
 }
 
+:root[data-theme='light'] .general-field-row {
+  background: rgba(248, 250, 252, 0.96);
+  border-color: rgba(148, 163, 184, 0.36);
+}
+
+:root[data-theme='light'] .general-field-row:hover {
+  background: #ffffff;
+  border-color: rgba(37, 99, 235, 0.28);
+}
+
 :root[data-theme='light'] .dashboard-link-card,
 :root[data-theme='light'] .qc-notification-panel,
 :root[data-theme='light'] .modal-content,
@@ -2816,6 +2831,12 @@
 :root[data-theme='light'] .role-qc {
   color: #0e7490;
   background: rgba(14, 116, 144, 0.12);
+}
+
+:root[data-theme='light'] .qc-kpi-card.tone-blue .kpi-icon-wrap {
+  color: #0284c7;
+  background: rgba(37, 99, 235, 0.1);
+  border-color: rgba(37, 99, 235, 0.24);
 }
 
 :root[data-theme='light'] .role-freelancer {
