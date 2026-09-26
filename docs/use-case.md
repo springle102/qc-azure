@@ -24,40 +24,32 @@ flowchart TB
         U4(["Xem task<br/>được giao"])
         U5(["Nhận task"])
         U6(["Cập nhật<br/>trạng thái task"])
-        U7(["Xem lỗi"])
-        U8(["Xem mã QR"])
-        U9(["Cập nhật mã QR"])
 
-        U10(["Tạo tài khoản"])
-        U11(["Tải lên guide"])
-        U12(["Tải lên folder<br/>tài nguyên"])
+        U9(["Tạo tài khoản"])
+        U10(["Tải lên guide"])
+        U11(["Tải lên folder<br/>tài nguyên"])
 
-        U13(["Tạo task"])
-        U14(["Phân công task<br/>cho Freelancer"])
-        U15(["Ghi nhận lỗi QC"])
+        U12(["Tạo task"])
+        U13(["Phân công task<br/>cho Freelancer"])
 
         U1 ~~~ U2
         U2 ~~~ U3
         U3 ~~~ U4
         U4 ~~~ U5
         U5 ~~~ U6
-        U6 ~~~ U7
-        U7 ~~~ U8
-        U8 ~~~ U9
+        U6 ~~~ U9
         U9 ~~~ U10
         U10 ~~~ U11
         U11 ~~~ U12
         U12 ~~~ U13
-        U13 ~~~ U14
-        U14 ~~~ U15
     end
 
     Admin --> U1
     Admin --> U2
     Admin --> U3
+    Admin --> U9
     Admin --> U10
     Admin --> U11
-    Admin --> U12
 
     QC --> U1
     QC --> U2
@@ -65,12 +57,8 @@ flowchart TB
     QC --> U4
     QC --> U5
     QC --> U6
-    QC --> U7
-    QC --> U8
-    QC --> U9
+    QC --> U12
     QC --> U13
-    QC --> U14
-    QC --> U15
 
     Freelancer --> U1
     Freelancer --> U2
@@ -78,6 +66,4 @@ flowchart TB
     Freelancer --> U4
     Freelancer --> U5
     Freelancer --> U6
-    Freelancer --> U7
-    Freelancer --> U8
     Freelancer --> U9

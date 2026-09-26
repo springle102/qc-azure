@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { IconCheckCircle, IconAlertTriangle, IconBug, IconX } from './Icons';
+import { IconCheckCircle, IconAlertTriangle, IconX } from './Icons';
 
 // Global toast dispatch helper
 let toastDispatch = null;
@@ -51,8 +51,6 @@ export function ToastContainer() {
             background: 'rgba(10, 17, 34, 0.95)',
             border: toast.type === 'error'
               ? '1px solid rgba(239, 68, 68, 0.5)'
-              : toast.type === 'bug'
-              ? '1px solid rgba(244, 63, 94, 0.5)'
               : '1px solid rgba(59, 130, 246, 0.5)',
             borderRadius: '12px',
             padding: '14px 18px',
@@ -69,8 +67,6 @@ export function ToastContainer() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {toast.type === 'error' ? (
               <IconAlertTriangle size={20} className="text-red-400" />
-            ) : toast.type === 'bug' ? (
-              <IconBug size={20} className="text-rose-400" />
             ) : (
               <IconCheckCircle size={20} className="text-cyan-400" />
             )}

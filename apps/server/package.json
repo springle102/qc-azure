@@ -9,10 +9,18 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^4.21.2"
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.4",
+    "express": "^4.22.3",
+    "pg": "^8.23.0"
   },
-  "keywords": ["webtoon", "qc", "ycomm", "nodejs", "api"],
+  "keywords": [
+    "webtoon",
+    "qc",
+    "ycomm",
+    "nodejs",
+    "api"
+  ],
   "author": "Y-COMM",
   "license": "ISC"
 }

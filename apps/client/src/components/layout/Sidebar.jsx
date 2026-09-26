@@ -3,24 +3,31 @@ import {
   IconDashboard,
   IconUsers,
   IconTasks,
-  IconQRCode,
-  IconBug,
   IconUser,
-  IconLogOut,
-  IconClock
+  IconLogOut
 } from '../common/Icons';
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
-  { id: 'profile', label: 'Hồ sơ cá nhân', icon: IconUser },
   { id: 'freelancers', label: 'Quản lý freelancer', icon: IconUsers },
-  { id: 'company-deadlines', label: 'Deadline công ty', icon: IconClock },
-  { id: 'deadlines', label: 'Quản lý deadline', icon: IconTasks },
-  { id: 'qrcodes', label: 'Quản lý QR', icon: IconQRCode },
-  { id: 'errors', label: 'Quản lý lỗi', icon: IconBug }
+  { id: 'deadlines', label: 'Quản lý Deadline', icon: IconTasks },
+  { id: 'pricing', label: 'Giá tiền', icon: IconTasks },
+  { id: 'settings', label: 'Cấu hình chung', icon: IconTasks },
+  { id: 'salary', label: 'Lương', icon: IconUsers },
+  { id: 'profile', label: 'Hồ sơ cá nhân', icon: IconUser }
 ];
 
-export function Sidebar({ currentView, onNavigate, currentUser, onOpenLogout, isOpen = false }) {
+const ROLE_VIEWS = {
+  Admin: ['dashboard', 'freelancers', 'deadlines', 'pricing', 'settings', 'salary', 'profile'],
+  QC: ['dashboard', 'profile', 'salary', 'deadlines'],
+  Freelancer: ['dashboard', 'profile', 'salary', 'deadlines']
+};
+
+export function Sidebar({ currentView, onNavigate, currentUser, role = 'QC', onOpenLogout, isOpen = false }) {
+  const visibleItems = NAV_ITEMS
+    .filter(({ id }) => (ROLE_VIEWS[role] || ROLE_VIEWS.Freelancer).includes(id))
+    .map((item) => item.id === 'deadlines' && role === 'Freelancer' ? { ...item, label: 'Deadline của tôi' } : item);
+
   return (
     <aside className={`app-sidebar ${isOpen ? 'open' : ''}`}>
       <div className="qc-sidebar-brand">
@@ -31,9 +38,9 @@ export function Sidebar({ currentView, onNavigate, currentUser, onOpenLogout, is
         </div>
       </div>
 
-      <div className="sidebar-section-title">Không gian QC</div>
-      <nav className="qc-sidebar-nav" aria-label="Điều hướng QC">
-        {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
+      <div className="sidebar-section-title">{role === 'Freelancer' ? 'Không gian Freelancer' : 'Không gian QC'}</div>
+      <nav className="qc-sidebar-nav" aria-label={role === 'Freelancer' ? 'Điều hướng Freelancer' : 'Điều hướng QC'}>
+        {visibleItems.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             type="button"
@@ -61,8 +68,8 @@ export function Sidebar({ currentView, onNavigate, currentUser, onOpenLogout, is
           {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'Q'}
         </div>
         <div className="qc-user-label">
-          <strong>{currentUser?.name || 'QC'}</strong>
-          <span>Vai trò kiểm soát</span>
+          <strong>{currentUser?.name || currentUser?.username || 'Account'}</strong>
+          <span>{currentUser?.role || '—'}</span>
         </div>
         {onOpenLogout && (
           <button type="button" onClick={onOpenLogout} className="icon-button" title="Đăng xuất">
