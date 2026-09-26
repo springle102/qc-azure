@@ -11,12 +11,13 @@ function getStoredSession() {
 }
 
 async function request(path, options = {}) {
+  const { timeoutMs = REQUEST_TIMEOUT_MS, ...fetchOptions } = options;
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
+      ...fetchOptions,
       headers: {
         'Content-Type': 'application/json',
         ...(getStoredSession()?.token ? { Authorization: 'Bearer ' + getStoredSession().token } : {}),
@@ -102,7 +103,7 @@ export const api = {
     method: 'PATCH',
     body: JSON.stringify(settings)
   }),
-  syncGoogleSheet: () => request('/google-sheet/sync', { method: 'POST' }),
+  syncGoogleSheet: () => request('/google-sheet/sync', { method: 'POST', timeoutMs: 120000 }),
   getDifficultyLevels: () => request('/difficulty-levels'),
   createDifficultyLevel: (level) => request('/difficulty-levels', {
     method: 'POST',

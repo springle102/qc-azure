@@ -79,7 +79,8 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
       const result = await api.syncGoogleSheet();
       const skippedMessage = result.skipped ? ' Bỏ qua ' + result.skipped + ' dòng thiếu dữ liệu bắt buộc.' : '';
       const duplicateMessage = result.duplicates ? ' Có ' + result.duplicates + ' dòng trùng, đã ưu tiên bản ghi cuối.' : '';
-      showToast('Đã đồng bộ ' + result.total + ' dòng (' + result.inserted + ' mới, ' + result.updated + ' cập nhật).' + skippedMessage + duplicateMessage, 'success');
+      const deletedMessage = result.deleted ? ' Đã xóa ' + result.deleted + ' dòng không còn trên Sheet.' : '';
+      showToast('Đã đồng bộ ' + result.total + ' dòng (' + result.inserted + ' mới, ' + result.updated + ' cập nhật).' + deletedMessage + skippedMessage + duplicateMessage, 'success');
       await onRefresh?.();
     } catch (error) {
       showToast(error.message || 'Không thể đồng bộ Google Sheet.', 'error');

@@ -17,6 +17,8 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const sessions = new Map();
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24;
+const GOOGLE_REQUEST_TIMEOUT_MS = 20_000;
+const SYNC_WRITE_CONCURRENCY = 8;
 
 app.use(cors());
 app.use(express.json({ limit: '5mb' }));
@@ -33,6 +35,31 @@ const emptyCollections = {
   fields: [],
   generalSettings: []
 };
+
+async function runWithConcurrency(items, worker, concurrency = SYNC_WRITE_CONCURRENCY) {
+  if (items.length === 0) return [];
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), items.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(items[index], index);
+    }
+  }));
+  return results;
+}
+
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 async function getCollection(collection) {
   if (!isDatabaseConfigured()) return emptyCollections[collection];
@@ -948,15 +975,18 @@ async function getGoogleAccessToken() {
   const assertion = `${unsignedToken}.${signature}`;
   let response;
   try {
-    response = await fetch('https://oauth2.googleapis.com/token', {
+    response = await fetchWithTimeout('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
         assertion
       })
-    });
-  } catch {
+    }, GOOGLE_REQUEST_TIMEOUT_MS);
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Google OAuth phản hồi quá lâu. Hãy kiểm tra Internet hoặc proxy của máy chạy backend.');
+    }
     throw new Error('Không thể kết nối Google OAuth. Hãy kiểm tra Internet của máy chạy backend.');
   }
 
@@ -977,10 +1007,13 @@ async function googleSheetsRequest(path) {
   const token = await getGoogleAccessToken();
   let response;
   try {
-    response = await fetch(`https://sheets.googleapis.com/v4/${path}`, {
+    response = await fetchWithTimeout(`https://sheets.googleapis.com/v4/${path}`, {
       headers: { Authorization: `Bearer ${token}` }
-    });
-  } catch {
+    }, GOOGLE_REQUEST_TIMEOUT_MS);
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Google Sheets API phản hồi quá lâu. Hãy kiểm tra Internet hoặc proxy của máy chạy backend.');
+    }
     throw new Error('Không thể kết nối Google Sheets API. Hãy kiểm tra Internet của máy chạy backend.');
   }
   if (!response.ok) {
@@ -1239,6 +1272,23 @@ function buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qc
   };
 }
 
+function normalizeSyncValue(value, column) {
+  if (value === null || value === undefined || value === '') return '';
+  if (['endTask', 'submittedAt'].includes(column)) {
+    const timestamp = new Date(value).getTime();
+    if (Number.isFinite(timestamp)) return String(timestamp);
+  }
+  if (['seriesId', 'chapterNumber', 'fIld', 'qcId', 'price', 'receivePrice', 'completionPercent'].includes(column)) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return String(numeric);
+  }
+  return String(value).trim();
+}
+
+function hasDeadlineSheetChanges(current, imported, columns) {
+  return columns.some((column) => normalizeSyncValue(current[column], column) !== normalizeSyncValue(imported[column], column));
+}
+
 async function syncGoogleSheet() {
   if (googleSheetSyncPromise) return googleSheetSyncPromise;
   googleSheetSyncPromise = (async () => {
@@ -1288,39 +1338,46 @@ async function syncGoogleSheet() {
     const uniqueRows = [...uniqueRowsByKey.values()];
 
     const allowedColumns = ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'completionPercent'];
-    let inserted = 0;
-    let updated = 0;
-    let deleted = 0;
-    for (const { data: row } of uniqueRows) {
-      const current = currentRows.find((item) => Number(item.seriesId) === row.seriesId && Number(item.chapterNumber) === row.chapterNumber);
+    const currentRowsByKey = new Map(currentRows.map((item) => [
+      `${Number(item.seriesId)}:${Number(item.chapterNumber)}`,
+      item
+    ]));
+    const writeResults = await runWithConcurrency(uniqueRows, async ({ data: row }) => {
+      const key = `${row.seriesId}:${row.chapterNumber}`;
+      const current = currentRowsByKey.get(key);
       if (current) {
+        if (!hasDeadlineSheetChanges(current, row, allowedColumns)) return 'unchanged';
         await updateRow('deadlines', { seriesId: row.seriesId, chapterNumber: row.chapterNumber }, row, allowedColumns);
-        updated += 1;
-      } else {
-        await insertRow('deadlines', {
-          ...row,
-          doingStartedAt: row.status === 'doing' ? new Date().toISOString() : null,
-          workDurationSeconds: 0
-        }, ['seriesId', 'chapterNumber', ...allowedColumns]);
-        inserted += 1;
+        return 'updated';
       }
-    }
+      await insertRow('deadlines', {
+        ...row,
+        doingStartedAt: row.status === 'doing' ? new Date().toISOString() : null,
+        workDurationSeconds: 0
+      }, ['seriesId', 'chapterNumber', ...allowedColumns]);
+      return 'inserted';
+    });
+    const inserted = writeResults.filter((result) => result === 'inserted').length;
+    const updated = writeResults.filter((result) => result === 'updated').length;
 
     // Google Sheet is the source of truth. Only reconcile deletions when every
     // non-empty row was parsed successfully; otherwise a malformed row could
     // be mistaken for a deleted row and remove valid data from the database.
+    let deleted = 0;
     if (skippedRows.length === 0) {
       const sheetKeys = new Set(uniqueRows.map(({ data }) => `${data.seriesId}:${data.chapterNumber}`));
-      for (const current of currentRows) {
+      const rowsToDelete = currentRows.filter((current) => {
         const key = `${Number(current.seriesId)}:${Number(current.chapterNumber)}`;
-        if (!sheetKeys.has(key)) {
-          const removedRows = await deleteRowsByKeys('deadlines', {
-            seriesId: current.seriesId,
-            chapterNumber: current.chapterNumber
-          });
-          deleted += removedRows.length;
-        }
-      }
+        return !sheetKeys.has(key);
+      });
+      const deletedCounts = await runWithConcurrency(rowsToDelete, async (current) => {
+        const removedRows = await deleteRowsByKeys('deadlines', {
+          seriesId: current.seriesId,
+          chapterNumber: current.chapterNumber
+        });
+        return removedRows.length;
+      });
+      deleted = deletedCounts.reduce((total, count) => total + count, 0);
     }
 
     const syncedAt = new Date().toISOString();
