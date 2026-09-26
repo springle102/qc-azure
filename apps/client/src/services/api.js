@@ -1,5 +1,6 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const SESSION_KEY = 'qc_webtoon_session';
+const REQUEST_TIMEOUT_MS = 15000;
 
 function getStoredSession() {
   try {
@@ -10,27 +11,40 @@ function getStoredSession() {
 }
 
 async function request(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(getStoredSession()?.token ? { Authorization: 'Bearer ' + getStoredSession().token } : {}),
-      ...(options.headers || {})
-    },
-    ...options
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  let payload = null;
   try {
-    payload = await response.json();
-  } catch {
-    payload = null;
-  }
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(getStoredSession()?.token ? { Authorization: 'Bearer ' + getStoredSession().token } : {}),
+        ...(options.headers || {})
+      },
+      signal: controller.signal
+    });
 
-  if (!response.ok) {
-    throw new Error(payload?.message || `Request failed with status ${response.status}`);
-  }
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
 
-  return payload?.data ?? payload;
+    if (!response.ok) {
+      throw new Error(payload?.message || `Request failed with status ${response.status}`);
+    }
+
+    return payload?.data ?? payload;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('Máy chủ phản hồi quá lâu. Vui lòng thử lại sau.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 export const api = {

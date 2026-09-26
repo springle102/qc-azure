@@ -1337,11 +1337,12 @@ async function syncGoogleSheetIfDue() {
   if (settings.googleSheetAutoSync !== true || !settings.googleSheetUrl) return;
   const lastSyncedAt = settings.googleSheetLastSyncedAt ? new Date(settings.googleSheetLastSyncedAt).getTime() : 0;
   if (Number.isFinite(lastSyncedAt) && Date.now() - lastSyncedAt < 5 * 60 * 1000) return;
-  try {
-    await syncGoogleSheet();
-  } catch (error) {
+
+  // Do not block read endpoints on Google OAuth, Sheets API, or row upserts.
+  // The explicit "Đồng bộ ngay" action still awaits syncGoogleSheet().
+  syncGoogleSheet().catch((error) => {
     console.error('Google Sheet auto sync failed:', error.message);
-  }
+  });
 }
 
 function getTaskStatus(task) {

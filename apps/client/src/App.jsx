@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
 import { Footer } from './components/layout/Footer';
@@ -35,6 +35,16 @@ const ROLE_VIEWS = {
   Freelancer: ['dashboard', 'profile', 'salary', 'deadlines']
 };
 
+const VIEW_RESOURCES = {
+  dashboard: ['dashboard', 'tasks', 'deadlines'],
+  freelancers: ['freelancers', 'accounts', 'fields'],
+  deadlines: ['deadlines', 'freelancers', 'qcs', 'fields', 'difficultyLevels', 'difficultyPrices'],
+  pricing: ['difficultyLevels', 'difficultyPrices', 'fields', 'bonusSettings'],
+  settings: ['fields', 'generalSettings'],
+  salary: ['freelancers', 'salaries', 'fields', 'bonusSettings'],
+  profile: []
+};
+
 const THEME_STORAGE_KEY = 'qc-webtoon-theme';
 
 function getInitialTheme() {
@@ -59,13 +69,8 @@ function canAccessView(role, view) {
   return (ROLE_VIEWS[role] || ROLE_VIEWS.Freelancer).includes(view);
 }
 
-async function loadResource(loader, fallback) {
-  try {
-    const value = await loader();
-    return value ?? fallback;
-  } catch {
-    return fallback;
-  }
+function getResourcesForView(view) {
+  return VIEW_RESOURCES[view] || VIEW_RESOURCES.dashboard;
 }
 
 export function App() {
@@ -77,6 +82,7 @@ export function App() {
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [loadWarning, setLoadWarning] = useState('');
   const [theme, setTheme] = useState(getInitialTheme);
+  const loadRequestId = useRef(0);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -99,34 +105,69 @@ export function App() {
       .finally(() => setIsAuthChecking(false));
   }, []);
 
+  const role = profile?.role;
+
   const loadData = useCallback(async () => {
-    if (!profile) {
+    if (!role) {
       setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
-    const accountLoader = profile.role === 'Admin' ? api.getAccounts : async () => [];
-    const [dashboard, tasks, freelancers, qcs, deadlines, difficultyLevels, difficultyPrices, bonusSettings, salaries, accounts, fields, generalSettings] = await Promise.all([
-      loadResource(api.getDashboard, EMPTY_DATA.dashboard),
-      loadResource(api.getTasks, []),
-      loadResource(api.getFreelancers, []),
-      loadResource(api.getQCs, []),
-      loadResource(api.getDeadlines, []),
-      loadResource(api.getDifficultyLevels, []),
-      loadResource(api.getDifficultyPrices, []),
-      loadResource(api.getBonusSettings, EMPTY_DATA.bonusSettings),
-      loadResource(api.getSalaries, []),
-      loadResource(accountLoader, []),
-      loadResource(api.getFields, []),
-      loadResource(api.getGeneralSettings, EMPTY_DATA.generalSettings)
-    ]);
+    const resources = getResourcesForView(currentView);
+    const requestId = ++loadRequestId.current;
+    if (resources.length === 0) {
+      setIsLoading(false);
+      setLoadWarning('');
+      return;
+    }
 
-    const apiUnavailable = [tasks, freelancers, qcs, deadlines, difficultyLevels, difficultyPrices, salaries].every((items) => items.length === 0);
-    setLoadWarning(apiUnavailable ? 'Chưa có dữ liệu từ backend hoặc Supabase.' : '');
-    setData({ dashboard, tasks, freelancers, qcs, deadlines, difficultyLevels, difficultyPrices, bonusSettings, salaries, accounts, fields, generalSettings });
+    setIsLoading(true);
+    const loaders = {
+      dashboard: api.getDashboard,
+      tasks: api.getTasks,
+      freelancers: api.getFreelancers,
+      qcs: api.getQCs,
+      deadlines: api.getDeadlines,
+      difficultyLevels: api.getDifficultyLevels,
+      difficultyPrices: api.getDifficultyPrices,
+      bonusSettings: api.getBonusSettings,
+      salaries: api.getSalaries,
+      accounts: role === 'Admin' ? api.getAccounts : async () => [],
+      fields: api.getFields,
+      generalSettings: api.getGeneralSettings
+    };
+    const fallbacks = {
+      dashboard: EMPTY_DATA.dashboard,
+      tasks: EMPTY_DATA.tasks,
+      freelancers: EMPTY_DATA.freelancers,
+      qcs: EMPTY_DATA.qcs,
+      deadlines: EMPTY_DATA.deadlines,
+      difficultyLevels: EMPTY_DATA.difficultyLevels,
+      difficultyPrices: EMPTY_DATA.difficultyPrices,
+      bonusSettings: EMPTY_DATA.bonusSettings,
+      salaries: EMPTY_DATA.salaries,
+      accounts: EMPTY_DATA.accounts,
+      fields: EMPTY_DATA.fields,
+      generalSettings: EMPTY_DATA.generalSettings
+    };
+    const results = await Promise.all(resources.map(async (resource) => {
+      try {
+        const value = await loaders[resource]();
+        return { resource, value: value ?? fallbacks[resource], failed: false };
+      } catch {
+        return { resource, value: fallbacks[resource], failed: true };
+      }
+    }));
+
+    if (requestId !== loadRequestId.current) return;
+
+    setLoadWarning(results.some((result) => result.failed) ? 'Một số dữ liệu chưa tải được. Vui lòng thử lại.' : '');
+    setData((current) => ({
+      ...current,
+      ...Object.fromEntries(results.map(({ resource, value }) => [resource, value]))
+    }));
     setIsLoading(false);
-  }, [profile]);
+  }, [currentView, role]);
 
   useEffect(() => {
     loadData();
@@ -189,12 +230,11 @@ export function App() {
         ...savedUser,
         ...(Object.prototype.hasOwnProperty.call(updates, 'avatar') ? { avatar: updates.avatar } : {})
       }));
-      await loadData();
       showToast('Đã lưu hồ sơ.', 'success');
     } catch {
       showToast('Không thể lưu thông tin hồ sơ.', 'error');
     }
-  }, [loadData]);
+  }, []);
 
   const page = useMemo(() => {
     const commonProps = {

@@ -1691,7 +1691,8 @@
   white-space: nowrap;
 }
 
-.data-status.success { color: #6ee7b7 !important; background: rgba(16, 185, 129, 0.12); }
+.data-status.success,
+.data-status.completed { color: #6ee7b7 !important; background: rgba(16, 185, 129, 0.12); }
 .data-status.pending { color: #fde68a !important; background: rgba(245, 158, 11, 0.12); }
 .field-badge { color: #bae6fd; background: rgba(14, 116, 144, 0.18); }
 
@@ -2826,4 +2827,67 @@
 :root[data-theme='light'] .data-connection-banner {
   color: #92400e;
   background: rgba(245, 158, 11, 0.12);
+}
+
+/* Keep colored badges readable on the light surface. */
+:root[data-theme='light'] .completion-badge,
+:root[data-theme='light'] .data-status.success,
+:root[data-theme='light'] .data-status.completed {
+  color: #047857 !important;
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(5, 150, 105, 0.35);
+}
+
+:root[data-theme='light'] .data-status.pending,
+:root[data-theme='light'] .upcoming-time-badge,
+:root[data-theme='light'] .role-admin {
+  color: #92400e !important;
+  background: rgba(245, 158, 11, 0.16);
+}
+
+:root[data-theme='light'] .field-badge,
+:root[data-theme='light'] .role-qc {
+  color: #0e7490;
+  background: rgba(14, 116, 144, 0.12);
+}
+
+:root[data-theme='light'] .role-freelancer {
+  color: #166534;
+  background: rgba(34, 197, 94, 0.14);
+}
+
+:root[data-theme='light'] .task-status-trigger.task-status-doing,
+:root[data-theme='light'] .task-status-option.task-status-doing {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+:root[data-theme='light'] .task-status-trigger.task-status-submitted,
+:root[data-theme='light'] .task-status-option.task-status-submitted {
+  color: #075985;
+  background: #e0f2fe;
+}
+
+:root[data-theme='light'] .task-status-trigger.task-status-checking,
+:root[data-theme='light'] .task-status-option.task-status-checking {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+:root[data-theme='light'] .task-status-trigger.task-status-fixing,
+:root[data-theme='light'] .task-status-option.task-status-fixing {
+  color: #6b21a8;
+  background: #f3e8ff;
+}
+
+:root[data-theme='light'] .task-status-trigger.task-status-done,
+:root[data-theme='light'] .task-status-option.task-status-done {
+  color: #166534;
+  background: #dcfce7;
+}
+
+:root[data-theme='light'] .task-status-trigger.task-status-pending,
+:root[data-theme='light'] .task-status-option.task-status-pending {
+  color: #475569;
+  background: #f1f5f9;
 }
