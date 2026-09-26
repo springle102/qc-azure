@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { IconAlertTriangle, IconBell, IconCheckCircle, IconChevronRight, IconClock, IconMenu, IconUser } from '../common/Icons';
+import { IconAlertTriangle, IconBell, IconCheckCircle, IconChevronRight, IconClock, IconMenu, IconMoon, IconSun, IconUser } from '../common/Icons';
 
-export function Header({ currentUser, deadlines = [], onNavigate, onOpenProfile, onToggleSidebar }) {
+export function Header({ currentUser, deadlines = [], onNavigate, onOpenProfile, onToggleSidebar, isDarkMode = true, onToggleTheme }) {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [readNotificationIds, setReadNotificationIds] = useState([]);
   const notificationRef = useRef(null);
   const notifications = useMemo(() => buildNotifications(deadlines, currentUser), [currentUser, deadlines]);
   const unreadCount = notifications.filter((notification) => !readNotificationIds.includes(notification.id)).length;
+  const ThemeIcon = isDarkMode ? IconSun : IconMoon;
+  const themeLabel = isDarkMode ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối';
 
   useEffect(() => {
     const handlePointerDown = (event) => {
@@ -95,6 +97,17 @@ export function Header({ currentUser, deadlines = [], onNavigate, onOpenProfile,
             </div>
           )}
         </div>
+
+        <button
+          type="button"
+          className="qc-theme-button"
+          onClick={onToggleTheme}
+          aria-label={themeLabel}
+          aria-pressed={!isDarkMode}
+          title={themeLabel}
+        >
+          <ThemeIcon size={18} />
+        </button>
 
         <button type="button" className="qc-header-profile" onClick={onOpenProfile}>
           <span className="qc-header-avatar"><IconUser size={17} /></span>

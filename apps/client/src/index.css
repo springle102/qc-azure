@@ -42,6 +42,23 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
+:root[data-theme='light'] {
+  --bg-darkest: #f3f6fb;
+  --bg-darker: #e8eef7;
+  --bg-surface: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.9);
+  --bg-card-hover: rgba(248, 250, 252, 0.98);
+  --bg-glass: rgba(255, 255, 255, 0.82);
+  --grad-blue-dark: linear-gradient(180deg, rgba(219, 234, 254, 0.75) 0%, rgba(241, 245, 249, 0.88) 100%);
+  --grad-card-border: linear-gradient(135deg, rgba(59, 130, 246, 0.32) 0%, rgba(6, 182, 212, 0.18) 50%, rgba(15, 23, 42, 0.06) 100%);
+  --grad-text: linear-gradient(135deg, #0f172a 30%, #2563eb 100%);
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --text-sub: #64748b;
+  --border-subtle: rgba(37, 99, 235, 0.18);
+  --border-bright: rgba(37, 99, 235, 0.38);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -85,6 +102,14 @@ body::after {
   filter: blur(90px);
   pointer-events: none;
   z-index: 0;
+}
+
+:root[data-theme='light'] body::before {
+  opacity: 0.45;
+}
+
+:root[data-theme='light'] body::after {
+  opacity: 0.3;
 }
 
 #root {

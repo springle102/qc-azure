@@ -951,6 +951,28 @@
   box-shadow: 0 0 18px rgba(59, 130, 246, 0.18);
 }
 
+.qc-theme-button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.qc-theme-button:hover,
+.qc-theme-button:focus-visible {
+  border-color: var(--border-bright);
+  color: var(--cyan-bright);
+  background: rgba(30, 58, 138, 0.3);
+  box-shadow: 0 0 18px rgba(59, 130, 246, 0.18);
+  outline: none;
+}
+
 .qc-notification-count {
   position: absolute;
   top: -5px;
@@ -2668,4 +2690,140 @@
   .form-group-full {
     grid-column: auto;
   }
+}
+
+/* ==========================================
+   Light Theme Overrides
+   ========================================== */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='light'] .app-header,
+:root[data-theme='light'] .app-sidebar,
+:root[data-theme='light'] .app-footer,
+:root[data-theme='light'] .sidebar-user-card,
+:root[data-theme='light'] .qc-header-profile,
+:root[data-theme='light'] .header-btn,
+:root[data-theme='light'] .role-switcher-box,
+:root[data-theme='light'] .qc-notification-button {
+  background: rgba(255, 255, 255, 0.88);
+}
+
+:root[data-theme='light'] .nav-link:hover {
+  color: var(--text-main);
+  background: rgba(37, 99, 235, 0.08);
+  border-color: rgba(37, 99, 235, 0.18);
+}
+
+:root[data-theme='light'] .nav-link.active {
+  color: #0f172a;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.16) 0%, rgba(6, 182, 212, 0.12) 100%);
+  border-color: rgba(37, 99, 235, 0.35);
+}
+
+:root[data-theme='light'] .qc-header-title,
+:root[data-theme='light'] .page-title,
+:root[data-theme='light'] .kpi-value,
+:root[data-theme='light'] .modal-title,
+:root[data-theme='light'] .kanban-col-title,
+:root[data-theme='light'] .section-heading h3,
+:root[data-theme='light'] .difficulty-field-card h3,
+:root[data-theme='light'] .difficulty-level-manager-row strong,
+:root[data-theme='light'] .difficulty-level-form-heading,
+:root[data-theme='light'] .bonus-settings-header h3,
+:root[data-theme='light'] .account-create-panel h3,
+:root[data-theme='light'] .qc-notification-header strong,
+:root[data-theme='light'] .qc-notification-content strong,
+:root[data-theme='light'] .upcoming-tasks-table td:first-child strong,
+:root[data-theme='light'] .recent-chapter-row strong {
+  color: var(--text-main);
+}
+
+:root[data-theme='light'] .qc-theme-button,
+:root[data-theme='light'] .qc-notification-button {
+  color: var(--text-muted);
+}
+
+:root[data-theme='light'] .qc-theme-button:hover,
+:root[data-theme='light'] .qc-theme-button:focus-visible,
+:root[data-theme='light'] .qc-notification-button:hover,
+:root[data-theme='light'] .qc-notification-button.is-open,
+:root[data-theme='light'] .header-btn:hover {
+  color: var(--blue-glow);
+  background: rgba(37, 99, 235, 0.09);
+}
+
+:root[data-theme='light'] .form-input,
+:root[data-theme='light'] .form-select,
+:root[data-theme='light'] .form-textarea,
+:root[data-theme='light'] .toolbar-search,
+:root[data-theme='light'] .difficulty-level-chip,
+:root[data-theme='light'] .difficulty-level-manager-row,
+:root[data-theme='light'] .color-input,
+:root[data-theme='light'] .task-status-trigger {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+:root[data-theme='light'] .form-input:focus,
+:root[data-theme='light'] .form-select:focus,
+:root[data-theme='light'] .form-textarea:focus,
+:root[data-theme='light'] .task-status-trigger:hover:not(:disabled),
+:root[data-theme='light'] .task-status-dropdown.is-open .task-status-trigger {
+  background: #ffffff;
+}
+
+:root[data-theme='light'] .toolbar-search input {
+  color: var(--text-main);
+}
+
+:root[data-theme='light'] .custom-table th {
+  background: var(--bg-darker);
+}
+
+:root[data-theme='light'] .custom-table tr:hover td,
+:root[data-theme='light'] .qc-notification-item:hover {
+  background: rgba(37, 99, 235, 0.06);
+}
+
+:root[data-theme='light'] .dashboard-link-card,
+:root[data-theme='light'] .qc-notification-panel,
+:root[data-theme='light'] .modal-content,
+:root[data-theme='light'] .task-status-menu {
+  background: #ffffff;
+}
+
+:root[data-theme='light'] .modal-overlay {
+  background: rgba(15, 23, 42, 0.28);
+}
+
+:root[data-theme='light'] .modal-footer {
+  background: rgba(241, 245, 249, 0.9);
+}
+
+:root[data-theme='light'] .kanban-column {
+  background: rgba(226, 232, 240, 0.5);
+}
+
+:root[data-theme='light'] .task-status-option {
+  color: var(--text-main);
+}
+
+:root[data-theme='light'] .btn-secondary {
+  color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.1);
+}
+
+:root[data-theme='light'] .btn-secondary:hover,
+:root[data-theme='light'] .btn-outline:hover,
+:root[data-theme='light'] .text-button:hover,
+:root[data-theme='light'] .table-link:hover,
+:root[data-theme='light'] .qc-notification-mark-read:hover {
+  color: var(--text-main);
+}
+
+:root[data-theme='light'] .data-connection-banner {
+  color: #92400e;
+  background: rgba(245, 158, 11, 0.12);
 }

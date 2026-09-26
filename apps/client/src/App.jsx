@@ -35,6 +35,17 @@ const ROLE_VIEWS = {
   Freelancer: ['dashboard', 'profile', 'salary', 'deadlines']
 };
 
+const THEME_STORAGE_KEY = 'qc-webtoon-theme';
+
+function getInitialTheme() {
+  if (typeof window === 'undefined') return 'dark';
+  try {
+    return window.localStorage.getItem(THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark';
+  } catch {
+    return 'dark';
+  }
+}
+
 function normalizeUser(user) {
   if (!user) return null;
   return {
@@ -65,6 +76,16 @@ export function App() {
   const [profile, setProfile] = useState(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [loadWarning, setLoadWarning] = useState('');
+  const [theme, setTheme] = useState(getInitialTheme);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // Theme preference still applies for the current session when storage is unavailable.
+    }
+  }, [theme]);
 
   useEffect(() => {
     if (!api.hasSession()) {
@@ -247,6 +268,8 @@ export function App() {
           onNavigate={handleNavigate}
           onOpenProfile={() => handleNavigate('profile')}
           onToggleSidebar={() => setIsSidebarOpen((open) => !open)}
+          isDarkMode={theme === 'dark'}
+          onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
         />
 
         <main className="content-area">
