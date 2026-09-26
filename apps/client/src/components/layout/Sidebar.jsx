@@ -55,14 +55,6 @@ export function Sidebar({ currentView, onNavigate, currentUser, role = 'QC', onO
         ))}
       </nav>
 
-      <div className="qc-sidebar-note">
-        <span className="status-dot" />
-        <div>
-          <strong>Dữ liệu trực tiếp</strong>
-          <span>Kết nối qua API / Supabase</span>
-        </div>
-      </div>
-
       <div className="sidebar-user-card qc-sidebar-user">
         <div className="qc-avatar-placeholder" aria-hidden="true">
           {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'Q'}

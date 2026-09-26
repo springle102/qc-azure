@@ -785,45 +785,8 @@
   width: 100%;
 }
 
-.qc-sidebar-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  margin: auto 8px 14px;
-  padding: 12px;
-  border: 1px solid rgba(56, 189, 248, 0.17);
-  border-radius: 12px;
-  background: rgba(8, 47, 73, 0.2);
-}
-
-.qc-sidebar-note strong,
-.qc-sidebar-note span:last-child {
-  display: block;
-}
-
-.qc-sidebar-note strong {
-  font-size: 11px;
-  color: #bae6fd;
-}
-
-.qc-sidebar-note span:last-child {
-  margin-top: 2px;
-  color: var(--text-sub);
-  font-size: 10px;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 auto;
-  margin-top: 4px;
-  border-radius: 50%;
-  background: #38bdf8;
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.8);
-}
-
 .qc-sidebar-user {
-  margin-top: 0;
+  margin-top: auto;
 }
 
 .qc-avatar-placeholder,
@@ -2890,4 +2853,26 @@
 :root[data-theme='light'] .task-status-option.task-status-pending {
   color: #475569;
   background: #f1f5f9;
+}
+
+/* Improve contrast for light-theme labels and helper blocks. */
+:root[data-theme='light'] .deadline-edit-note {
+  color: #92400e;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(217, 119, 6, 0.35);
+}
+
+:root[data-theme='light'] .strong-cell {
+  color: var(--text-main) !important;
+}
+
+:root[data-theme='light'] .mono-cell {
+  color: #0284c7 !important;
+}
+
+:root[data-theme='light'] .qc-sidebar-brand strong,
+:root[data-theme='light'] .qc-user-label strong,
+:root[data-theme='light'] .auth-brand strong,
+:root[data-theme='light'] .auth-card h1 {
+  color: var(--text-main);
 }

@@ -1257,7 +1257,6 @@ async function syncGoogleSheet() {
     const skippedRows = [];
     for (const tab of tabs) {
       const headerRowIndex = findGoogleSheetHeaderRow(tab.values);
-      if (tab.values.length <= headerRowIndex + 1) throw validationError(`Tab "${tab.range}" chưa có dữ liệu bên dưới dòng tiêu đề.`);
       const headers = tab.values[headerRowIndex].map(normalizeSheetHeader);
       const headerIndex = new Map(headers.map((header, index) => [header, index]));
       const fieldOverride = tab.field ? normalizeImportedField(tab.field, fields, 1) : null;
@@ -1271,11 +1270,13 @@ async function syncGoogleSheet() {
           }
           mappedRows.push({
             tab: tab.range,
-            data: buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qcs, rowNumber, fieldOverride)
+           data: buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qcs, rowNumber, fieldOverride)
           });
         });
     }
-    if (mappedRows.length === 0) throw validationError('Không có dòng deadline hợp lệ để đồng bộ.');
+    if (mappedRows.length === 0 && skippedRows.length > 0) {
+      throw validationError('Không có dòng deadline hợp lệ để đồng bộ. Hãy kiểm tra các dòng thiếu series ID, chapter, difficulty hoặc price.');
+    }
     const uniqueRowsByKey = new Map();
     let duplicateRows = 0;
     for (const entry of mappedRows) {
@@ -1289,6 +1290,7 @@ async function syncGoogleSheet() {
     const allowedColumns = ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'completionPercent'];
     let inserted = 0;
     let updated = 0;
+    let deleted = 0;
     for (const { data: row } of uniqueRows) {
       const current = currentRows.find((item) => Number(item.seriesId) === row.seriesId && Number(item.chapterNumber) === row.chapterNumber);
       if (current) {
@@ -1304,6 +1306,23 @@ async function syncGoogleSheet() {
       }
     }
 
+    // Google Sheet is the source of truth. Only reconcile deletions when every
+    // non-empty row was parsed successfully; otherwise a malformed row could
+    // be mistaken for a deleted row and remove valid data from the database.
+    if (skippedRows.length === 0) {
+      const sheetKeys = new Set(uniqueRows.map(({ data }) => `${data.seriesId}:${data.chapterNumber}`));
+      for (const current of currentRows) {
+        const key = `${Number(current.seriesId)}:${Number(current.chapterNumber)}`;
+        if (!sheetKeys.has(key)) {
+          const removedRows = await deleteRowsByKeys('deadlines', {
+            seriesId: current.seriesId,
+            chapterNumber: current.chapterNumber
+          });
+          deleted += removedRows.length;
+        }
+      }
+    }
+
     const syncedAt = new Date().toISOString();
     const currentSettings = (await getCollection('generalSettings'))[0];
     if (currentSettings) {
@@ -1311,11 +1330,11 @@ async function syncGoogleSheet() {
         googleSheetLastSyncedAt: syncedAt,
         googleSheetLastSyncCount: uniqueRows.length,
         googleSheetLastSyncError: skippedRows.length || duplicateRows
-          ? `Bỏ qua ${skippedRows.length} dòng thiếu dữ liệu và ${duplicateRows} dòng trùng series ID + Chap; ưu tiên bản ghi cuối.`
+          ? `Bỏ qua ${skippedRows.length} dòng thiếu dữ liệu và ${duplicateRows} dòng trùng series ID + Chap; ưu tiên bản ghi cuối.${skippedRows.length ? ' Chưa xóa các dòng không còn trong Sheet cho đến khi dữ liệu hợp lệ.' : ''}`
           : ''
       }, ['googleSheetLastSyncedAt', 'googleSheetLastSyncCount', 'googleSheetLastSyncError']);
     }
-    return { inserted, updated, total: uniqueRows.length, skipped: skippedRows.length, duplicates: duplicateRows, skippedRows: skippedRows.slice(0, 20), syncedAt };
+    return { inserted, updated, deleted, total: uniqueRows.length, skipped: skippedRows.length, duplicates: duplicateRows, skippedRows: skippedRows.slice(0, 20), syncedAt };
   })().catch(async (error) => {
     try {
       const currentSettings = (await getCollection('generalSettings'))[0];
