@@ -80,7 +80,7 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
       const skippedMessage = result.skipped ? ' Bỏ qua ' + result.skipped + ' dòng thiếu dữ liệu bắt buộc.' : '';
       const duplicateMessage = result.duplicates ? ' Có ' + result.duplicates + ' dòng trùng, đã ưu tiên bản ghi cuối.' : '';
       const deletedMessage = result.deleted ? ' Đã xóa ' + result.deleted + ' dòng không còn trên Sheet.' : '';
-      showToast('Đã đồng bộ ' + result.total + ' dòng (' + result.inserted + ' mới, ' + result.updated + ' cập nhật).' + deletedMessage + skippedMessage + duplicateMessage, 'success');
+      showToast('Đã đọc ' + (result.sheetRows ?? result.total) + ' dòng từ Sheet (' + result.inserted + ' mới, ' + result.updated + ' cập nhật).' + deletedMessage + skippedMessage + duplicateMessage, 'success');
       await onRefresh?.();
     } catch (error) {
       showToast(error.message || 'Không thể đồng bộ Google Sheet.', 'error');
@@ -171,7 +171,7 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
           </div>
         </form>
         {generalSettings?.googleSheetLastSyncedAt && <p className="form-help general-settings-sync-status">Lần đồng bộ gần nhất: {new Date(generalSettings.googleSheetLastSyncedAt).toLocaleString('vi-VN')} · {generalSettings.googleSheetLastSyncCount ?? 0} dòng</p>}
-        {generalSettings?.googleSheetLastSyncError && <p className="form-help general-settings-sync-error">Lỗi gần nhất: {generalSettings.googleSheetLastSyncError}</p>}
+        {generalSettings?.googleSheetLastSyncError && <p className="form-help general-settings-sync-error">Cảnh báo/lỗi gần nhất: {generalSettings.googleSheetLastSyncError}</p>}
       </section>
 
       <section className="glass-panel qc-table-panel">

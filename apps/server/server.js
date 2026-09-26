@@ -1306,6 +1306,7 @@ async function syncGoogleSheet() {
     ]);
     const mappedRows = [];
     const skippedRows = [];
+    const sheetKeys = new Set();
     for (const tab of tabs) {
       const headerRowIndex = findGoogleSheetHeaderRow(tab.values);
       const headers = tab.values[headerRowIndex].map(normalizeSheetHeader);
@@ -1315,6 +1316,13 @@ async function syncGoogleSheet() {
         .map((row, index) => ({ row, rowNumber: index + headerRowIndex + 2 }))
          .filter(({ row }) => !isDecorativeGoogleSheetRow(row, headerIndex, fieldOverride))
          .forEach(({ row, rowNumber }) => {
+           const rawSeriesId = getSheetValue(row, headerIndex, 'seriesId', fieldOverride);
+           const rawChapterNumber = getSheetValue(row, headerIndex, 'chapterNumber');
+           const sheetSeriesId = Number(rawSeriesId.replace(/,/g, ''));
+           const sheetChapterNumber = Number(rawChapterNumber.replace(/,/g, ''));
+           if (Number.isInteger(sheetSeriesId) && sheetSeriesId >= 0 && Number.isInteger(sheetChapterNumber) && sheetChapterNumber > 0) {
+             sheetKeys.add(`${sheetSeriesId}:${sheetChapterNumber}`);
+           }
            if (isIncompleteGoogleSheetRow(row, headerIndex, fieldOverride)) {
             skippedRows.push({ tab: tab.range, rowNumber });
             return;
@@ -1324,9 +1332,6 @@ async function syncGoogleSheet() {
            data: buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qcs, rowNumber, fieldOverride)
           });
         });
-    }
-    if (mappedRows.length === 0 && skippedRows.length > 0) {
-      throw validationError('Không có dòng deadline hợp lệ để đồng bộ. Hãy kiểm tra các dòng thiếu series ID, chapter, difficulty hoặc price.');
     }
     const uniqueRowsByKey = new Map();
     let duplicateRows = 0;
@@ -1361,38 +1366,35 @@ async function syncGoogleSheet() {
     const inserted = writeResults.filter((result) => result === 'inserted').length;
     const updated = writeResults.filter((result) => result === 'updated').length;
 
-    // Google Sheet is the source of truth. Only reconcile deletions when every
-    // non-empty row was parsed successfully; otherwise a malformed row could
-    // be mistaken for a deleted row and remove valid data from the database.
+    // Google Sheet is the source of truth. Reconcile deletions against every
+    // valid ID + Chapter key found in the Sheet, including rows that cannot be
+    // imported yet because their difficulty or price is incomplete.
     let deleted = 0;
-    if (skippedRows.length === 0) {
-      const sheetKeys = new Set(uniqueRows.map(({ data }) => `${data.seriesId}:${data.chapterNumber}`));
-      const rowsToDelete = currentRows.filter((current) => {
-        const key = `${Number(current.seriesId)}:${Number(current.chapterNumber)}`;
-        return !sheetKeys.has(key);
+    const rowsToDelete = currentRows.filter((current) => {
+      const key = `${Number(current.seriesId)}:${Number(current.chapterNumber)}`;
+      return !sheetKeys.has(key);
+    });
+    const deletedCounts = await runWithConcurrency(rowsToDelete, async (current) => {
+      const removedRows = await deleteRowsByKeys('deadlines', {
+        seriesId: current.seriesId,
+        chapterNumber: current.chapterNumber
       });
-      const deletedCounts = await runWithConcurrency(rowsToDelete, async (current) => {
-        const removedRows = await deleteRowsByKeys('deadlines', {
-          seriesId: current.seriesId,
-          chapterNumber: current.chapterNumber
-        });
-        return removedRows.length;
-      });
-      deleted = deletedCounts.reduce((total, count) => total + count, 0);
-    }
+      return removedRows.length;
+    });
+    deleted = deletedCounts.reduce((total, count) => total + count, 0);
 
     const syncedAt = new Date().toISOString();
     const currentSettings = (await getCollection('generalSettings'))[0];
     if (currentSettings) {
       await updateRow('generalSettings', { id: currentSettings.id }, {
         googleSheetLastSyncedAt: syncedAt,
-        googleSheetLastSyncCount: uniqueRows.length,
+        googleSheetLastSyncCount: sheetKeys.size,
         googleSheetLastSyncError: skippedRows.length || duplicateRows
-          ? `Bỏ qua ${skippedRows.length} dòng thiếu dữ liệu và ${duplicateRows} dòng trùng series ID + Chap; ưu tiên bản ghi cuối.${skippedRows.length ? ' Chưa xóa các dòng không còn trong Sheet cho đến khi dữ liệu hợp lệ.' : ''}`
+          ? `Bỏ qua ${skippedRows.length} dòng thiếu dữ liệu và ${duplicateRows} dòng trùng series ID + Chap; ưu tiên bản ghi cuối.`
           : ''
       }, ['googleSheetLastSyncedAt', 'googleSheetLastSyncCount', 'googleSheetLastSyncError']);
     }
-    return { inserted, updated, deleted, total: uniqueRows.length, skipped: skippedRows.length, duplicates: duplicateRows, skippedRows: skippedRows.slice(0, 20), syncedAt };
+    return { inserted, updated, deleted, total: uniqueRows.length, sheetRows: sheetKeys.size, skipped: skippedRows.length, duplicates: duplicateRows, skippedRows: skippedRows.slice(0, 20), syncedAt };
   })().catch(async (error) => {
     try {
       const currentSettings = (await getCollection('generalSettings'))[0];
