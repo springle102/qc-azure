@@ -1306,7 +1306,6 @@ async function syncGoogleSheet() {
     ]);
     const mappedRows = [];
     const skippedRows = [];
-    const sheetKeys = new Set();
     for (const tab of tabs) {
       const headerRowIndex = findGoogleSheetHeaderRow(tab.values);
       const headers = tab.values[headerRowIndex].map(normalizeSheetHeader);
@@ -1316,13 +1315,6 @@ async function syncGoogleSheet() {
         .map((row, index) => ({ row, rowNumber: index + headerRowIndex + 2 }))
          .filter(({ row }) => !isDecorativeGoogleSheetRow(row, headerIndex, fieldOverride))
          .forEach(({ row, rowNumber }) => {
-           const rawSeriesId = getSheetValue(row, headerIndex, 'seriesId', fieldOverride);
-           const rawChapterNumber = getSheetValue(row, headerIndex, 'chapterNumber');
-           const sheetSeriesId = Number(rawSeriesId.replace(/,/g, ''));
-           const sheetChapterNumber = Number(rawChapterNumber.replace(/,/g, ''));
-           if (Number.isInteger(sheetSeriesId) && sheetSeriesId >= 0 && Number.isInteger(sheetChapterNumber) && sheetChapterNumber > 0) {
-             sheetKeys.add(`${sheetSeriesId}:${sheetChapterNumber}`);
-           }
            if (isIncompleteGoogleSheetRow(row, headerIndex, fieldOverride)) {
             skippedRows.push({ tab: tab.range, rowNumber });
             return;
@@ -1366,10 +1358,11 @@ async function syncGoogleSheet() {
     const inserted = writeResults.filter((result) => result === 'inserted').length;
     const updated = writeResults.filter((result) => result === 'updated').length;
 
-    // Google Sheet is the source of truth. Reconcile deletions against every
-    // valid ID + Chapter key found in the Sheet, including rows that cannot be
-    // imported yet because their difficulty or price is incomplete.
+    // Google Sheet is the source of truth. Reconcile deletions against valid
+    // imported ID + Chapter keys, even when other rows were skipped because
+    // their difficulty or price is incomplete.
     let deleted = 0;
+    const sheetKeys = new Set(uniqueRows.map(({ data }) => `${data.seriesId}:${data.chapterNumber}`));
     const rowsToDelete = currentRows.filter((current) => {
       const key = `${Number(current.seriesId)}:${Number(current.chapterNumber)}`;
       return !sheetKeys.has(key);
@@ -1388,13 +1381,13 @@ async function syncGoogleSheet() {
     if (currentSettings) {
       await updateRow('generalSettings', { id: currentSettings.id }, {
         googleSheetLastSyncedAt: syncedAt,
-        googleSheetLastSyncCount: sheetKeys.size,
+        googleSheetLastSyncCount: uniqueRows.length,
         googleSheetLastSyncError: skippedRows.length || duplicateRows
           ? `Bỏ qua ${skippedRows.length} dòng thiếu dữ liệu và ${duplicateRows} dòng trùng series ID + Chap; ưu tiên bản ghi cuối.`
           : ''
       }, ['googleSheetLastSyncedAt', 'googleSheetLastSyncCount', 'googleSheetLastSyncError']);
     }
-    return { inserted, updated, deleted, total: uniqueRows.length, sheetRows: sheetKeys.size, skipped: skippedRows.length, duplicates: duplicateRows, skippedRows: skippedRows.slice(0, 20), syncedAt };
+    return { inserted, updated, deleted, total: uniqueRows.length, sheetRows: uniqueRows.length, skipped: skippedRows.length, duplicates: duplicateRows, skippedRows: skippedRows.slice(0, 20), syncedAt };
   })().catch(async (error) => {
     try {
       const currentSettings = (await getCollection('generalSettings'))[0];

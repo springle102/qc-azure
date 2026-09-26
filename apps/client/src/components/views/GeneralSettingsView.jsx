@@ -80,7 +80,7 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
       const skippedMessage = result.skipped ? ' Bỏ qua ' + result.skipped + ' dòng thiếu dữ liệu bắt buộc.' : '';
       const duplicateMessage = result.duplicates ? ' Có ' + result.duplicates + ' dòng trùng, đã ưu tiên bản ghi cuối.' : '';
       const deletedMessage = result.deleted ? ' Đã xóa ' + result.deleted + ' dòng không còn trên Sheet.' : '';
-      showToast('Đã đọc ' + (result.sheetRows ?? result.total) + ' dòng từ Sheet (' + result.inserted + ' mới, ' + result.updated + ' cập nhật).' + deletedMessage + skippedMessage + duplicateMessage, 'success');
+      showToast('Đã đồng bộ ' + (result.sheetRows ?? result.total) + ' dòng hợp lệ từ Sheet (' + result.inserted + ' mới, ' + result.updated + ' cập nhật).' + deletedMessage + skippedMessage + duplicateMessage, 'success');
       await onRefresh?.();
     } catch (error) {
       showToast(error.message || 'Không thể đồng bộ Google Sheet.', 'error');
@@ -170,7 +170,7 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
             <button type="button" className="btn btn-secondary" onClick={syncGoogleSheet} disabled={isSaving || !googleSheetUrl.trim()}><IconRefresh size={16} /> Đồng bộ ngay</button>
           </div>
         </form>
-        {generalSettings?.googleSheetLastSyncedAt && <p className="form-help general-settings-sync-status">Lần đồng bộ gần nhất: {new Date(generalSettings.googleSheetLastSyncedAt).toLocaleString('vi-VN')} · {generalSettings.googleSheetLastSyncCount ?? 0} dòng</p>}
+        {generalSettings?.googleSheetLastSyncedAt && <p className="form-help general-settings-sync-status">Lần đồng bộ gần nhất: {new Date(generalSettings.googleSheetLastSyncedAt).toLocaleString('vi-VN')} · {generalSettings.googleSheetLastSyncCount ?? 0} dòng hợp lệ</p>}
         {generalSettings?.googleSheetLastSyncError && <p className="form-help general-settings-sync-error">Cảnh báo/lỗi gần nhất: {generalSettings.googleSheetLastSyncError}</p>}
       </section>
 
