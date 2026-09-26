@@ -17,7 +17,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const sessions = new Map();
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24;
-const GOOGLE_REQUEST_TIMEOUT_MS = 20_000;
+const GOOGLE_REQUEST_TIMEOUT_MS = 30_000;
 const SYNC_WRITE_CONCURRENCY = 8;
 
 app.use(cors());
@@ -1056,11 +1056,28 @@ function resolveGoogleSheetRange(tabReference, sheets) {
 }
 
 async function readGoogleSheetValues(spreadsheetId, range) {
-  const query = new URLSearchParams({ majorDimension: 'ROWS' });
+  // values.get() does not include row visibility. Read the grid metadata as
+  // well so filtered/manual-hidden rows can be excluded from synchronization.
+  const query = new URLSearchParams({
+    includeGridData: 'true',
+    ranges: range,
+    fields: 'sheets(data(startRow,rowMetadata,rowData/values/formattedValue))'
+  });
   const payload = await googleSheetsRequest(
-    `spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?${query.toString()}`
+    `spreadsheets/${encodeURIComponent(spreadsheetId)}?${query.toString()}`
   );
-  return payload.values || [];
+  const data = payload.sheets?.[0]?.data?.[0] || {};
+  const values = (data.rowData || []).map((row) => (
+    row.values || []
+  ).map((cell) => cell.formattedValue ?? ''));
+  const hiddenRows = new Set(
+    (data.rowMetadata || [])
+      .map((metadata, index) => (
+        metadata?.hidden === true || metadata?.hiddenByFilter === true ? index : null
+      ))
+      .filter((index) => index !== null)
+  );
+  return { values, hiddenRows };
 }
 
 async function readGoogleSheetTabs(settings) {
@@ -1071,7 +1088,7 @@ async function readGoogleSheetTabs(settings) {
   if (configuredTabs.length > 0) {
     return Promise.all(configuredTabs.map(async ([field, tabReference]) => {
       const range = resolveGoogleSheetRange(tabReference, sheets);
-      return { field, range, values: await readGoogleSheetValues(spreadsheetId, range) };
+      return { field, range, ...(await readGoogleSheetValues(spreadsheetId, range)) };
     }));
   }
 
@@ -1081,7 +1098,7 @@ async function readGoogleSheetTabs(settings) {
   const range = settings.googleSheetRange || selectedSheet?.properties?.title;
   if (!range) throw new Error('Không tìm thấy tab trong Google Sheet.');
   const resolvedRange = range.includes('!') ? range : resolveGoogleSheetRange(range, sheets);
-  return [{ field: null, range: resolvedRange, values: await readGoogleSheetValues(spreadsheetId, resolvedRange) }];
+  return [{ field: null, range: resolvedRange, ...(await readGoogleSheetValues(spreadsheetId, resolvedRange)) }];
 }
 
 function normalizeSheetHeader(value) {
@@ -1306,16 +1323,20 @@ async function syncGoogleSheet() {
     ]);
     const mappedRows = [];
     const skippedRows = [];
+    let hiddenRows = 0;
     for (const tab of tabs) {
       const headerRowIndex = findGoogleSheetHeaderRow(tab.values);
       const headers = tab.values[headerRowIndex].map(normalizeSheetHeader);
       const headerIndex = new Map(headers.map((header, index) => [header, index]));
       const fieldOverride = tab.field ? normalizeImportedField(tab.field, fields, 1) : null;
-      tab.values.slice(headerRowIndex + 1)
-        .map((row, index) => ({ row, rowNumber: index + headerRowIndex + 2 }))
-         .filter(({ row }) => !isDecorativeGoogleSheetRow(row, headerIndex, fieldOverride))
-         .forEach(({ row, rowNumber }) => {
-           if (isIncompleteGoogleSheetRow(row, headerIndex, fieldOverride)) {
+      hiddenRows += [...(tab.hiddenRows || [])].filter((index) => index > headerRowIndex).length;
+      tab.values
+        .map((row, index) => ({ row, index }))
+        .filter(({ index }) => index > headerRowIndex && !tab.hiddenRows?.has(index))
+        .map(({ row, index }) => ({ row, rowNumber: index + 1 }))
+        .filter(({ row }) => !isDecorativeGoogleSheetRow(row, headerIndex, fieldOverride))
+        .forEach(({ row, rowNumber }) => {
+          if (isIncompleteGoogleSheetRow(row, headerIndex, fieldOverride)) {
             skippedRows.push({ tab: tab.range, rowNumber });
             return;
           }
@@ -1387,7 +1408,7 @@ async function syncGoogleSheet() {
           : ''
       }, ['googleSheetLastSyncedAt', 'googleSheetLastSyncCount', 'googleSheetLastSyncError']);
     }
-    return { inserted, updated, deleted, total: uniqueRows.length, sheetRows: uniqueRows.length, skipped: skippedRows.length, duplicates: duplicateRows, skippedRows: skippedRows.slice(0, 20), syncedAt };
+    return { inserted, updated, deleted, total: uniqueRows.length, sheetRows: uniqueRows.length, skipped: skippedRows.length, duplicates: duplicateRows, hidden: hiddenRows, skippedRows: skippedRows.slice(0, 20), syncedAt };
   })().catch(async (error) => {
     try {
       const currentSettings = (await getCollection('generalSettings'))[0];

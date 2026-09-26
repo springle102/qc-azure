@@ -80,7 +80,8 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
       const skippedMessage = result.skipped ? ' Bỏ qua ' + result.skipped + ' dòng thiếu dữ liệu bắt buộc.' : '';
       const duplicateMessage = result.duplicates ? ' Có ' + result.duplicates + ' dòng trùng, đã ưu tiên bản ghi cuối.' : '';
       const deletedMessage = result.deleted ? ' Đã xóa ' + result.deleted + ' dòng không còn trên Sheet.' : '';
-      showToast('Đã đồng bộ ' + (result.sheetRows ?? result.total) + ' dòng hợp lệ từ Sheet (' + result.inserted + ' mới, ' + result.updated + ' cập nhật).' + deletedMessage + skippedMessage + duplicateMessage, 'success');
+      const hiddenMessage = result.hidden ? ' Bỏ qua ' + result.hidden + ' dòng đang ẩn.' : '';
+      showToast('Đã đồng bộ ' + (result.sheetRows ?? result.total) + ' dòng hợp lệ từ Sheet (' + result.inserted + ' mới, ' + result.updated + ' cập nhật).' + deletedMessage + skippedMessage + duplicateMessage + hiddenMessage, 'success');
       await onRefresh?.();
     } catch (error) {
       showToast(error.message || 'Không thể đồng bộ Google Sheet.', 'error');
