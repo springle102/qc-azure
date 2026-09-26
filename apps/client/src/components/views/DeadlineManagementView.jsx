@@ -582,13 +582,13 @@ function formatDuration(seconds) {
 
 function DeadlineEditModal({ value, isCreate, freelancers, qcs, difficultyLevels, difficultyPrices, fieldOptions = FIELD_OPTIONS, statusOptions, isSaving, onChange, onClose, onSubmit }) {
   const difficultyOptions = getDifficultyOptions(value.type, difficultyLevels, difficultyPrices);
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <form className="modal-content modal-lg deadline-edit-modal" onSubmit={onSubmit} onClick={(event) => event.stopPropagation()}>
+  return createPortal(
+    <div className="modal-overlay" onClick={onClose} role="presentation">
+      <form className="modal-content modal-lg deadline-edit-modal" onSubmit={onSubmit} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="deadline-edit-modal-title">
         <div className="modal-header">
           <div>
             <span className="qc-kicker">{isCreate ? 'ADMIN CREATOR' : 'QC EDITOR'}</span>
-            <div className="modal-title">{isCreate ? 'Thêm deadline' : 'Chỉnh sửa deadline'}</div>
+            <div className="modal-title" id="deadline-edit-modal-title">{isCreate ? 'Thêm deadline' : 'Chỉnh sửa deadline'}</div>
           </div>
           <button type="button" className="icon-button" onClick={onClose} disabled={isSaving} title="Đóng">
             <IconX size={18} />
@@ -703,6 +703,7 @@ function DeadlineEditModal({ value, isCreate, freelancers, qcs, difficultyLevels
           </button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body
   );
 }
