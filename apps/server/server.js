@@ -1142,13 +1142,69 @@ async function findGoogleDriveFolder(folderName, parentId = '') {
   return folders.find((candidate) => candidate.driveId && candidate.parents?.includes(candidate.driveId)) || folders[0];
 }
 
-async function findGoogleDriveFolderUrl(seriesId, field, googleDriveFolders = {}) {
+async function findDirectGoogleDriveFolders(parentId) {
+  const normalizedParentId = String(parentId ?? '').trim();
+  if (!normalizedParentId) return [];
+  const cacheKey = `children::${normalizedParentId}`;
+  const now = Date.now();
+  const cached = googleDriveFolderCache.get(cacheKey);
+  if (cached && now - cached.checkedAt < GOOGLE_DRIVE_FOLDER_CACHE_TTL_MS) return cached.folders;
+
+  const queryParams = {
+    q: `'${escapeGoogleDriveQueryValue(normalizedParentId)}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    spaces: 'drive',
+    includeItemsFromAllDrives: 'true',
+    supportsAllDrives: 'true',
+    pageSize: '1000',
+    fields: 'nextPageToken,files(id,name,webViewLink,driveId,parents)'
+  };
+  const folders = [];
+  let pageToken = '';
+  do {
+    const query = new URLSearchParams({ ...queryParams, ...(pageToken ? { pageToken } : {}) });
+    const payload = await googleDriveRequest(`files?${query.toString()}`);
+    folders.push(...(payload.files || []));
+    pageToken = payload.nextPageToken || '';
+  } while (pageToken);
+  googleDriveFolderCache.set(cacheKey, { checkedAt: now, folders });
+  return folders;
+}
+
+function normalizeDriveFolderSearchText(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/gi, 'd')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function findDriveFolderBySeriesName(folders, seriesName) {
+  const target = normalizeDriveFolderSearchText(seriesName);
+  if (!target) return null;
+  const matches = folders
+    .map((folder) => ({ folder, name: normalizeDriveFolderSearchText(folder.name) }))
+    .filter(({ name }) => name === target || name.includes(target))
+    .sort((left, right) => {
+      const score = (name) => name === target
+        ? 3
+        : name.startsWith(target) || name.includes(` ${target}`)
+          ? 2
+          : 1;
+      return score(right.name) - score(left.name) || left.name.length - right.name.length;
+    });
+  return matches[0]?.folder || null;
+}
+
+async function findGoogleDriveFolderUrl(seriesId, field, googleDriveFolders = {}, seriesName = '') {
   const seriesFolderName = String(seriesId ?? '').trim();
   const fieldName = String(field ?? '').trim();
   const rootFolderName = getConfiguredDriveRootFolder(fieldName, googleDriveFolders);
   if (!seriesFolderName) return '';
 
-  const cacheKey = `url::${fieldName}::${rootFolderName}::${seriesFolderName}`;
+  const cacheKey = `url::${fieldName}::${rootFolderName}::${seriesFolderName}::${normalizeDriveFolderSearchText(seriesName)}`;
 
   const now = Date.now();
   const cached = googleDriveFolderCache.get(cacheKey);
@@ -1166,6 +1222,12 @@ async function findGoogleDriveFolderUrl(seriesId, field, googleDriveFolders = {}
     // this name and keep the one that actually contains the requested ID.
     for (const rootCandidate of prioritizedRoots) {
       folder = await findGoogleDriveFolder(seriesFolderName, rootCandidate.id);
+      if (!folder && seriesName) {
+        folder = findDriveFolderBySeriesName(
+          await findDirectGoogleDriveFolders(rootCandidate.id),
+          seriesName
+        );
+      }
       if (folder) break;
     }
   } else {
@@ -1195,16 +1257,17 @@ async function enrichRowsWithGoogleDriveLinks(rows, lookupRows = rows, googleDri
     .map(({ data }) => {
       const field = String(data.type ?? '').trim();
       const seriesId = String(data.seriesId ?? '').trim();
-      return [googleDriveLookupKey(field, seriesId), { field, seriesId }];
+      const seriesName = String(data.seriesName ?? '').trim();
+      return [googleDriveLookupKey(field, seriesId), { field, seriesId, seriesName }];
     })
     .filter(([, lookup]) => lookup.seriesId)).values()];
   if (lookups.length === 0) return { rows, linked: 0, missing: 0, error: '' };
 
   let firstError = '';
-  const lookupResults = await runWithConcurrency(lookups, async ({ field, seriesId }) => {
+  const lookupResults = await runWithConcurrency(lookups, async ({ field, seriesId, seriesName }) => {
     if (firstError) return { seriesId, url: '', error: firstError };
     try {
-      return { field, seriesId, key: googleDriveLookupKey(field, seriesId), url: await findGoogleDriveFolderUrl(seriesId, field, googleDriveFolders), error: '' };
+      return { field, seriesId, key: googleDriveLookupKey(field, seriesId), url: await findGoogleDriveFolderUrl(seriesId, field, googleDriveFolders, seriesName), error: '' };
     } catch (error) {
       firstError = error.message || 'Không thể tìm folder trên Google Drive.';
       return { field, seriesId, key: googleDriveLookupKey(field, seriesId), url: '', error: firstError };
