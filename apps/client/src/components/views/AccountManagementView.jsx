@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { IconEdit, IconPlus, IconRefresh, IconUsers, IconX } from '../common/Icons';
+import { IconEdit, IconPlus, IconRefresh, IconTrash, IconUsers, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
 
@@ -81,6 +81,22 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
       await onRefresh?.();
     } catch (error) {
       showToast(error.message || 'Không thể cập nhật account.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const deleteAccount = async (account) => {
+    const accountLabel = account.displayName || account.username || 'này';
+    if (!window.confirm(`Bạn có chắc muốn xóa account "${accountLabel}"? Hành động này không thể hoàn tác.`)) return;
+
+    setIsSaving(true);
+    try {
+      await api.deleteAccount(account.id);
+      showToast('Đã xóa account.', 'success');
+      await onRefresh?.();
+    } catch (error) {
+      showToast(error.message || 'Không thể xóa account.', 'error');
     } finally {
       setIsSaving(false);
     }
@@ -169,7 +185,12 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
                   <td>{account.freelancerName || getFreelancerName(account.freelancerId, freelancers)}</td>
                   <td><span className={'data-status ' + (account.isActive ? 'completed' : 'pending')}>{account.isActive ? 'Đang hoạt động' : 'Đã khóa'}</span></td>
                   <td>{formatDate(account.createdAt)}</td>
-                  <td><button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(account)}><IconEdit size={14} /> Chỉnh sửa</button></td>
+                  <td>
+                    <div className="table-actions">
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(account)} disabled={isSaving}><IconEdit size={14} /> Chỉnh sửa</button>
+                      <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteAccount(account)} disabled={isSaving}><IconTrash size={14} /> Xóa</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

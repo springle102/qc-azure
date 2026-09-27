@@ -67,6 +67,9 @@ export const api = {
     method: 'PATCH',
     body: JSON.stringify(account)
   }),
+  deleteAccount: (id) => request(`/accounts/${id}`, {
+    method: 'DELETE'
+  }),
   getDashboard: () => request('/dashboard/summary'),
   getTasks: () => request('/tasks'),
   getFreelancers: () => request('/freelancers'),

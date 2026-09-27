@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { IconEdit, IconPlus, IconRefresh, IconSearch, IconTasks, IconX } from '../common/Icons';
+import { IconEdit, IconFilter, IconPlus, IconRefresh, IconSearch, IconTasks, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
 
@@ -66,6 +66,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
   const [isSaving, setIsSaving] = useState(false);
   const [rawStatusUpdatingKey, setRawStatusUpdatingKey] = useState('');
   const [taskStatusUpdatingKey, setTaskStatusUpdatingKey] = useState('');
+  const [columnFilters, setColumnFilters] = useState({});
   const fieldOptions = useMemo(() => fields.length > 0 ? fields.map((field) => field.name || field).filter(Boolean) : FIELD_OPTIONS, [fields]);
   const visibleColumns = useMemo(() => readOnly ? columns.filter(([key]) => key !== 'edit') : columns, [readOnly]);
 
@@ -77,14 +78,33 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
     qcs: qcOptions
   }), [deadlines, freelancerOptions, qcOptions]);
 
+  const columnFilterOptions = useMemo(() => Object.fromEntries(
+    visibleColumns
+      .filter(([key]) => key !== 'edit')
+      .map(([key]) => [key, uniqueFilterValues(deadlines.map((item) => getFilterValue(item, key))).sort((left, right) => left.localeCompare(right, 'vi', { numeric: true }))])
+  ), [deadlines, visibleColumns]);
+
   const filteredDeadlines = useMemo(() => deadlines.filter((item) => {
     const text = Object.values(item).join(' ').toLowerCase();
+    const matchesColumnFilters = Object.entries(columnFilters).every(([key, selectedValues]) => (
+      selectedValues.includes(getFilterValue(item, key))
+    ));
     return (!field || String(item.type || '') === field)
       && (!seriesId || String(item.seriesId || '') === seriesId)
       && (!freelancer || String(item.fIld ?? item.fId ?? '') === freelancer)
       && (!qc || String(item.qcId ?? '') === qc)
-      && (!search.trim() || text.includes(search.trim().toLowerCase()));
-  }), [deadlines, field, freelancer, qc, search, seriesId]);
+      && (!search.trim() || text.includes(search.trim().toLowerCase()))
+      && matchesColumnFilters;
+  }), [columnFilters, deadlines, field, freelancer, qc, search, seriesId]);
+
+  const updateColumnFilter = (key, selectedValues) => {
+    setColumnFilters((current) => {
+      const next = { ...current };
+      if (selectedValues === null) delete next[key];
+      else next[key] = selectedValues;
+      return next;
+    });
+  };
 
   const openCreate = () => {
     setIsCreating(true);
@@ -228,7 +248,24 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
 
         <div className="table-wrapper table-wrapper-flat">
           <table className="custom-table deadline-table">
-            <thead><tr>{visibleColumns.map(([, label]) => <th key={label}>{label}</th>)}</tr></thead>
+            <thead>
+              <tr>
+                {visibleColumns.map(([key, label]) => (
+                  <th key={label}>
+                    <div className="deadline-column-header">
+                      <span>{label}</span>
+                      {key !== 'edit' && <ColumnFilterButton
+                        columnKey={key}
+                        label={label}
+                        values={columnFilterOptions[key] || []}
+                        activeValues={columnFilters[key]}
+                        onApply={(selectedValues) => updateColumnFilter(key, selectedValues)}
+                      />}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
             <tbody>
               {filteredDeadlines.length === 0 ? (
                 <tr><td colSpan={visibleColumns.length}><div className="empty-state table-empty"><IconTasks size={24} /><strong>{isLoading ? 'Đang tải dữ liệu...' : 'Chưa có deadline trong hệ thống.'}</strong></div></td></tr>
@@ -300,6 +337,139 @@ function peopleOptions(rows, primaryId, fallbackId) {
 
 function unique(values) {
   return [...new Set(values.filter(Boolean).map(String))];
+}
+
+function uniqueFilterValues(values) {
+  return [...new Set(values.map((value) => String(value ?? '')))];
+}
+
+function getFilterValue(item, key) {
+  const value = key === 'fIld' ? (item.fIld ?? item.fId) : item[key];
+  return value === null || value === undefined ? '' : String(value);
+}
+
+function formatFilterValue(value, key) {
+  if (value === '') return '(Trống)';
+  if (key === 'endTask') return formatDateOnly(value);
+  if (key === 'submittedAt') return formatDateTime(value);
+  return value;
+}
+
+function ColumnFilterButton({ columnKey, label, values, activeValues, onApply }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState('');
+  const [draftValues, setDraftValues] = useState([]);
+  const [menuPosition, setMenuPosition] = useState(null);
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
+  const isActive = Array.isArray(activeValues);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const updatePosition = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = 280;
+      setMenuPosition({
+        top: rect.bottom + 6,
+        left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))
+      });
+    };
+    const handleOutsidePointer = (event) => {
+      if (!buttonRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) setIsOpen(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+
+    updatePosition();
+    document.addEventListener('pointerdown', handleOutsidePointer);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointer);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [isOpen]);
+
+  const openFilter = (event) => {
+    event.stopPropagation();
+    if (isOpen) {
+      setIsOpen(false);
+      return;
+    }
+    setSearchValue('');
+    setDraftValues(Array.isArray(activeValues) ? [...activeValues] : [...values]);
+    setIsOpen(true);
+  };
+
+  const visibleValues = values.filter((value) => formatFilterValue(value, columnKey).toLowerCase().includes(searchValue.trim().toLowerCase()));
+  const allSelected = values.length > 0 && draftValues.length === values.length;
+
+  const toggleValue = (value) => {
+    setDraftValues((current) => current.includes(value)
+      ? current.filter((item) => item !== value)
+      : [...current, value]);
+  };
+
+  const applyFilter = () => {
+    onApply(draftValues.length === values.length ? null : draftValues);
+    setIsOpen(false);
+  };
+
+  const clearFilter = () => {
+    onApply(null);
+    setIsOpen(false);
+  };
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={'column-filter-button' + (isActive ? ' active' : '')}
+        onClick={openFilter}
+        aria-label={`Lọc cột ${label}`}
+        aria-expanded={isOpen}
+        title={`Lọc cột ${label}`}
+      >
+        <IconFilter size={14} />
+      </button>
+      {isOpen && menuPosition && createPortal(
+        <div ref={menuRef} className="column-filter-menu" style={menuPosition} onClick={(event) => event.stopPropagation()}>
+          <div className="column-filter-menu-title">Lọc {label}</div>
+          <input
+            className="form-input column-filter-search"
+            value={searchValue}
+            onChange={(event) => setSearchValue(event.target.value)}
+            placeholder="Tìm giá trị..."
+            autoFocus
+          />
+          <label className="column-filter-option column-filter-select-all">
+            <input type="checkbox" checked={allSelected} onChange={() => setDraftValues(allSelected ? [] : [...values])} />
+            <span>Chọn tất cả</span>
+          </label>
+          <div className="column-filter-options">
+            {visibleValues.length > 0 ? visibleValues.map((value) => (
+              <label className="column-filter-option" key={value || '__empty__'}>
+                <input type="checkbox" checked={draftValues.includes(value)} onChange={() => toggleValue(value)} />
+                <span title={formatFilterValue(value, columnKey)}>{formatFilterValue(value, columnKey)}</span>
+              </label>
+            )) : <span className="column-filter-empty">Không có giá trị phù hợp.</span>}
+          </div>
+          <div className="column-filter-actions">
+            <button type="button" className="btn btn-outline btn-sm" onClick={clearFilter}>Xóa lọc</button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={applyFilter}>Áp dụng</button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
 }
 
 function renderValue(value, key, field, difficultyLevels, freelancers, qcs, item = {}) {

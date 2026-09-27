@@ -358,6 +358,28 @@ app.patch('/api/accounts/:id', requireAdmin, async (req, res) => {
     res.status(error.statusCode || (error.code === '23505' ? 409 : 502)).json({ success: false, message: error.code === '23505' ? 'Username đã tồn tại.' : error.message });
   }
 });
+app.delete('/api/accounts/:id', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ success: false, message: 'ID account không hợp lệ.' });
+
+  try {
+    if (String(req.authUser.id) === String(id)) {
+      return res.status(400).json({ success: false, message: 'Không thể tự xóa account đang đăng nhập.' });
+    }
+    const accounts = await getCollection('accounts');
+    const current = accounts.find((account) => Number(account.id) === id);
+    if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy account cần xóa.' });
+    if (current.role === 'Admin' && accounts.filter((account) => account.role === 'Admin').length <= 1) {
+      return res.status(400).json({ success: false, message: 'Phải giữ lại ít nhất một account Admin.' });
+    }
+
+    const data = await deleteRowById('accounts', id);
+    invalidateAccountSessions(id);
+    res.json({ success: true, data: toPublicAccount(data, await getCollection('freelancers')) });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: error.message });
+  }
+});
 app.get('/api/deadlines', requireAuth, async (req, res) => {
   try {
     if (req.query?.refreshDrive === '1') googleDriveFolderCache.clear();
