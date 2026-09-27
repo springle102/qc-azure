@@ -120,7 +120,7 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
             <IconRefresh size={16} /> {isLoading ? 'Đang tải...' : 'Làm mới dữ liệu'}
           </button>
           {currentUser.role === 'Admin' && (
-            <button type="button" className="btn btn-danger" onClick={resetAll} disabled={isLoading || isResetting}>
+            <button type="button" className="btn btn-danger dashboard-reset-button" onClick={resetAll} disabled={isLoading || isResetting}>
               <IconTrash size={16} /> {isResetting ? 'Đang reset...' : 'Reset all'}
             </button>
           )}

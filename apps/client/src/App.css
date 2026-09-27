@@ -1404,6 +1404,15 @@
   gap: 10px;
 }
 
+.dashboard-reset-button {
+  color: #fecaca;
+  font-weight: 800;
+}
+
+:root[data-theme='light'] .dashboard-reset-button {
+  color: #b91c1c;
+}
+
 .dashboard-link-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
