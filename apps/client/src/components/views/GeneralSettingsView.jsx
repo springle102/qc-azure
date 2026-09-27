@@ -159,7 +159,7 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
 
       <section className="glass-panel general-settings-panel">
         <div className="section-heading">
-          <div><span className="qc-kicker">GOOGLE SHEET</span><h3>Đồng bộ bảng quản lý deadline</h3><p className="form-help">Service Account chỉ cần quyền Viewer trên file. Dòng đầu tiên của tab phải là tên cột.</p></div>
+          <div><span className="qc-kicker">GOOGLE SHEET</span><h3>Đồng bộ hai chiều bảng quản lý deadline</h3><p className="form-help">Service Account cần quyền Editor trên file. Dòng đầu tiên của mỗi tab phải là tên cột.</p></div>
         </div>
         <form className="general-settings-form google-sheet-settings-form" onSubmit={saveGoogleSheet}>
           <div className="form-group form-group-full">

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { IconEdit, IconFilter, IconPlus, IconRefresh, IconSearch, IconTasks, IconX } from '../common/Icons';
+import { IconEdit, IconFilter, IconPlus, IconRefresh, IconSearch, IconTasks, IconTrash, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
 
@@ -60,7 +60,7 @@ const STATUS_OPTIONS = [
   { value: 'done', label: 'Done', className: 'task-status-done' }
 ];
 
-export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs = [], fields = [], difficultyLevels = [], difficultyPrices = [], isLoading, onRefresh, onUpdate, onCreate, readOnly = false, title = 'Quản lý deadline' }) {
+export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs = [], fields = [], difficultyLevels = [], difficultyPrices = [], isLoading, onRefresh, onUpdate, onCreate, onDelete, readOnly = false, title = 'Quản lý deadline' }) {
   const [field, setField] = useState('');
   const [seriesId, setSeriesId] = useState('');
   const [freelancer, setFreelancer] = useState('');
@@ -72,6 +72,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
   const [rawStatusUpdatingKey, setRawStatusUpdatingKey] = useState('');
   const [taskStatusUpdatingKey, setTaskStatusUpdatingKey] = useState('');
   const [paymentUpdatingKey, setPaymentUpdatingKey] = useState('');
+  const [deletingKey, setDeletingKey] = useState('');
   const [columnFilters, setColumnFilters] = useState({});
   const [columnSort, setColumnSort] = useState(null);
   const fieldOptions = useMemo(() => fields.length > 0 ? fields.map((field) => field.name || field).filter(Boolean) : FIELD_OPTIONS, [fields]);
@@ -238,6 +239,21 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
     }
   };
 
+  const deleteDeadline = async (deadline) => {
+    if (!window.confirm(`Xóa deadline ${deadline.seriesId} - Chapter ${deadline.chapterNumber}? Dòng này cũng sẽ bị xóa trên Google Sheet.`)) return;
+    const rowKey = String(deadline.seriesId) + '-' + String(deadline.chapterNumber);
+    setDeletingKey(rowKey);
+    try {
+      const deletedDeadline = await api.deleteDeadline(deadline.seriesId, deadline.chapterNumber);
+      onDelete?.(deletedDeadline);
+      showToast('Đã xóa deadline trên web và Google Sheet.', 'success');
+    } catch (error) {
+      showToast(error.message || 'Không thể xóa deadline.', 'error');
+    } finally {
+      setDeletingKey('');
+    }
+  };
+
   return (
     <div className="fade-in">
       <div className="page-header-row qc-page-heading">
@@ -313,9 +329,14 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
                   {visibleColumns.map(([key]) => (
                     <td key={key} className={`deadline-column deadline-column-${key}`}>
                       {key === 'edit' ? (
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(item)}>
-                          <IconEdit size={14} /> Chỉnh sửa
-                        </button>
+                        <div className="deadline-action-buttons">
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(item)} disabled={deletingKey === String(item.seriesId) + '-' + String(item.chapterNumber)}>
+                            <IconEdit size={14} /> Chỉnh sửa
+                          </button>
+                          <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteDeadline(item)} disabled={deletingKey === String(item.seriesId) + '-' + String(item.chapterNumber)}>
+                            <IconTrash size={14} /> Xóa
+                          </button>
+                        </div>
                       ) : key === 'statusRaw' ? (
                         <input
                           className="raw-status-checkbox"

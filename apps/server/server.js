@@ -87,7 +87,7 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
   try {
-    await syncGoogleSheetIfDue();
+    await syncGoogleSheetIfDue({ waitForCompletion: true });
     const [tasks, deadlines] = await Promise.all([
       getCollection('tasks'),
       getCollection('deadlines')
@@ -131,7 +131,7 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
 
 app.get('/api/tasks', requireAuth, async (req, res) => {
   try {
-    await syncGoogleSheetIfDue();
+    await syncGoogleSheetIfDue({ waitForCompletion: true });
     return sendCollection('tasks', req, res);
   } catch (error) {
     return res.status(502).json({ success: false, message: error.message });
@@ -502,7 +502,7 @@ app.post('/api/google-sheet/sync', requireAdmin, async (req, res) => {
 });
 app.get('/api/salaries', requireAuth, async (req, res) => {
   try {
-    await syncGoogleSheetIfDue();
+    await syncGoogleSheetIfDue({ waitForCompletion: true });
     const [freelancers, qcs, deadlines, prices, bonusSettings] = await Promise.all([
       getCollection('freelancers'),
       getMergedQCs(),
@@ -549,6 +549,8 @@ app.get('/api/salaries', requireAuth, async (req, res) => {
 
 app.post('/api/reset-all', requireAdmin, async (req, res) => {
   try {
+    const syncSettings = await getGeneralSettings();
+    if (normalizeGoogleSheetUrl(syncSettings.googleSheetUrl)) await syncGoogleSheet();
     const currentRows = await getCollection('deadlines');
     const deadlineKeys = new Map();
     currentRows.forEach((row) => {
@@ -559,6 +561,8 @@ app.post('/api/reset-all', requireAdmin, async (req, res) => {
       });
     });
 
+    await deleteDeadlinesFromGoogleSheet([...deadlineKeys.values()]);
+
     const deletedCounts = await runWithConcurrency([...deadlineKeys.values()], async (keys) => {
       const deletedRows = await deleteRowsByKeys('deadlines', keys);
       return deletedRows.length;
@@ -567,11 +571,11 @@ app.post('/api/reset-all', requireAdmin, async (req, res) => {
 
     // Keep the configured Sheet connection unchanged, but prevent an immediate
     // automatic sync from restoring the deleted rows on the next dashboard load.
-    const settings = (await getCollection('generalSettings'))[0];
-    if (settings) {
+    const currentSettings = (await getCollection('generalSettings'))[0];
+    if (currentSettings) {
       await updateRow(
         'generalSettings',
-        { id: settings.id },
+        { id: currentSettings.id },
         { googleSheetLastSyncedAt: new Date().toISOString(), googleSheetLastSyncCount: 0 },
         ['googleSheetLastSyncedAt', 'googleSheetLastSyncCount']
       );
@@ -596,8 +600,7 @@ app.post('/api/deadlines', requireManager, async (req, res) => {
 
     payload.price = configuredPrice.price;
     payload.receivePrice = calculateReceivePrice(payload.price, payload.completionPercent);
-    const data = await insertRow(
-      'deadlines',
+    const data = await insertDeadlineAndGoogleSheet(
       payload,
       ['seriesId', 'chapterNumber', 'endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'completionPercent']
     );
@@ -626,8 +629,7 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber/status', requireAuth, async (
       return res.status(403).json({ success: false, message: 'Freelancer chỉ được chọn Doing hoặc Submitted.' });
     }
     const updates = buildStatusTransition(current, status);
-    const data = await updateRow(
-      'deadlines',
+    const data = await updateDeadlineAndGoogleSheet(
       { seriesId, chapterNumber },
       updates,
       ['status', 'doingStartedAt', 'workDurationSeconds', 'submittedAt']
@@ -695,13 +697,39 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber', requireManager, async (req,
       }
     }
 
-    const data = await updateRow(
-      'deadlines',
+    const data = await updateDeadlineAndGoogleSheet(
       { seriesId, chapterNumber },
       updates,
       ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'paymentApproved', 'completionPercent']
     );
     res.json({ success: true, data: decorateDeadlineTiming(data) });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: error.message });
+  }
+});
+
+app.delete('/api/deadlines/:seriesId/:chapterNumber', requireManager, async (req, res) => {
+  const seriesId = Number(req.params.seriesId);
+  const chapterNumber = Number(req.params.chapterNumber);
+  if (!Number.isInteger(seriesId) || !Number.isInteger(chapterNumber)) {
+    return res.status(400).json({ success: false, message: 'seriesId và chapterNumber phải là số nguyên.' });
+  }
+
+  try {
+    const settings = await getGeneralSettings();
+    if (normalizeGoogleSheetUrl(settings.googleSheetUrl)) await syncGoogleSheet();
+    const currentRows = await selectRows('deadlines');
+    const current = currentRows.find((item) => Number(item.seriesId) === seriesId && Number(item.chapterNumber) === chapterNumber);
+    if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy deadline cần xóa.' });
+
+    await syncDeadlineWithGoogleSheet(current, { action: 'delete' });
+    try {
+      const deletedRows = await deleteRowsByKeys('deadlines', { seriesId, chapterNumber });
+      res.json({ success: true, data: deletedRows[0] || current });
+    } catch (error) {
+      await syncDeadlineWithGoogleSheet(current);
+      throw error;
+    }
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
   }
@@ -936,7 +964,7 @@ async function getConfiguredFields() {
 
 async function getVisibleFields(user) {
   const fields = await getConfiguredFields();
-  if (user?.role !== 'Freelancer') return fields;
+  if (!['Freelancer', 'QC'].includes(user?.role)) return fields;
 
   const allowedFields = normalizeStoredFields(user.fields, user.field).map((field) => field.toLowerCase());
   return fields.filter((field) => allowedFields.includes(String(field.name || '').toLowerCase()));
@@ -1142,7 +1170,7 @@ async function getGoogleAccessToken() {
   const claimSet = encodeBase64Url(JSON.stringify({
     iss: credentials.client_email,
     scope: [
-      'https://www.googleapis.com/auth/spreadsheets.readonly',
+      'https://www.googleapis.com/auth/spreadsheets',
       'https://www.googleapis.com/auth/drive.readonly'
     ].join(' '),
     aud: 'https://oauth2.googleapis.com/token',
@@ -1185,12 +1213,18 @@ async function getGoogleAccessToken() {
   return googleAccessTokenCache.token;
 }
 
-async function googleSheetsRequest(path) {
+async function googleSheetsRequest(path, options = {}) {
   const token = await getGoogleAccessToken();
   let response;
   try {
     response = await fetchWithTimeout(`https://sheets.googleapis.com/v4/${path}`, {
-      headers: { Authorization: `Bearer ${token}` }
+      method: options.method || 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(options.headers || {})
+      },
+      ...(options.body ? { body: JSON.stringify(options.body) } : {})
     }, GOOGLE_REQUEST_TIMEOUT_MS);
   } catch (error) {
     if (error?.name === 'AbortError') {
@@ -1204,10 +1238,11 @@ async function googleSheetsRequest(path) {
       throw new Error('Google Sheets API đang bị tắt. Hãy bật Google Sheets API trong Google Cloud project rồi thử lại sau vài phút.');
     }
     if (response.status === 403 && /permission|not have access|does not have permission/i.test(message)) {
-      throw new Error('Service Account chưa được cấp quyền Viewer trên Google Sheet. Hãy chia sẻ file cho email client_email trong file JSON.');
+      throw new Error('Service Account chưa được cấp quyền Editor trên Google Sheet. Hãy chia sẻ file cho email client_email trong file JSON.');
     }
     throw new Error(`Google Sheets API trả về lỗi ${response.status}: ${message}`);
   }
+  if (response.status === 204) return {};
   return response.json();
 }
 
@@ -1517,7 +1552,40 @@ async function readGoogleSheetValues(spreadsheetId, range) {
       ))
       .filter((index) => index !== null)
   );
-  return { values, hiddenRows };
+  return { values, hiddenRows, startRow: Number(data.startRow || 0) };
+}
+
+function parseGoogleSheetA1Range(range) {
+  const reference = String(range ?? '').trim();
+  const bangIndex = reference.indexOf('!');
+  const sheetTitle = bangIndex === -1 ? reference : reference.slice(0, bangIndex);
+  const body = bangIndex === -1 ? '' : reference.slice(bangIndex + 1);
+  const startReference = body.split(':')[0] || 'A1';
+  const match = startReference.match(/^([A-Za-z]+)?(\d+)?$/);
+  const startColumn = match?.[1] ? googleSheetColumnToIndex(match[1]) : 0;
+  const startRow = match?.[2] ? Math.max(0, Number(match[2]) - 1) : 0;
+  return { sheetTitle: sheetTitle.replace(/^'|'$/g, "").replace(/''/g, "'"), startColumn, startRow };
+}
+
+function googleSheetColumnToIndex(value) {
+  return String(value || '').toUpperCase().split('').reduce((total, character) => (
+    total * 26 + character.charCodeAt(0) - 64
+  ), 0) - 1;
+}
+
+function googleSheetIndexToColumn(index) {
+  let current = Math.max(0, Number(index) || 0) + 1;
+  let result = '';
+  while (current > 0) {
+    const remainder = (current - 1) % 26;
+    result = String.fromCharCode(65 + remainder) + result;
+    current = Math.floor((current - 1) / 26);
+  }
+  return result;
+}
+
+function quoteGoogleSheetTitle(title) {
+  return `'${String(title ?? '').replace(/'/g, "''")}'`;
 }
 
 async function readGoogleSheetTabs(settings) {
@@ -1535,7 +1603,14 @@ async function readGoogleSheetTabs(settings) {
         return { field, missingTab: sheetTitle };
       }
       const range = resolveGoogleSheetRange(tabReference, sheets);
-      return { field, range, ...(await readGoogleSheetValues(spreadsheetId, range)) };
+      return {
+        field,
+        range,
+        sheetId: selectedSheet.properties?.sheetId,
+        sheetTitle: selectedSheet.properties?.title,
+        rangeMeta: parseGoogleSheetA1Range(range),
+        ...(await readGoogleSheetValues(spreadsheetId, range))
+      };
     }));
     const tabs = results.filter((result) => !result.missingTab);
     const missingTabs = results.filter((result) => result.missingTab);
@@ -1551,7 +1626,19 @@ async function readGoogleSheetTabs(settings) {
   const range = settings.googleSheetRange || selectedSheet?.properties?.title;
   if (!range) throw new Error('Không tìm thấy tab trong Google Sheet.');
   const resolvedRange = range.includes('!') ? range : resolveGoogleSheetRange(range, sheets);
-  return { tabs: [{ field: null, range: resolvedRange, ...(await readGoogleSheetValues(spreadsheetId, resolvedRange)) }], missingTabs: [] };
+  const rangeSheetTitle = parseGoogleSheetA1Range(resolvedRange).sheetTitle;
+  const rangeSheet = sheets.find((sheet) => String(sheet.properties?.title).toLowerCase() === rangeSheetTitle.toLowerCase()) || selectedSheet;
+  return {
+    tabs: [{
+      field: null,
+      range: resolvedRange,
+      sheetId: rangeSheet?.properties?.sheetId,
+      sheetTitle: rangeSheet?.properties?.title,
+      rangeMeta: parseGoogleSheetA1Range(resolvedRange),
+      ...(await readGoogleSheetValues(spreadsheetId, resolvedRange))
+    }],
+    missingTabs: []
+  };
 }
 
 function normalizeSheetHeader(value) {
@@ -1578,7 +1665,8 @@ const googleSheetHeaderAliases = {
   difficulty: ['difficulty', 'level', 'dokho', 'mucdo'],
   price: ['price', 'priceperchapter', 'dongia', 'rate'],
   feedback: ['feedback', 'note', 'ghichu', 'phanhoi'],
-  completionPercent: ['completionpercent', 'percent', 'progress', 'phantramhoanthanh', 'hoanthanh', '100']
+  completionPercent: ['completionpercent', 'percent', 'progress', 'phantramhoanthanh', 'hoanthanh', '100'],
+  paymentApproved: ['paymentapproved', 'payment', 'thanhtoan', 'duoc thanhtoan', 'paid']
 };
 
 function findGoogleSheetHeaderRow(values) {
@@ -1650,6 +1738,12 @@ function parseImportedMoney(value, label, rowNumber) {
   const parsed = Number(normalized);
   if (!Number.isFinite(parsed) || parsed < 0) throw validationError(`Dòng ${rowNumber}: ${label} không hợp lệ.`);
   return parsed;
+}
+
+function parseImportedBoolean(value) {
+  const text = String(value ?? '').trim().toLowerCase();
+  if (!text) return false;
+  return ['true', '1', 'yes', 'y', 'done', 'paid', 'đã thanh toán', 'đã duyệt'].includes(text);
 }
 
 function parseImportedDate(value, label, rowNumber) {
@@ -1724,6 +1818,7 @@ function buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qc
   }
   const fIld = resolveImportedReference(getSheetValue(row, headerIndex, 'fIld'), freelancers, ['fIld', 'fId', 'id'], ['name', 'email']);
   const qcId = resolveImportedReference(getSheetValue(row, headerIndex, 'qcId'), qcs, ['qcId', 'id'], ['name', 'email']);
+  const paymentHeaderIndex = getGoogleSheetHeaderIndex(headerIndex, 'paymentApproved', fieldOverride);
   return {
     seriesId,
     chapterNumber,
@@ -1740,7 +1835,10 @@ function buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qc
     feedback: nullableText(getSheetValue(row, headerIndex, 'feedback')),
     completionPercent,
     price,
-    receivePrice: calculateReceivePrice(price, completionPercent)
+    receivePrice: calculateReceivePrice(price, completionPercent),
+    ...(paymentHeaderIndex === undefined
+      ? {}
+      : { paymentApproved: parseImportedBoolean(getSheetValue(row, headerIndex, 'paymentApproved')) })
   };
 }
 
@@ -1761,6 +1859,285 @@ function hasDeadlineSheetChanges(current, imported, columns) {
   return columns.some((column) => normalizeSyncValue(current[column], column) !== normalizeSyncValue(imported[column], column));
 }
 
+const GOOGLE_SHEET_DEADLINE_COLUMNS = [
+  'seriesId', 'chapterNumber', 'endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status',
+  'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice',
+  'feedback', 'completionPercent', 'paymentApproved'
+];
+const GOOGLE_SHEET_HEADER_LABELS = {
+  paymentApproved: 'Thanh toán'
+};
+
+function getGoogleSheetHeaderIndex(headerIndex, key, fieldOverride = null) {
+  const aliases = key === 'seriesId' && normalizeSheetHeader(fieldOverride) === 'latin'
+    ? ['azid']
+    : googleSheetHeaderAliases[key] || [];
+  return aliases.map((alias) => headerIndex.get(normalizeSheetHeader(alias))).find((value) => value !== undefined);
+}
+
+function getGoogleSheetTabSnapshot(tab, fields) {
+  const headerRowIndex = findGoogleSheetHeaderRow(tab.values);
+  const headers = tab.values[headerRowIndex].map(normalizeSheetHeader);
+  const headerIndex = new Map(headers.map((header, index) => [header, index]));
+  const fieldOverride = tab.field ? normalizeImportedField(tab.field, fields, 1) : null;
+  const startRow = Number(tab.startRow ?? tab.rangeMeta?.startRow ?? 0);
+  const startColumn = Number(tab.rangeMeta?.startColumn ?? 0);
+  return { ...tab, headerRowIndex, headerIndex, fieldOverride, startRow, startColumn };
+}
+
+function findGoogleSheetRow(tab, seriesId, chapterNumber) {
+  for (let index = tab.headerRowIndex + 1; index < tab.values.length; index += 1) {
+    const row = tab.values[index] || [];
+    if (isDecorativeGoogleSheetRow(row, tab.headerIndex, tab.fieldOverride)) continue;
+    const currentSeriesId = getSheetValue(row, tab.headerIndex, 'seriesId', tab.fieldOverride);
+    const currentChapterNumber = getSheetValue(row, tab.headerIndex, 'chapterNumber');
+    if (Number(currentSeriesId) === Number(seriesId) && Number(currentChapterNumber) === Number(chapterNumber)) {
+      return {
+        row,
+        rowIndex: index,
+        rowNumber: tab.startRow + index + 1
+      };
+    }
+  }
+  return null;
+}
+
+function formatGoogleSheetDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  return hours || minutes
+    ? `${day}/${month}/${year} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+    : `${day}/${month}/${year}`;
+}
+
+function getGoogleSheetCellValue(row, key, fieldOverride = null) {
+  if (key === 'type' && fieldOverride) return fieldOverride;
+  if (key === 'endTask' || key === 'submittedAt') return formatGoogleSheetDate(row[key]);
+  if (key === 'paymentApproved') return Boolean(row[key]);
+  if (key === 'fIld') return row.fIld ?? row.fId ?? '';
+  if (key === 'statusRaw') return row.statusRaw || row.status || '';
+  if (key === 'urlSeries') return row.urlSeries || '';
+  if (row[key] === null || row[key] === undefined) return '';
+  return row[key];
+}
+
+function getGoogleSheetTargetTab(tabs, field) {
+  const normalizedField = String(field ?? '').trim().toLowerCase();
+  return tabs.find((tab) => tab.field && String(tab.field).trim().toLowerCase() === normalizedField)
+    || (tabs.length === 1 && !tabs[0].field ? tabs[0] : null);
+}
+
+async function ensureGoogleSheetHeaders(spreadsheetId, tab) {
+  const missingHeaders = Object.entries(GOOGLE_SHEET_HEADER_LABELS)
+    .filter(([key]) => getGoogleSheetHeaderIndex(tab.headerIndex, key, tab.fieldOverride) === undefined);
+  if (missingHeaders.length === 0) return;
+
+  let nextColumn = Math.max(-1, ...tab.headerIndex.values()) + 1;
+  const data = missingHeaders.map(([key, label]) => {
+    const columnIndex = nextColumn;
+    nextColumn += 1;
+    tab.headerIndex.set(normalizeSheetHeader(label), columnIndex);
+    return {
+      range: `${quoteGoogleSheetTitle(tab.sheetTitle)}!${googleSheetIndexToColumn(tab.startColumn + columnIndex)}${tab.startRow + tab.headerRowIndex + 1}`,
+      values: [[label]]
+    };
+  });
+  await googleSheetsRequest(`spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchUpdate`, {
+    method: 'POST',
+    body: { valueInputOption: 'USER_ENTERED', data }
+  });
+}
+
+async function writeGoogleSheetCells(spreadsheetId, tab, rowNumber, row) {
+  await ensureGoogleSheetHeaders(spreadsheetId, tab);
+  const data = GOOGLE_SHEET_DEADLINE_COLUMNS
+    .map((key) => {
+      const columnIndex = getGoogleSheetHeaderIndex(tab.headerIndex, key, tab.fieldOverride);
+      if (columnIndex === undefined) return null;
+      return {
+        range: `${quoteGoogleSheetTitle(tab.sheetTitle)}!${googleSheetIndexToColumn(tab.startColumn + columnIndex)}${rowNumber}`,
+        values: [[getGoogleSheetCellValue(row, key, tab.fieldOverride)]]
+      };
+    })
+    .filter(Boolean);
+  if (data.length === 0) throw new Error(`Tab "${tab.sheetTitle}" chưa có cột dữ liệu để cập nhật.`);
+  return googleSheetsRequest(`spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchUpdate`, {
+    method: 'POST',
+    body: { valueInputOption: 'USER_ENTERED', data }
+  });
+}
+
+async function appendGoogleSheetRow(spreadsheetId, tab, row) {
+  await ensureGoogleSheetHeaders(spreadsheetId, tab);
+  const mappedColumns = GOOGLE_SHEET_DEADLINE_COLUMNS
+    .map((key) => getGoogleSheetHeaderIndex(tab.headerIndex, key, tab.fieldOverride))
+    .filter((index) => index !== undefined);
+  if (mappedColumns.length === 0) throw new Error(`Tab "${tab.sheetTitle}" chưa có cột dữ liệu để thêm dòng.`);
+  const lastColumn = Math.max(...mappedColumns);
+  const values = Array.from({ length: lastColumn + 1 }, () => '');
+  GOOGLE_SHEET_DEADLINE_COLUMNS.forEach((key) => {
+    const columnIndex = getGoogleSheetHeaderIndex(tab.headerIndex, key, tab.fieldOverride);
+    if (columnIndex !== undefined) values[columnIndex] = getGoogleSheetCellValue(row, key, tab.fieldOverride);
+  });
+  const startColumn = googleSheetIndexToColumn(tab.startColumn);
+  const endColumn = googleSheetIndexToColumn(tab.startColumn + lastColumn);
+  return googleSheetsRequest(`spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(`${quoteGoogleSheetTitle(tab.sheetTitle)}!${startColumn}:${endColumn}`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
+    method: 'POST',
+    body: { majorDimension: 'ROWS', values: [values] }
+  });
+}
+
+async function deleteGoogleSheetRow(spreadsheetId, tab, rowNumber) {
+  if (tab.sheetId === undefined || tab.sheetId === null) throw new Error(`Không xác định được sheetId của tab "${tab.sheetTitle}".`);
+  return googleSheetsRequest(`spreadsheets/${encodeURIComponent(spreadsheetId)}:batchUpdate`, {
+    method: 'POST',
+    body: {
+      requests: [{
+        deleteDimension: {
+          range: {
+            sheetId: Number(tab.sheetId),
+            dimension: 'ROWS',
+            startIndex: rowNumber - 1,
+            endIndex: rowNumber
+          }
+        }
+      }]
+    }
+  });
+}
+
+async function syncDeadlineWithGoogleSheet(row, { action = 'upsert' } = {}) {
+  const settings = await getGeneralSettings();
+  const sheetUrl = normalizeGoogleSheetUrl(settings.googleSheetUrl);
+  if (!sheetUrl) return { skipped: true };
+
+  const { spreadsheetId } = parseGoogleSheetReference(sheetUrl);
+  const [fields, sheetReadResult] = await Promise.all([
+    getConfiguredFields(),
+    readGoogleSheetTabs({ ...settings, googleSheetUrl: sheetUrl })
+  ]);
+  const missingFields = new Set((sheetReadResult.missingTabs || []).map(({ field }) => String(field ?? '').trim().toLowerCase()).filter(Boolean));
+  if (missingFields.has(String(row.type ?? '').trim().toLowerCase())) {
+    throw new Error(`Không thể đồng bộ hai chiều vì thiếu tab Google Sheet: ${sheetReadResult.missingTabs.map(({ field, missingTab }) => `${field} → "${missingTab}"`).join(', ')}.`);
+  }
+  const tabs = sheetReadResult.tabs.map((tab) => getGoogleSheetTabSnapshot(tab, fields));
+  const targetTab = getGoogleSheetTargetTab(tabs, row.type);
+  const existing = tabs
+    .map((tab) => ({ tab, match: findGoogleSheetRow(tab, row.seriesId, row.chapterNumber) }))
+    .filter(({ match }) => match)
+    .at(-1);
+
+  if (action === 'delete') {
+    if (existing) await deleteGoogleSheetRow(spreadsheetId, existing.tab, existing.match.rowNumber);
+    return { deleted: Boolean(existing) };
+  }
+
+  if (!targetTab) {
+    throw new Error(`Không tìm thấy tab Google Sheet cho mảng "${row.type}" để đồng bộ hai chiều.`);
+  }
+  if (existing && existing.tab.sheetTitle === targetTab.sheetTitle) {
+    await writeGoogleSheetCells(spreadsheetId, existing.tab, existing.match.rowNumber, row);
+    return { updated: true };
+  }
+  if (existing) await deleteGoogleSheetRow(spreadsheetId, existing.tab, existing.match.rowNumber);
+  await appendGoogleSheetRow(spreadsheetId, targetTab, row);
+  return { inserted: true };
+}
+
+async function deleteDeadlinesFromGoogleSheet(rows) {
+  if (rows.length === 0) return;
+  const settings = await getGeneralSettings();
+  const sheetUrl = normalizeGoogleSheetUrl(settings.googleSheetUrl);
+  if (!sheetUrl) return;
+  const { spreadsheetId } = parseGoogleSheetReference(sheetUrl);
+  const [fields, sheetReadResult] = await Promise.all([
+    getConfiguredFields(),
+    readGoogleSheetTabs({ ...settings, googleSheetUrl: sheetUrl })
+  ]);
+  const missingFields = new Set((sheetReadResult.missingTabs || []).map(({ field }) => String(field ?? '').trim().toLowerCase()).filter(Boolean));
+  if (rows.some((row) => missingFields.has(String(row.type ?? '').trim().toLowerCase()))) {
+    throw new Error(`Không thể đồng bộ hai chiều vì thiếu tab Google Sheet: ${sheetReadResult.missingTabs.map(({ field, missingTab }) => `${field} → "${missingTab}"`).join(', ')}.`);
+  }
+  const tabs = sheetReadResult.tabs.map((tab) => getGoogleSheetTabSnapshot(tab, fields));
+  const keys = new Set(rows.map((row) => `${Number(row.seriesId)}:${Number(row.chapterNumber)}`));
+  const requests = [];
+  tabs.forEach((tab) => {
+    for (let index = tab.headerRowIndex + 1; index < tab.values.length; index += 1) {
+      const row = tab.values[index] || [];
+      if (isDecorativeGoogleSheetRow(row, tab.headerIndex, tab.fieldOverride)) continue;
+      const key = `${Number(getSheetValue(row, tab.headerIndex, 'seriesId', tab.fieldOverride))}:${Number(getSheetValue(row, tab.headerIndex, 'chapterNumber'))}`;
+      if (!keys.has(key)) continue;
+      requests.push({
+        deleteDimension: {
+          range: {
+            sheetId: Number(tab.sheetId),
+            dimension: 'ROWS',
+            startIndex: tab.startRow + index,
+            endIndex: tab.startRow + index + 1
+          }
+        }
+      });
+    }
+  });
+  if (requests.length === 0) return;
+  requests.sort((left, right) => {
+    const leftRange = left.deleteDimension.range;
+    const rightRange = right.deleteDimension.range;
+    if (leftRange.sheetId !== rightRange.sheetId) return rightRange.sheetId - leftRange.sheetId;
+    return rightRange.startIndex - leftRange.startIndex;
+  });
+  return googleSheetsRequest(`spreadsheets/${encodeURIComponent(spreadsheetId)}:batchUpdate`, {
+    method: 'POST',
+    body: { requests }
+  });
+}
+
+async function updateDeadlineAndGoogleSheet(keys, updates, allowedColumns) {
+  const settings = await getGeneralSettings();
+  if (normalizeGoogleSheetUrl(settings.googleSheetUrl)) await syncGoogleSheet();
+  const currentRows = await selectRows('deadlines');
+  const current = currentRows.find((item) => Object.entries(keys).every(([key, value]) => String(item[key]) === String(value)));
+  if (!current) throw new Error('Không tìm thấy deadline cần cập nhật.');
+  const data = await updateRow('deadlines', keys, updates, allowedColumns);
+  try {
+    await syncDeadlineWithGoogleSheet(data);
+    return data;
+  } catch (error) {
+    const rollback = Object.fromEntries(allowedColumns
+      .filter((column) => Object.prototype.hasOwnProperty.call(current, column))
+      .map((column) => [column, current[column]]));
+    try {
+      await updateRow('deadlines', keys, rollback, allowedColumns);
+    } catch (rollbackError) {
+      throw new Error(`${error.message} Không thể khôi phục dữ liệu web sau lỗi đồng bộ: ${rollbackError.message}`);
+    }
+    throw new Error(`${error.message} Dữ liệu web đã được khôi phục để giữ hai bên nhất quán.`);
+  }
+}
+
+async function insertDeadlineAndGoogleSheet(payload, allowedColumns) {
+  const settings = await getGeneralSettings();
+  if (normalizeGoogleSheetUrl(settings.googleSheetUrl)) await syncGoogleSheet();
+  const data = await insertRow('deadlines', payload, allowedColumns);
+  try {
+    await syncDeadlineWithGoogleSheet(data);
+    return data;
+  } catch (error) {
+    try {
+      await deleteRowsByKeys('deadlines', { seriesId: data.seriesId, chapterNumber: data.chapterNumber });
+    } catch (rollbackError) {
+      throw new Error(`${error.message} Không thể khôi phục dòng web sau lỗi đồng bộ: ${rollbackError.message}`);
+    }
+    throw new Error(`${error.message} Dòng web đã được khôi phục để giữ hai bên nhất quán.`);
+  }
+}
+
 async function syncGoogleSheet() {
   if (googleSheetSyncPromise) return googleSheetSyncPromise;
   googleSheetSyncPromise = (async () => {
@@ -1777,6 +2154,11 @@ async function syncGoogleSheet() {
       getMergedQCs(),
       getCollection('deadlines')
     ]);
+    const missingConfiguredFields = new Set(missingTabs.map(({ field }) => String(field ?? '').trim().toLowerCase()).filter(Boolean));
+    const missingRows = currentRows.filter((row) => missingConfiguredFields.has(String(row.type ?? '').trim().toLowerCase()));
+    if (missingRows.length) {
+      throw new Error(`Không thể đồng bộ hai chiều vì thiếu tab Google Sheet cho dữ liệu đang có: ${missingTabs.map(({ field, missingTab }) => `${field} → "${missingTab}"`).join(', ')}.`);
+    }
     const mappedRows = [];
     const skippedRows = [];
     let hiddenRows = 0;
@@ -1812,7 +2194,7 @@ async function syncGoogleSheet() {
     }
     let uniqueRows = [...uniqueRowsByKey.values()];
 
-    const allowedColumns = ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'completionPercent'];
+    const allowedColumns = ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'completionPercent', 'paymentApproved'];
     const currentRowsByKey = new Map(currentRows.map((item) => [
       `${Number(item.seriesId)}:${Number(item.chapterNumber)}`,
       item
@@ -1837,24 +2219,26 @@ async function syncGoogleSheet() {
     const writeResults = await runWithConcurrency(uniqueRows, async ({ data: row }) => {
       const key = `${row.seriesId}:${row.chapterNumber}`;
       const current = currentRowsByKey.get(key);
+      const rowAllowedColumns = Object.prototype.hasOwnProperty.call(row, 'paymentApproved')
+        ? allowedColumns
+        : allowedColumns.filter((column) => column !== 'paymentApproved');
       if (current) {
-        if (!hasDeadlineSheetChanges(current, row, allowedColumns)) return 'unchanged';
-        await updateRow('deadlines', { seriesId: row.seriesId, chapterNumber: row.chapterNumber }, row, allowedColumns);
+        if (!hasDeadlineSheetChanges(current, row, rowAllowedColumns)) return 'unchanged';
+        await updateRow('deadlines', { seriesId: row.seriesId, chapterNumber: row.chapterNumber }, row, rowAllowedColumns);
         return 'updated';
       }
       await insertRow('deadlines', {
         ...row,
         doingStartedAt: row.status === 'doing' ? new Date().toISOString() : null,
         workDurationSeconds: 0
-      }, ['seriesId', 'chapterNumber', ...allowedColumns]);
+      }, ['seriesId', 'chapterNumber', ...rowAllowedColumns]);
       return 'inserted';
     });
     const inserted = writeResults.filter((result) => result === 'inserted').length;
     const updated = writeResults.filter((result) => result === 'updated').length;
 
-    // Google Sheet is the source of truth. Reconcile deletions against valid
-    // imported ID + Chapter keys, even when other rows were skipped because
-    // their identifiers are incomplete.
+    // Reconcile deletions against valid imported ID + Chapter keys, even when
+    // other rows were skipped because their identifiers are incomplete.
     let deleted = 0;
     const sheetKeys = new Set(uniqueRows.map(({ data }) => `${data.seriesId}:${data.chapterNumber}`));
     const missingFields = new Set(missingTabs.map(({ field }) => String(field ?? '').trim().toLowerCase()).filter(Boolean));
@@ -1862,7 +2246,7 @@ async function syncGoogleSheet() {
       // A missing configured tab is not evidence that its existing rows were
       // deleted from the Sheet. Preserve them until that tab is restored or
       // its mapping is removed from settings.
-      if (missingFields.has(String(current.type ?? '').trim().toLowerCase())) return false;
+      if (missingConfiguredFields.has(String(current.type ?? '').trim().toLowerCase())) return false;
       const key = `${Number(current.seriesId)}:${Number(current.chapterNumber)}`;
       return !sheetKeys.has(key);
     });
@@ -1926,11 +2310,7 @@ async function syncGoogleSheetIfDue({ waitForCompletion = false } = {}) {
 
   const syncPromise = syncGoogleSheet();
   if (waitForCompletion) {
-    try {
-      await syncPromise;
-    } catch (error) {
-      console.error('Google Sheet auto sync failed:', error.message);
-    }
+    await syncPromise;
     return;
   }
 
@@ -2270,7 +2650,7 @@ function nullableInteger(value, label) {
 function nullableField(value, role) {
   const field = String(value ?? '').trim();
   if (!field) {
-    if (['Freelancer', 'QC'].includes(role)) throw validationError('Account phải chọn ít nhất một mảng đã cấu hình.');
+    if (['Freelancer', 'QC'].includes(role)) throw validationError('Account Freelancer/QC phải chọn ít nhất một mảng đã cấu hình.');
     return null;
   }
   normalizeConfiguredFieldName(field);
@@ -2295,7 +2675,7 @@ function normalizeAccountFields(value, fallback, role) {
     throw validationError('Mảng có tên không hợp lệ.');
   }
   if (['Freelancer', 'QC'].includes(role) && fields.length === 0) {
-    throw validationError('Account phải chọn ít nhất một mảng đã cấu hình.');
+    throw validationError('Account Freelancer/QC phải chọn ít nhất một mảng đã cấu hình.');
   }
   return fields;
 }
@@ -2382,6 +2762,11 @@ function getAuthUser(req) {
 }
 
 function filterRowsForUser(rows, user) {
+  if (user?.role === 'QC') {
+    const allowedFields = normalizeStoredFields(user.fields, user.field).map((field) => field.toLowerCase());
+    if (allowedFields.length === 0) return [];
+    return rows.filter((row) => allowedFields.includes(String(row.type ?? '').trim().toLowerCase()));
+  }
   if (user?.role !== 'Freelancer') return rows;
   if (user.freelancerId === null || user.freelancerId === undefined || user.freelancerId === '') return [];
   return rows.filter((row) => String(row.fIld ?? row.fId ?? row.freelancerId ?? '') === String(user.freelancerId));
@@ -2546,7 +2931,7 @@ function validateAccountUpdatePayload(payload, current) {
     ? result.fields
     : normalizeAccountFields(current.fields, result.field ?? current.field, nextRole, true);
   if (['Freelancer', 'QC'].includes(nextRole) && nextFields.length === 0) {
-    throw validationError('Account phải chọn ít nhất một mảng đã cấu hình.');
+    throw validationError('Account Freelancer/QC phải chọn ít nhất một mảng đã cấu hình.');
   }
   if (nextRole === 'Freelancer' && nextFields.length > 1) {
     throw validationError('Freelancer chỉ được chọn một mảng.');

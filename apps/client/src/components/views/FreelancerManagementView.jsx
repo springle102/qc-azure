@@ -1,11 +1,21 @@
-import React, { useMemo, useState } from 'react';
-import { IconEdit, IconRefresh, IconSearch, IconUsers, IconX } from '../common/Icons';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { IconEdit, IconFilter, IconRefresh, IconSearch, IconUsers, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
 import { AccountManagementView } from './AccountManagementView';
 
 const FIELD_OPTIONS = ['Japan', 'Latin', 'QC'];
 const EMPTY_ROWS = [];
+const FREELANCER_FILTER_COLUMNS = [
+  { key: 'fId', label: 'fId', sortKind: 'string' },
+  { key: 'name', label: 'Họ và tên', sortKind: 'string' },
+  { key: 'email', label: 'Email', sortKind: 'string' },
+  { key: 'fields', label: 'Mảng', sortKind: 'string' },
+  { key: 'note', label: 'Note', sortKind: 'string' },
+  { key: 'accountUsername', label: 'Account', sortKind: 'string' },
+  { key: 'accountStatus', label: 'Trạng thái account', sortKind: 'string' }
+];
 
 export function FreelancerManagementView({ freelancers = [], accounts = [], fields = [], isLoading, onRefresh, canManageAccounts = false, canEdit = false }) {
   const freelancerRows = Array.isArray(freelancers) ? freelancers : EMPTY_ROWS;
@@ -17,6 +27,18 @@ export function FreelancerManagementView({ freelancers = [], accounts = [], fiel
   const [editingFreelancer, setEditingFreelancer] = useState(null);
   const [form, setForm] = useState({ name: '', email: '', field: '', note: '' });
   const [isSaving, setIsSaving] = useState(false);
+  const [columnFilters, setColumnFilters] = useState({});
+  const [columnSort, setColumnSort] = useState(null);
+
+  const columnFilterOptions = useMemo(() => Object.fromEntries(
+    FREELANCER_FILTER_COLUMNS.map(({ key }) => {
+      const values = key === 'fields'
+        ? [...fieldOptions, ...freelancerRows.flatMap((freelancer) => getMemberFields(freelancer))]
+        : freelancerRows.map((freelancer) => getFreelancerFilterValue(freelancer, key));
+      return [key, [...new Set(values.map((value) => String(value ?? '')))]
+        .sort((left, right) => left.localeCompare(right, 'vi', { numeric: true, sensitivity: 'base' }))];
+    })
+  ), [fieldOptions, freelancerRows]);
 
   const filteredFreelancers = useMemo(() => freelancerRows.filter((freelancer) => {
     const memberFields = getMemberFields(freelancer);
@@ -30,8 +52,39 @@ export function FreelancerManagementView({ freelancers = [], accounts = [], fiel
       freelancer.note || freelancer.notes,
       freelancer.accountUsername
     ].some((value) => String(value || '').toLowerCase().includes(query));
-    return matchesField && matchesSearch;
-  }), [field, search, freelancerRows]);
+    const matchesColumnFilters = Object.entries(columnFilters).every(([key, selectedValues]) => {
+      if (key === 'fields') {
+        return selectedValues.some((value) => memberFields.some((memberField) => String(memberField).toLowerCase() === String(value).toLowerCase()));
+      }
+      return selectedValues.includes(getFreelancerFilterValue(freelancer, key));
+    });
+    return matchesField && matchesSearch && matchesColumnFilters;
+  }), [columnFilters, field, search, freelancerRows]);
+
+  const sortedFreelancers = useMemo(() => {
+    if (!columnSort) return filteredFreelancers;
+    return [...filteredFreelancers].sort((left, right) => {
+      const comparison = getFreelancerFilterValue(left, columnSort.key).localeCompare(
+        getFreelancerFilterValue(right, columnSort.key),
+        'vi',
+        { numeric: true, sensitivity: 'base' }
+      );
+      return columnSort.direction === 'desc' ? -comparison : comparison;
+    });
+  }, [columnSort, filteredFreelancers]);
+
+  const updateColumnFilter = (key, selectedValues) => {
+    setColumnFilters((current) => {
+      const next = { ...current };
+      if (selectedValues === null) delete next[key];
+      else next[key] = selectedValues;
+      return next;
+    });
+  };
+
+  const updateColumnSort = (key, direction) => {
+    setColumnSort(direction ? { key, direction } : null);
+  };
 
   const openEdit = (freelancer) => {
     setEditingFreelancer(freelancer);
@@ -107,20 +160,29 @@ export function FreelancerManagementView({ freelancers = [], accounts = [], fiel
           <table className="custom-table freelancer-table">
             <thead>
               <tr>
-                <th>fId</th>
-                <th>Họ và tên</th>
-                <th>Email</th>
-                <th>Mảng</th>
-                <th>Note</th>
-                <th>Account</th>
-                <th>Trạng thái account</th>
+                {FREELANCER_FILTER_COLUMNS.map(({ key, label, sortKind }) => (
+                  <th key={key}>
+                    <div className="deadline-column-header">
+                      <span>{label}</span>
+                      <ColumnFilterButton
+                        label={label}
+                        values={columnFilterOptions[key] || []}
+                        activeValues={columnFilters[key]}
+                        sortKind={sortKind}
+                        activeSortDirection={columnSort?.key === key ? columnSort.direction : null}
+                        onApply={(selectedValues) => updateColumnFilter(key, selectedValues)}
+                        onSort={(direction) => updateColumnSort(key, direction)}
+                      />
+                    </div>
+                  </th>
+                ))}
                 {canEdit && <th>Thao tác</th>}
               </tr>
             </thead>
             <tbody>
               {filteredFreelancers.length === 0 ? (
                 <tr><td colSpan={canEdit ? 8 : 7}><EmptyTable icon={<IconUsers size={24} />} text={isLoading ? 'Đang tải dữ liệu...' : 'Chưa có freelancer trong hệ thống.'} /></td></tr>
-              ) : filteredFreelancers.map((freelancer) => (
+              ) : sortedFreelancers.map((freelancer) => (
                 <tr key={freelancer.fIld || freelancer.fId || freelancer.id}>
                   <td className="mono-cell">{freelancer.fId || freelancer.fIld || '—'}</td>
                   <td className="strong-cell">{freelancer.name || '—'}</td>
@@ -181,6 +243,128 @@ export function FreelancerManagementView({ freelancers = [], accounts = [], fiel
 
 function EmptyTable({ icon, text }) {
   return <div className="empty-state table-empty">{icon}<strong>{text}</strong></div>;
+}
+
+function getFreelancerFilterValue(freelancer = {}, key) {
+  if (key === 'fId') return String(freelancer.fId ?? freelancer.fIld ?? freelancer.id ?? '');
+  if (key === 'fields') return getMemberFields(freelancer).join(', ');
+  if (key === 'note') return String(freelancer.note ?? freelancer.notes ?? '');
+  if (key === 'accountStatus') {
+    return freelancer.accountUsername
+      ? (freelancer.accountIsActive ? 'Đang hoạt động' : 'Đã khóa')
+      : 'Chưa cấp';
+  }
+  return String(freelancer[key] ?? '');
+}
+
+function formatFilterValue(value) {
+  return value === '' ? '(Trống)' : value;
+}
+
+function ColumnFilterButton({ label, values, activeValues, sortKind, activeSortDirection, onApply, onSort }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState('');
+  const [draftValues, setDraftValues] = useState([]);
+  const [menuPosition, setMenuPosition] = useState(null);
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
+  const isActive = Array.isArray(activeValues) || Boolean(activeSortDirection);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const updatePosition = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = 280;
+      setMenuPosition({
+        top: rect.bottom + 6,
+        left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))
+      });
+    };
+    const handleOutsidePointer = (event) => {
+      if (!buttonRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) setIsOpen(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+
+    updatePosition();
+    document.addEventListener('pointerdown', handleOutsidePointer);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointer);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [isOpen]);
+
+  const openFilter = (event) => {
+    event.stopPropagation();
+    if (isOpen) {
+      setIsOpen(false);
+      return;
+    }
+    setSearchValue('');
+    setDraftValues(Array.isArray(activeValues) ? [...activeValues] : [...values]);
+    setIsOpen(true);
+  };
+
+  const visibleValues = values.filter((value) => formatFilterValue(value).toLowerCase().includes(searchValue.trim().toLowerCase()));
+  const allSelected = values.length > 0 && draftValues.length === values.length;
+  const toggleValue = (value) => {
+    setDraftValues((current) => current.includes(value)
+      ? current.filter((item) => item !== value)
+      : [...current, value]);
+  };
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={'column-filter-button' + (isActive ? ' active' : '')}
+        onClick={openFilter}
+        aria-label={`Lọc cột ${label}`}
+        aria-expanded={isOpen}
+        title={`Lọc cột ${label}`}
+      >
+        <IconFilter size={14} />
+      </button>
+      {isOpen && menuPosition && createPortal(
+        <div ref={menuRef} className="column-filter-menu" style={menuPosition} onClick={(event) => event.stopPropagation()}>
+          <div className="column-filter-menu-title">Lọc {label}</div>
+          {sortKind && (
+            <div className="column-filter-sort">
+              <div className="column-filter-section-label">Sắp xếp</div>
+              <button type="button" className={'column-filter-sort-button' + (activeSortDirection === 'asc' ? ' active' : '')} onClick={() => { onSort(activeSortDirection === 'asc' ? null : 'asc'); setIsOpen(false); }}>A → Z</button>
+              <button type="button" className={'column-filter-sort-button' + (activeSortDirection === 'desc' ? ' active' : '')} onClick={() => { onSort(activeSortDirection === 'desc' ? null : 'desc'); setIsOpen(false); }}>Z → A</button>
+            </div>
+          )}
+          <input className="form-input column-filter-search" value={searchValue} onChange={(event) => setSearchValue(event.target.value)} placeholder="Tìm giá trị..." autoFocus />
+          <label className="column-filter-option column-filter-select-all">
+            <input type="checkbox" checked={allSelected} onChange={() => setDraftValues(allSelected ? [] : [...values])} />
+            <span>Chọn tất cả</span>
+          </label>
+          <div className="column-filter-options">
+            {visibleValues.length > 0 ? visibleValues.map((value) => (
+              <label className="column-filter-option" key={value || '__empty__'}>
+                <input type="checkbox" checked={draftValues.includes(value)} onChange={() => toggleValue(value)} />
+                <span title={formatFilterValue(value)}>{formatFilterValue(value)}</span>
+              </label>
+            )) : <span className="column-filter-empty">Không có giá trị phù hợp.</span>}
+          </div>
+          <div className="column-filter-actions">
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => { onApply(null); setIsOpen(false); }}>Xóa lọc</button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => { onApply(draftValues.length === values.length ? null : draftValues); setIsOpen(false); }}>Áp dụng</button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
 }
 
 function getMemberFields(member = {}) {

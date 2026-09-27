@@ -192,6 +192,16 @@ export function App() {
     }));
   }, []);
 
+  const handleDeleteDeadline = useCallback((deletedDeadline) => {
+    setData((current) => ({
+      ...current,
+      deadlines: current.deadlines.filter((deadline) => (
+        String(deadline.seriesId) !== String(deletedDeadline.seriesId)
+        || String(deadline.chapterNumber) !== String(deletedDeadline.chapterNumber)
+      ))
+    }));
+  }, []);
+
   const handleResetAll = useCallback(async () => {
     await api.resetAllData();
     setData((current) => ({
@@ -271,7 +281,7 @@ export function App() {
       case 'settings':
         return <GeneralSettingsView {...commonProps} fields={data.fields} generalSettings={data.generalSettings} />;
       case 'deadlines':
-        return <DeadlineManagementView {...commonProps} deadlines={data.deadlines} freelancers={data.freelancers} qcs={data.qcs} fields={data.fields} difficultyLevels={data.difficultyLevels} difficultyPrices={data.difficultyPrices} onUpdate={handleUpdateDeadline} onCreate={handleCreateDeadline} readOnly={profile.role === 'Freelancer'} title={profile.role === 'Freelancer' ? 'Deadline của tôi' : 'Quản lý deadline'} />;
+        return <DeadlineManagementView {...commonProps} deadlines={data.deadlines} freelancers={data.freelancers} qcs={data.qcs} fields={data.fields} difficultyLevels={data.difficultyLevels} difficultyPrices={data.difficultyPrices} onUpdate={handleUpdateDeadline} onCreate={handleCreateDeadline} onDelete={handleDeleteDeadline} readOnly={profile.role === 'Freelancer'} title={profile.role === 'Freelancer' ? 'Deadline của tôi' : 'Quản lý deadline'} />;
       case 'profile':
         return <ProfileView currentUser={profile} onSaveProfile={handleSaveProfile} />;
       case 'dashboard':
@@ -288,7 +298,7 @@ export function App() {
           />
         );
     }
-  }, [currentView, data, handleCreateDeadline, handleNavigate, handleResetAll, handleSaveProfile, handleUpdateDeadline, isLoading, loadData, profile]);
+  }, [currentView, data, handleCreateDeadline, handleDeleteDeadline, handleNavigate, handleResetAll, handleSaveProfile, handleUpdateDeadline, isLoading, loadData, profile]);
 
   if (isAuthChecking) {
     return (

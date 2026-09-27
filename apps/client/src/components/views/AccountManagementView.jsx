@@ -91,7 +91,7 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
   const createAccount = async (event) => {
     event.preventDefault();
     if (['QC', 'Freelancer'].includes(form.role) && form.fields.length === 0) {
-      showToast('Hãy chọn ít nhất một mảng cho account.', 'error');
+      showToast('Account Freelancer/QC cần chọn ít nhất một mảng.', 'error');
       return;
     }
     setIsSaving(true);
@@ -130,7 +130,7 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
     event.preventDefault();
     if (!editingAccount) return;
     if (['QC', 'Freelancer'].includes(editForm.role) && editForm.fields.length === 0) {
-      showToast('Hãy chọn ít nhất một mảng cho account.', 'error');
+      showToast('Account Freelancer/QC cần chọn ít nhất một mảng.', 'error');
       return;
     }
     setIsSaving(true);
@@ -208,7 +208,7 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
           <div className="form-group">
             <span className="form-label">Mảng</span>
             <FieldCheckboxes options={fieldOptions} value={form.fields} onChange={(fields) => updateField('fields', fields)} />
-            <span className="form-help account-create-link-help">Có thể chọn nhiều mảng; account Freelancer/QC cần chọn ít nhất một mảng.</span>
+            <span className="form-help account-create-link-help">Freelancer chọn một mảng; QC có thể chọn một hoặc nhiều mảng được Admin cấp.</span>
           </div>
           <div className="account-create-actions">
             <span className="form-help">Password được lưu dạng hash trong database và không hiển thị lại.</span>
@@ -309,6 +309,7 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
               <div className="form-group">
                 <span className="form-label">Mảng</span>
                 <FieldCheckboxes options={fieldOptions} value={editForm.fields} onChange={(fields) => updateEditField('fields', fields)} disabled={isSaving} />
+                <span className="form-help account-create-link-help">QC chỉ xem và nhận deadline trong các mảng được chọn.</span>
               </div>
               <label className="form-checkbox-control">
                 <input type="checkbox" checked={editForm.isActive} onChange={(event) => updateEditField('isActive', event.target.checked)} disabled={isSaving} />

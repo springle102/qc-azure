@@ -94,6 +94,9 @@ export const api = {
     method: 'PATCH',
     body: JSON.stringify({ status })
   }),
+  deleteDeadline: (seriesId, chapterNumber) => request(`/deadlines/${seriesId}/${chapterNumber}`, {
+    method: 'DELETE'
+  }),
   getFields: () => request('/fields'),
   createField: (field) => request('/fields', {
     method: 'POST',

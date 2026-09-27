@@ -35,7 +35,7 @@ Mặc định server chạy tại `http://localhost:5000`.
 - `DELETE /api/fields/:id` (Admin)
 - `GET /api/general-settings`
 - `PATCH /api/general-settings` (Admin; cấu hình kết nối Google Sheet)
-- `POST /api/google-sheet/sync` (Admin; đồng bộ Google Sheet vào `SeriesList`)
+- `POST /api/google-sheet/sync` (Admin; đối soát hai chiều Google Sheet và `SeriesList`)
 - `GET /api/difficulty-levels`
 - `POST /api/difficulty-levels`
 - `PATCH /api/difficulty-levels/:id`
@@ -74,8 +74,8 @@ Mỗi dòng trong bảng `Fields` có thêm `guideUrl` và `resourceUrl`. Dashbo
 ## Đồng bộ Google Sheet riêng tư
 
 1. Trong Google Cloud, bật Google Sheets API, tạo Service Account và tạo key JSON.
-2. Chia sẻ file Google Sheet cho email `client_email` trong file JSON với quyền Viewer.
+2. Chia sẻ file Google Sheet cho email `client_email` trong file JSON với quyền Editor để hệ thống có thể ghi ngược dữ liệu.
 3. Đặt đường dẫn file JSON vào `GOOGLE_SERVICE_ACCOUNT_FILE` trong `apps/server/.env` (hoặc dùng biến JSON/base64), rồi khởi động lại server.
 4. Vào Cấu hình chung, nhập link Google Sheet, khai báo tab cho từng mảng (ví dụ `Japan` → tab `Japan`, `Latin` → tab `Latin`, `QC` → tab `QC`), lưu kết nối và bấm Đồng bộ ngay.
 
-Dòng đầu tiên của mỗi tab là header. Tên mảng của tab được dùng làm `type` của deadline nên không bắt buộc phải có cột `type`. Khóa đồng bộ là `seriesId` + `chapterNumber`; bản ghi trùng khóa được cập nhật, bản ghi mới được thêm, còn bản ghi không còn trong Sheet không bị xóa tự động.
+Dòng đầu tiên của mỗi tab là header. Tên mảng của tab được dùng làm `type` của deadline nên không bắt buộc phải có cột `type`. Khóa đồng bộ là `seriesId` + `chapterNumber`. Đồng bộ hai chiều: dòng mới/sửa/xóa trên Sheet được phản ánh về web; tạo/sửa/xóa trên web được ghi lại vào Sheet. Nếu đồng thời sửa cùng một dòng, lần ghi cuối sẽ được giữ lại. Web kiểm tra Sheet khi tải dữ liệu và tối đa mỗi 5 phút khi bật tự động đồng bộ.
