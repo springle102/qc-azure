@@ -570,6 +570,11 @@ function formatDateOnly(value) {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString('vi-VN');
 }
 
+function formatDateTime(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('vi-VN');
+}
+
 function formatDuration(seconds) {
   const totalSeconds = Math.max(0, Number(seconds || 0));
   if (!totalSeconds) return 'Chưa tính giờ';
