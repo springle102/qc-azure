@@ -74,6 +74,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
   const [rawStatusUpdatingKey, setRawStatusUpdatingKey] = useState('');
   const [taskStatusUpdatingKey, setTaskStatusUpdatingKey] = useState('');
   const [paymentUpdatingKey, setPaymentUpdatingKey] = useState('');
+  const [paymentOverrides, setPaymentOverrides] = useState({});
   const [lateUpdatingKey, setLateUpdatingKey] = useState('');
   const [deletingKey, setDeletingKey] = useState('');
   const [columnFilters, setColumnFilters] = useState({});
@@ -231,14 +232,28 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
 
   const togglePayment = async (deadline, checked) => {
     const rowKey = String(deadline.seriesId) + '-' + String(deadline.chapterNumber);
+    // Show the new state immediately while the database/Sheet update runs.
+    setPaymentOverrides((current) => ({ ...current, [rowKey]: checked }));
     setPaymentUpdatingKey(rowKey);
     try {
       const updatedDeadline = await api.updateDeadline(deadline.seriesId, deadline.chapterNumber, {
         paymentApproved: checked
       });
       onUpdate?.(updatedDeadline);
+      setPaymentOverrides((current) => {
+        const next = { ...current };
+        delete next[rowKey];
+        return next;
+      });
       showToast(checked ? 'Đã đánh dấu task được tính lương.' : 'Đã bỏ đánh dấu thanh toán.', 'success');
     } catch (error) {
+      // The props still contain the previous value, so removing the override
+      // restores the checkbox automatically when the request fails.
+      setPaymentOverrides((current) => {
+        const next = { ...current };
+        delete next[rowKey];
+        return next;
+      });
       showToast(error.message || 'Không thể cập nhật trạng thái thanh toán.', 'error');
     } finally {
       setPaymentUpdatingKey('');
@@ -387,10 +402,10 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
                         <input
                           className="raw-status-checkbox payment-checkbox"
                           type="checkbox"
-                          checked={isPaymentApproved(item.paymentApproved)}
+                          checked={getPaymentDisplayValue(item, paymentOverrides)}
                           onChange={(event) => togglePayment(item, event.target.checked)}
                           disabled={readOnly || paymentUpdatingKey === String(item.seriesId) + '-' + String(item.chapterNumber)}
-                          aria-label={'Thanh toán: ' + (isPaymentApproved(item.paymentApproved) ? 'đã chọn' : 'chưa chọn')}
+                          aria-label={'Thanh toán: ' + (getPaymentDisplayValue(item, paymentOverrides) ? 'đã chọn' : 'chưa chọn')}
                         />
                       ) : renderValue(key === 'fIld' ? (item.fIld ?? item.fId) : item[key], key, item.type, difficultyLevels, freelancerOptions, qcOptions, item)}
                     </td>
@@ -466,6 +481,13 @@ function getPersonName(id, people = []) {
 
 function isPaymentApproved(value) {
   return value === true || value === 1 || ['true', '1', 'yes'].includes(String(value ?? '').trim().toLowerCase());
+}
+
+function getPaymentDisplayValue(item, overrides = {}) {
+  const rowKey = String(item?.seriesId) + '-' + String(item?.chapterNumber);
+  return Object.prototype.hasOwnProperty.call(overrides, rowKey)
+    ? overrides[rowKey]
+    : isPaymentApproved(item?.paymentApproved);
 }
 
 function getMonthFilterValue(value) {

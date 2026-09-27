@@ -2138,8 +2138,6 @@ async function deleteDeadlinesFromGoogleSheet(rows) {
 }
 
 async function updateDeadlineAndGoogleSheet(keys, updates, allowedColumns) {
-  const settings = await getGeneralSettings();
-  if (normalizeGoogleSheetUrl(settings.googleSheetUrl)) await syncGoogleSheet();
   const currentRows = await selectRows('deadlines');
   const current = currentRows.find((item) => Object.entries(keys).every(([key, value]) => String(item[key]) === String(value)));
   if (!current) throw new Error('Không tìm thấy deadline cần cập nhật.');
