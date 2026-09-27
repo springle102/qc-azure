@@ -2223,6 +2223,8 @@ async function syncGoogleSheet() {
           try {
             mappedRows.push({
               tab: tab.range,
+              headerIndex,
+              fieldOverride,
               data: buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qcs, rowNumber, fieldOverride)
             });
           } catch (error) {
@@ -2264,7 +2266,7 @@ async function syncGoogleSheet() {
     ));
     const driveLinkResult = await enrichRowsWithGoogleDriveLinks(rowsWithPreservedUrls, rowsToLookup, settings.googleDriveFolders);
     uniqueRows = driveLinkResult.rows;
-    const writeResults = await runWithConcurrency(uniqueRows, async ({ data: row }) => {
+    const writeResults = await runWithConcurrency(uniqueRows, async ({ data: row, headerIndex, fieldOverride }) => {
       const key = `${row.seriesId}:${row.chapterNumber}`;
       const current = currentRowsByKey.get(key);
       const rowAllowedColumns = allowedColumns.filter((column) => {
