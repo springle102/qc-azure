@@ -120,7 +120,7 @@ export function SalaryManagementView({ salaries = [], fields = [], bonusConfig, 
 function formatSalary(value) {
   if (value === null || value === undefined || value === '') return '—';
   const amount = Number(value);
-  return Number.isFinite(amount) ? `${amount.toLocaleString('vi-VN')} ₫` : String(value);
+  return Number.isFinite(amount) ? `${amount.toLocaleString('en-US', { maximumFractionDigits: 2 })} ₫` : String(value);
 }
 
 function getMemberFields(member) {

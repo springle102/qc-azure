@@ -1517,7 +1517,7 @@ const googleSheetHeaderAliases = {
   type: ['type', 'field', 'mang', 'theloai', 'lang'],
   endTask: ['endtask', 'end', 'deadline', 'due', 'duedate', 'han', 'thoigianketthuc', 'dl'],
   submittedAt: ['submittedat', 'submittedon', 'ngaynop', 'ngaynopbai', 'datesubmitted'],
-  statusRaw: ['statusraw', 'rawstatus', 'trangthairaw', 'trangthai'],
+  statusRaw: ['statusraw', 'rawstatus', 'trangthairaw', 'trangthai', 'file'],
   status: ['status', 'taskstatus', 'trangthaicodinh'],
   urlSeries: ['urlseries', 'seriesurl', 'url', 'link', 'linktruyen'],
   fIld: ['fild', 'freelancerid', 'freelancer', 'freelancername', 'nguoiduocgiao'],

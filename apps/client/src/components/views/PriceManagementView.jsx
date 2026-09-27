@@ -217,7 +217,7 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
             <input id="bonus-per-task" className="form-input" type="number" min="0" step="0.01" value={activeBonusConfig.bonusPerTask} onChange={(event) => updateBonusField('bonusPerTask', event.target.value)} disabled={isSaving} />
           </div>
           <div className="bonus-settings-actions">
-            <span className="muted-inline">Ví dụ: x = 20, y = 10.000 ₫ thì task thứ 21 được cộng 10.000 ₫.</span>
+            <span className="muted-inline">Ví dụ: x = 20, y = 10,000 ₫ thì task thứ 21 được cộng 10,000 ₫.</span>
             <button type="submit" className="btn btn-primary" disabled={isSaving}>{isSaving ? 'Đang lưu...' : 'Lưu cấu hình bonus'}</button>
           </div>
         </form>
@@ -363,5 +363,5 @@ function priceKey(field, difficulty) {
 
 function formatPrice(value) {
   const amount = Number(value);
-  return Number.isFinite(amount) ? `${amount.toLocaleString('vi-VN')} ₫` : '—';
+  return Number.isFinite(amount) ? `${amount.toLocaleString('en-US', { maximumFractionDigits: 2 })} ₫` : '—';
 }

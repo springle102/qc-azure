@@ -571,6 +571,7 @@ function renderValue(value, key, field, difficultyLevels, freelancers, qcs, item
     ? <a className="table-link" href={value} target="_blank" rel="noreferrer">Mở link</a>
     : '—';
   if (key === 'endTask') return formatDateOnly(value);
+  if (key === 'price' || key === 'receivePrice') return formatMoney(value);
   if (key === 'completionPercent') return <span className="completion-badge">{value}%</span>;
   if (key === 'fIld') return findPersonName(value, freelancers);
   if (key === 'qcId') return findPersonName(value, qcs);
@@ -586,6 +587,11 @@ function renderValue(value, key, field, difficultyLevels, freelancers, qcs, item
 
 function findPersonName(value, people) {
   return people.find((person) => String(person.id) === String(value))?.name || String(value);
+}
+
+function formatMoney(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? `${amount.toLocaleString('en-US', { maximumFractionDigits: 2 })} ₫` : '—';
 }
 
 function getStatusOption(value) {
