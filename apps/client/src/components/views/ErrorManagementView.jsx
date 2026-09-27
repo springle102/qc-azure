@@ -414,7 +414,7 @@ export function ErrorManagementView({
                 </div>
               ))}
             </div>
-            <button type="submit" className="btn btn-secondary" disabled={isSaving}><IconCheck size={16} /> Lưu link sheet lỗi</button>
+            <button type="submit" className="btn btn-secondary" disabled={isSaving}><IconCheck size={16} /> Lưu</button>
           </form>
         </section>
       )}

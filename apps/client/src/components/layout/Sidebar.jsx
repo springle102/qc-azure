@@ -4,6 +4,8 @@ import {
   IconAlertTriangle,
   IconUsers,
   IconTasks,
+  IconDollarSign,
+  IconBanknote,
   IconSettings,
   IconUser,
   IconLogOut
@@ -14,9 +16,9 @@ const NAV_ITEMS = [
   { id: 'freelancers', label: 'Quản lý freelancer', icon: IconUsers },
   { id: 'deadlines', label: 'Quản lý Deadline', icon: IconTasks },
   { id: 'errors', label: 'Quản lý lỗi', icon: IconAlertTriangle },
-  { id: 'pricing', label: 'Giá tiền', icon: IconTasks },
+  { id: 'pricing', label: 'Giá tiền', icon: IconDollarSign },
   { id: 'settings', label: 'Cấu hình chung', icon: IconSettings },
-  { id: 'salary', label: 'Lương', icon: IconUsers },
+  { id: 'salary', label: 'Lương', icon: IconBanknote },
   { id: 'profile', label: 'Hồ sơ cá nhân', icon: IconUser }
 ];
 

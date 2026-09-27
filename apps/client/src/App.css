@@ -586,6 +586,8 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
+  width: 100vw;
+  min-height: 100dvh;
   background: rgba(4, 7, 15, 0.82);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -593,6 +595,7 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
+  overflow-y: auto;
   z-index: 999;
   animation: fadeIn 0.2s ease-out;
 }
@@ -604,6 +607,7 @@
   max-width: 640px;
   width: 100%;
   max-height: 90vh;
+  margin: auto;
   overflow-y: auto;
   box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.8), 0 0 35px rgba(37, 99, 235, 0.25);
   animation: toastSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
@@ -3442,6 +3446,7 @@
 
 .error-sheet-config-grid .form-group {
   min-width: 0;
+  margin-bottom: 0;
 }
 
 .error-field-panel {
