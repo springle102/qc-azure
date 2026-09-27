@@ -14,9 +14,6 @@ export function Footer() {
         }} />
         <span>Hệ thống quản lý deadline Webtoon</span>
       </div>
-      <div>
-        <span>React · Node.js · Supabase PostgreSQL</span>
-      </div>
     </footer>
   );
 }
