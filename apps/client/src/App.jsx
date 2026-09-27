@@ -9,6 +9,7 @@ import { SalaryManagementView } from './components/views/SalaryManagementView';
 import { DeadlineManagementView } from './components/views/DeadlineManagementView';
 import { PriceManagementView } from './components/views/PriceManagementView';
 import { GeneralSettingsView } from './components/views/GeneralSettingsView';
+import { ErrorManagementView } from './components/views/ErrorManagementView';
 import { ProfileView } from './components/views/ProfileView';
 import { LoginView } from './components/views/LoginView';
 import { api } from './services/api';
@@ -27,21 +28,23 @@ const EMPTY_DATA = {
   accounts: [],
   fields: [],
   generalSettings: { id: 1 },
+  errors: [],
 };
 
 const ROLE_VIEWS = {
-  Admin: ['dashboard', 'freelancers', 'deadlines', 'pricing', 'settings', 'salary', 'profile'],
-  QC: ['dashboard', 'profile', 'salary', 'deadlines'],
-  Freelancer: ['dashboard', 'profile', 'salary', 'deadlines']
+  Admin: ['dashboard', 'freelancers', 'deadlines', 'errors', 'pricing', 'settings', 'salary', 'profile'],
+  QC: ['dashboard', 'profile', 'salary', 'deadlines', 'errors'],
+  Freelancer: ['dashboard', 'profile', 'salary', 'deadlines', 'errors']
 };
 
 const VIEW_RESOURCES = {
-  dashboard: ['dashboard', 'tasks', 'deadlines'],
-  freelancers: ['freelancers', 'accounts', 'fields'],
-  deadlines: ['deadlines', 'freelancers', 'qcs', 'fields', 'difficultyLevels', 'difficultyPrices'],
-  pricing: ['difficultyLevels', 'difficultyPrices', 'fields', 'bonusSettings'],
-  settings: ['fields', 'generalSettings', 'deadlines'],
-  salary: ['freelancers', 'salaries', 'fields', 'bonusSettings'],
+  dashboard: ['dashboard', 'tasks', 'deadlines', 'errors'],
+  freelancers: ['freelancers', 'accounts', 'fields', 'errors'],
+  deadlines: ['deadlines', 'freelancers', 'qcs', 'fields', 'difficultyLevels', 'difficultyPrices', 'errors'],
+  errors: ['errors', 'fields', 'freelancers', 'generalSettings'],
+  pricing: ['difficultyLevels', 'difficultyPrices', 'fields', 'bonusSettings', 'errors'],
+  settings: ['fields', 'generalSettings', 'deadlines', 'errors'],
+  salary: ['freelancers', 'salaries', 'fields', 'bonusSettings', 'errors'],
   profile: []
 };
 
@@ -134,7 +137,8 @@ export function App() {
       salaries: api.getSalaries,
       accounts: role === 'Admin' ? api.getAccounts : async () => [],
       fields: api.getFields,
-      generalSettings: api.getGeneralSettings
+      generalSettings: api.getGeneralSettings,
+      errors: api.getErrors
     };
     const fallbacks = {
       dashboard: EMPTY_DATA.dashboard,
@@ -148,7 +152,8 @@ export function App() {
       salaries: EMPTY_DATA.salaries,
       accounts: EMPTY_DATA.accounts,
       fields: EMPTY_DATA.fields,
-      generalSettings: EMPTY_DATA.generalSettings
+      generalSettings: EMPTY_DATA.generalSettings,
+      errors: EMPTY_DATA.errors
     };
     const results = await Promise.all(resources.map(async (resource) => {
       try {
@@ -199,6 +204,27 @@ export function App() {
         String(deadline.seriesId) !== String(deletedDeadline.seriesId)
         || String(deadline.chapterNumber) !== String(deletedDeadline.chapterNumber)
       ))
+    }));
+  }, []);
+
+  const handleUpdateError = useCallback((updatedError) => {
+    setData((current) => ({
+      ...current,
+      errors: current.errors.map((error) => error.id === updatedError.id ? updatedError : error)
+    }));
+  }, []);
+
+  const handleCreateError = useCallback((createdError) => {
+    setData((current) => ({
+      ...current,
+      errors: [createdError, ...current.errors]
+    }));
+  }, []);
+
+  const handleDeleteError = useCallback((deletedError) => {
+    setData((current) => ({
+      ...current,
+      errors: current.errors.filter((error) => error.id !== deletedError.id)
     }));
   }, []);
 
@@ -280,6 +306,8 @@ export function App() {
         return <PriceManagementView {...commonProps} difficultyLevels={data.difficultyLevels} difficultyPrices={data.difficultyPrices} fields={data.fields} bonusSettings={data.bonusSettings} />;
       case 'settings':
         return <GeneralSettingsView {...commonProps} fields={data.fields} generalSettings={data.generalSettings} />;
+      case 'errors':
+        return <ErrorManagementView {...commonProps} errors={data.errors} fields={data.fields} freelancers={data.freelancers} generalSettings={data.generalSettings} currentUser={profile} onUpdate={handleUpdateError} onCreate={handleCreateError} onDelete={handleDeleteError} />;
       case 'deadlines':
         return <DeadlineManagementView {...commonProps} deadlines={data.deadlines} freelancers={data.freelancers} qcs={data.qcs} fields={data.fields} difficultyLevels={data.difficultyLevels} difficultyPrices={data.difficultyPrices} onUpdate={handleUpdateDeadline} onCreate={handleCreateDeadline} onDelete={handleDeleteDeadline} readOnly={profile.role === 'Freelancer'} title={profile.role === 'Freelancer' ? 'Deadline của tôi' : 'Quản lý deadline'} />;
       case 'profile':
@@ -298,13 +326,13 @@ export function App() {
           />
         );
     }
-  }, [currentView, data, handleCreateDeadline, handleDeleteDeadline, handleNavigate, handleResetAll, handleSaveProfile, handleUpdateDeadline, isLoading, loadData, profile]);
+  }, [currentView, data, handleCreateDeadline, handleCreateError, handleDeleteDeadline, handleDeleteError, handleNavigate, handleResetAll, handleSaveProfile, handleUpdateDeadline, handleUpdateError, isLoading, loadData, profile]);
 
   if (isAuthChecking) {
     return (
       <div className="auth-screen">
         <div className="auth-card glass-panel">
-          <div className="auth-brand"><div className="qc-sidebar-mark"><img src="/favicon.svg" alt="" aria-hidden="true" /></div><div><strong>Azure System</strong><span>DEADLINE MANAGEMENT</span></div></div>
+          <div className="auth-brand"><div className="qc-sidebar-mark"><img src="/favicon.svg" alt="" aria-hidden="true" /></div><div><strong>WZ System</strong><span>DEADLINE MANAGEMENT</span></div></div>
           <p className="page-subtitle">Đang kiểm tra phiên đăng nhập...</p>
         </div>
       </div>
@@ -335,6 +363,7 @@ export function App() {
         <Header
           currentUser={profile}
           deadlines={data.deadlines}
+          errors={data.errors}
           onNavigate={handleNavigate}
           onOpenProfile={() => handleNavigate('profile')}
           onToggleSidebar={() => setIsSidebarOpen((open) => !open)}
@@ -342,7 +371,7 @@ export function App() {
           onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
         />
 
-        <main className={`content-area${currentView === 'deadlines' ? ' content-area-deadlines' : ''}`}>
+        <main className={`content-area${currentView === 'deadlines' || currentView === 'errors' ? ' content-area-deadlines' : ''}`}>
           {loadWarning && (
             <div className="data-connection-banner" role="status">
               <span>{loadWarning}</span>

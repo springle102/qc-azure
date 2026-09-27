@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   IconDashboard,
+  IconAlertTriangle,
   IconUsers,
   IconTasks,
   IconUser,
@@ -11,6 +12,7 @@ const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
   { id: 'freelancers', label: 'Quản lý freelancer', icon: IconUsers },
   { id: 'deadlines', label: 'Quản lý Deadline', icon: IconTasks },
+  { id: 'errors', label: 'Quản lý lỗi', icon: IconAlertTriangle },
   { id: 'pricing', label: 'Giá tiền', icon: IconTasks },
   { id: 'settings', label: 'Cấu hình chung', icon: IconTasks },
   { id: 'salary', label: 'Lương', icon: IconUsers },
@@ -18,9 +20,9 @@ const NAV_ITEMS = [
 ];
 
 const ROLE_VIEWS = {
-  Admin: ['dashboard', 'freelancers', 'deadlines', 'pricing', 'settings', 'salary', 'profile'],
-  QC: ['dashboard', 'profile', 'salary', 'deadlines'],
-  Freelancer: ['dashboard', 'profile', 'salary', 'deadlines']
+  Admin: ['dashboard', 'freelancers', 'deadlines', 'errors', 'pricing', 'settings', 'salary', 'profile'],
+  QC: ['dashboard', 'profile', 'salary', 'deadlines', 'errors'],
+  Freelancer: ['dashboard', 'profile', 'salary', 'deadlines', 'errors']
 };
 
 export function Sidebar({ currentView, onNavigate, currentUser, role = 'QC', onOpenLogout, isOpen = false }) {
@@ -33,7 +35,7 @@ export function Sidebar({ currentView, onNavigate, currentUser, role = 'QC', onO
       <div className="qc-sidebar-brand">
         <div className="qc-sidebar-mark"><img src="/favicon.svg" alt="" aria-hidden="true" /></div>
         <div>
-          <strong>Azure System</strong>
+          <strong>WZ System</strong>
           <span>DEADLINE MANAGEMENT</span>
         </div>
       </div>

@@ -45,7 +45,7 @@ export function LoginView({ onLogin }) {
         <div className="auth-brand">
           <div className="qc-sidebar-mark"><img src="/favicon.svg" alt="" aria-hidden="true" /></div>
           <div>
-            <strong>Azure System</strong>
+            <strong>WZ System</strong>
             <span>DEADLINE MANAGEMENT</span>
           </div>
         </div>

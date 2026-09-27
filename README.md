@@ -32,7 +32,7 @@ Các bảng giao diện bám theo schema trong `docs/database diagram.png` và s
 
 Deadline công ty và bảng `Companies` đã được loại bỏ khỏi giao diện, API và database.
 
-File PostgreSQL mẫu để tạo schema và dữ liệu test: `docs/sample-database.sql`. Nếu database đã tồn tại từ trước, chạy các migration trong `docs/migrations/` trong SQL Editor để thêm cột màu chữ và mapping folder Drive.
+File PostgreSQL mẫu để tạo schema và dữ liệu test: `docs/sample-database.sql`. Nếu database đã tồn tại từ trước, chạy các migration trong `docs/migrations/` trong SQL Editor để thêm cột màu chữ, mapping folder Drive và bảng Quản lý lỗi. Sheet lỗi gốc cần có các cột `Title`, `Chapter`, `Error Type`, `Error`, `Note`, `Editor`, `Fix/Check`; Service Account cần quyền Editor trên từng Sheet. `Error Type` gồm: `TR`, `File`, `Censor`, `Exposure`, `Logo/Credit`, `Text`, `SFX`, `Image`, `Bubble`, `Aesthetics`, `RD`.
 
 ## Cấu hình dữ liệu
 
@@ -40,7 +40,7 @@ Tạo file `apps/server/.env`:
 
 ```env
 PORT=5000
-DATABASE_URL=postgresql://postgres:password@localhost:5432/Qc-azure
+DATABASE_URL=postgresql://postgres:password@localhost:5432/Qc-WZ
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 SUPABASE_TABLE_TASKS=SeriesList

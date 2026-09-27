@@ -34,7 +34,8 @@ const emptyCollections = {
   difficultyPricing: [],
   bonusSettings: [],
   fields: [],
-  generalSettings: []
+  generalSettings: [],
+  errors: []
 };
 
 async function runWithConcurrency(items, worker, concurrency = SYNC_WRITE_CONCURRENCY) {
@@ -144,7 +145,7 @@ app.get('/api/freelancers', requireAuth, async (req, res) => {
       getCollection('freelancers'),
       getCollection('accounts')
     ]);
-    const scopedFreelancers = filterRowsForUser(freelancers, req.authUser);
+    const scopedFreelancers = filterFreelancerRowsForUser(freelancers, req.authUser);
     const data = scopedFreelancers.map((freelancer) => {
       const freelancerId = freelancer.fIld ?? freelancer.fId ?? freelancer.id;
       const account = accounts.find((item) => String(item.freelancerId ?? '') === String(freelancerId));
@@ -477,12 +478,15 @@ app.patch('/api/general-settings', requireAdmin, async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'googleDriveFolders')) {
       updates.googleDriveFolders = JSON.stringify(normalizeGoogleDriveFolders(req.body.googleDriveFolders));
     }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'errorSheetUrls')) {
+      updates.errorSheetUrls = JSON.stringify(normalizeErrorSheetUrls(req.body.errorSheetUrls));
+    }
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'googleSheetAutoSync')) {
       updates.googleSheetAutoSync = req.body.googleSheetAutoSync === true;
     }
     const data = current
-      ? await updateRow('generalSettings', { id: current.id }, updates, ['googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'googleSheetAutoSync'])
-      : await insertRow('generalSettings', { id: 1, ...updates }, ['id', 'googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'googleSheetAutoSync']);
+      ? await updateRow('generalSettings', { id: current.id }, updates, ['googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'errorSheetUrls', 'googleSheetAutoSync'])
+      : await insertRow('generalSettings', { id: 1, ...updates }, ['id', 'googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'errorSheetUrls', 'googleSheetAutoSync']);
     if (updatesDriveFolders) googleDriveFolderCache.clear();
     res.json({ success: true, data });
   } catch (error) {
@@ -497,6 +501,89 @@ app.post('/api/google-sheet/sync', requireAdmin, async (req, res) => {
     googleDriveFolderCache.clear();
     const result = await syncGoogleSheet();
     res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: error.message });
+  }
+});
+app.get('/api/errors', requireAuth, async (req, res) => {
+  try {
+    const settings = await getGeneralSettings();
+    const rows = filterErrorRowsForUser(await getCollection('errors'), req.authUser);
+    const data = rows.map((row) => ({
+      ...row,
+      sourceSheetUrl: getConfiguredErrorSheetUrl(settings.errorSheetUrls, row.field) || row.sourceUrl || ''
+    }));
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: error.message });
+  }
+});
+app.post('/api/errors', requireManager, async (req, res) => {
+  try {
+    const payload = await validateErrorPayload(req.body, req.authUser);
+    const now = new Date().toISOString();
+    const data = await insertRow('errors', {
+      ...payload,
+      fixCheck: false,
+      sourceRow: null,
+      sourceUrl: getConfiguredErrorSheetUrl((await getGeneralSettings()).errorSheetUrls, payload.field),
+      createdAt: now,
+      updatedAt: now
+    }, ['field', 'title', 'chapter', 'errorType', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'createdAt', 'updatedAt']);
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: error.message });
+  }
+});
+app.post('/api/errors/sync', requireManager, async (req, res) => {
+  try {
+    const result = await syncErrorsWithGoogleSheets(req.authUser);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: error.message });
+  }
+});
+app.patch('/api/errors/:id', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ success: false, message: 'ID lỗi không hợp lệ.' });
+
+  try {
+    const rows = await getCollection('errors');
+    const current = rows.find((row) => Number(row.id) === id);
+    if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy lỗi cần cập nhật.' });
+    const updates = req.authUser.role === 'Freelancer'
+      ? validateFreelancerErrorUpdatePayload(req.body, current, req.authUser)
+      : await validateErrorUpdatePayload(req.body, req.authUser, current);
+    updates.updatedAt = new Date().toISOString();
+    const data = await updateRowById(
+      'errors',
+      id,
+      updates,
+      ['field', 'title', 'chapter', 'errorType', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'updatedAt']
+    );
+    let sheetSyncError = '';
+    try {
+      await syncErrorWithGoogleSheet(data, { action: 'update' });
+    } catch (error) {
+      sheetSyncError = error.message;
+    }
+    res.json({ success: true, data: sheetSyncError ? { ...data, sheetSyncError } : data });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: error.message });
+  }
+});
+app.delete('/api/errors/:id', requireManager, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ success: false, message: 'ID lỗi không hợp lệ.' });
+
+  try {
+    const rows = await getCollection('errors');
+    const current = rows.find((row) => Number(row.id) === id);
+    if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy lỗi cần xóa.' });
+    assertManagerCanManageField(req.authUser, current.field);
+    await syncErrorWithGoogleSheet(current, { action: 'delete' });
+    const data = await deleteRowById('errors', id);
+    res.json({ success: true, data });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
   }
@@ -1049,27 +1136,30 @@ function isValidConfiguredFieldName(value) {
 }
 
 async function isConfiguredFieldInUse(name) {
-  const [levels, prices, accounts, freelancers, deadlines] = await Promise.all([
+  const [levels, prices, accounts, freelancers, deadlines, errors] = await Promise.all([
     getCollection('difficultyLevels'),
     getCollection('difficultyPricing'),
     getCollection('accounts'),
     getCollection('freelancers'),
-    getCollection('deadlines')
+    getCollection('deadlines'),
+    getCollection('errors')
   ]);
   return levels.some((row) => row.field === name)
     || prices.some((row) => row.field === name)
     || accounts.some((row) => row.field === name || normalizeStoredFields(row.fields, row.field).includes(name))
     || freelancers.some((row) => row.field === name || normalizeStoredFields(row.fields, row.field).includes(name))
-    || deadlines.some((row) => row.type === name);
+    || deadlines.some((row) => row.type === name)
+    || errors.some((row) => row.field === name);
 }
 
 async function renameConfiguredField(previousName, nextName) {
-  const [levels, prices, accounts, freelancers, deadlines] = await Promise.all([
+  const [levels, prices, accounts, freelancers, deadlines, errors] = await Promise.all([
     getCollection('difficultyLevels'),
     getCollection('difficultyPricing'),
     getCollection('accounts'),
     getCollection('freelancers'),
-    getCollection('deadlines')
+    getCollection('deadlines'),
+    getCollection('errors')
   ]);
   await Promise.all(levels.filter((row) => row.field === previousName).map((row) => updateRowById('difficultyLevels', row.id, { field: nextName }, ['field'])));
   await Promise.all(prices.filter((row) => row.field === previousName).map((row) => updateRowById('difficultyPricing', row.id, { field: nextName }, ['field'])));
@@ -1082,6 +1172,16 @@ async function renameConfiguredField(previousName, nextName) {
     return updateRow('freelancers', { fIld: row.fIld }, { field: fields[0] || null, fields }, ['field', 'fields']);
   }));
   await Promise.all(deadlines.filter((row) => row.type === previousName).map((row) => updateRow('deadlines', { seriesId: row.seriesId, chapterNumber: row.chapterNumber }, { type: nextName }, ['type'])));
+  await Promise.all(errors.filter((row) => row.field === previousName).map((row) => updateRowById('errors', row.id, { field: nextName }, ['field'])));
+  const settings = (await getCollection('generalSettings'))[0];
+  if (settings) {
+    const errorSheetUrls = normalizeErrorSheetUrls(settings.errorSheetUrls);
+    if (Object.prototype.hasOwnProperty.call(errorSheetUrls, previousName)) {
+      errorSheetUrls[nextName] = errorSheetUrls[previousName];
+      delete errorSheetUrls[previousName];
+      await updateRow('generalSettings', { id: settings.id }, { errorSheetUrls: JSON.stringify(errorSheetUrls) }, ['errorSheetUrls']);
+    }
+  }
 }
 
 async function getGeneralSettings() {
@@ -1091,7 +1191,8 @@ async function getGeneralSettings() {
     return {
       ...settings,
       googleSheetTabs: parseGoogleSheetTabs(settings.googleSheetTabs),
-      googleDriveFolders: normalizeGoogleDriveFolders(settings.googleDriveFolders)
+      googleDriveFolders: normalizeGoogleDriveFolders(settings.googleDriveFolders),
+      errorSheetUrls: normalizeErrorSheetUrls(settings.errorSheetUrls)
     };
   }
   return {
@@ -1100,6 +1201,7 @@ async function getGeneralSettings() {
     googleSheetRange: '',
     googleSheetTabs: {},
     googleDriveFolders: {},
+    errorSheetUrls: {},
     googleSheetAutoSync: false,
     googleSheetLastSyncedAt: null,
     googleSheetLastSyncCount: 0,
@@ -1160,6 +1262,31 @@ function normalizeGoogleDriveFolders(value) {
   return Object.fromEntries(Object.entries(parsed)
     .map(([field, folder]) => [String(field).trim(), String(folder ?? '').trim()])
     .filter(([field, folder]) => field && folder));
+}
+
+function normalizeErrorSheetUrls(value) {
+  let parsed = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      parsed = {};
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  return Object.fromEntries(Object.entries(parsed)
+    .map(([field, url]) => [String(field).trim(), normalizeGoogleSheetUrl(url)])
+    .filter(([field, url]) => field && url));
+}
+
+function getConfiguredErrorSheetUrl(errorSheetUrls, field) {
+  const fieldName = String(field ?? '').trim();
+  if (!fieldName) return '';
+  const exact = errorSheetUrls?.[fieldName];
+  if (exact) return String(exact).trim();
+  const match = Object.entries(errorSheetUrls || {})
+    .find(([name]) => String(name).trim().toLowerCase() === fieldName.toLowerCase());
+  return String(match?.[1] ?? '').trim();
 }
 
 function readGoogleServiceAccount() {
@@ -1846,9 +1973,10 @@ function buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qc
   const difficultyFromSheet = getSheetValue(row, headerIndex, 'difficulty');
   const difficulty = difficultyFromSheet || (importedPrice !== null ? 'Imported' : null);
   const endTask = parseImportedDate(getSheetValue(row, headerIndex, 'endTask'), 'endTask', rowNumber);
-  const submittedAt = parseImportedDate(getSheetValue(row, headerIndex, 'submittedAt'), 'submittedAt', rowNumber);
+  const submittedAtFromSheet = parseImportedDate(getSheetValue(row, headerIndex, 'submittedAt'), 'submittedAt', rowNumber);
   const rawStatus = getSheetValue(row, headerIndex, 'statusRaw') || getSheetValue(row, headerIndex, 'status') || 'Đang thực hiện';
   const status = normalizeImportedStatus(getSheetValue(row, headerIndex, 'status') || rawStatus);
+  const submittedAt = status === 'submitted' ? (submittedAtFromSheet || new Date().toISOString()) : submittedAtFromSheet;
   const configuredPrice = difficulty
     ? prices.find((item) => String(item.field).toLowerCase() === type.toLowerCase() && String(item.difficulty).toLowerCase() === difficulty.toLowerCase())
     : null;
@@ -2366,6 +2494,10 @@ async function syncGoogleSheet() {
     const writeResults = await runWithConcurrency(uniqueRows, async ({ data: row, headerIndex, fieldOverride }) => {
       const key = `${row.seriesId}:${row.chapterNumber}`;
       const current = currentRowsByKey.get(key);
+      const importedTiming = current && row.status
+        ? buildImportedTimingTransition(current, row.status)
+        : {};
+      const synchronizedRow = { ...row, ...importedTiming };
       const rowAllowedColumns = allowedColumns.filter((column) => {
         // A missing Sheet column is not permission to overwrite the web value
         // with a default/null value. The configured tab itself represents the
@@ -2373,18 +2505,28 @@ async function syncGoogleSheet() {
         const hasColumn = column === 'type' && fieldOverride
           ? true
           : getGoogleSheetHeaderIndex(headerIndex, column, fieldOverride) !== undefined;
-        return hasColumn && Object.prototype.hasOwnProperty.call(row, column);
+        return hasColumn && Object.prototype.hasOwnProperty.call(synchronizedRow, column);
       });
+      const writeColumns = [...new Set([
+        ...rowAllowedColumns,
+        'doingStartedAt',
+        'workDurationSeconds',
+        'submittedAt'
+      ])].filter((column) => Object.prototype.hasOwnProperty.call(synchronizedRow, column));
       if (current) {
-        if (!hasDeadlineSheetChanges(current, row, rowAllowedColumns)) return 'unchanged';
-        await updateRow('deadlines', { seriesId: row.seriesId, chapterNumber: row.chapterNumber }, row, rowAllowedColumns);
+        if (!hasDeadlineSheetChanges(current, synchronizedRow, writeColumns)) return 'unchanged';
+        await updateRow('deadlines', { seriesId: row.seriesId, chapterNumber: row.chapterNumber }, synchronizedRow, writeColumns);
         return 'updated';
       }
+      const initialTiming = {
+        doingStartedAt: synchronizedRow.doingStartedAt ?? (synchronizedRow.status === 'doing' ? new Date().toISOString() : null),
+        workDurationSeconds: synchronizedRow.workDurationSeconds ?? 0,
+        submittedAt: synchronizedRow.submittedAt ?? (synchronizedRow.status === 'submitted' ? new Date().toISOString() : null)
+      };
+      const insertRowData = { ...synchronizedRow, ...initialTiming };
       await insertRow('deadlines', {
-        ...row,
-        doingStartedAt: row.status === 'doing' ? new Date().toISOString() : null,
-        workDurationSeconds: 0
-      }, ['seriesId', 'chapterNumber', ...rowAllowedColumns]);
+        ...insertRowData
+      }, ['seriesId', 'chapterNumber', ...writeColumns, 'doingStartedAt', 'workDurationSeconds', 'submittedAt']);
       return 'inserted';
     });
     const inserted = writeResults.filter((result) => result === 'inserted').length;
@@ -2485,6 +2627,328 @@ async function syncGoogleSheetIfDue({ waitForCompletion = false } = {}) {
   });
 }
 
+const ERROR_TYPE_OPTIONS = ['TR', 'File', 'Censor', 'Exposure', 'Logo/Credit', 'Text', 'SFX', 'Image', 'Bubble', 'Aesthetics', 'RD'];
+const ERROR_SHEET_COLUMNS = ['title', 'chapter', 'errorType', 'error', 'note', 'editor', 'fixCheck'];
+const errorSheetHeaderAliases = {
+  title: ['title', 'series', 'seriesname', 'tensries', 'tentruyen', 'name'],
+  chapter: ['chapter', 'chap', 'chapternumber', 'chapterno', 'sochapter', 'chuong'],
+  errorType: ['errortype', 'errorkind', 'category', 'loailoi', 'loailo'],
+  error: ['error', 'issue', 'bug', 'description', 'loi', 'noidungloi'],
+  note: ['note', 'feedback', 'comment', 'comments', 'ghichu', 'noteofflorqc', 'notecuaflorqc', 'notecuaflhoacqc'],
+  editor: ['editor', 'freelancer', 'freelancername', 'fl', 'nguoiduocgiao', 'nguoi sua'],
+  fixCheck: ['fixcheck', 'fix', 'check', 'fixed', 'checked', 'done', 'da xem']
+};
+
+function getErrorSheetHeaderIndex(headerIndex, key) {
+  return (errorSheetHeaderAliases[key] || [])
+    .map((alias) => headerIndex.get(normalizeSheetHeader(alias)))
+    .find((index) => index !== undefined);
+}
+
+function findErrorSheetHeaderRow(values) {
+  let bestIndex = -1;
+  let bestScore = 0;
+  values.forEach((row, index) => {
+    const normalizedHeaders = new Set(row.map(normalizeSheetHeader));
+    const score = ['title', 'chapter', 'error', 'editor'].reduce((total, key) => (
+      (errorSheetHeaderAliases[key] || []).some((alias) => normalizedHeaders.has(normalizeSheetHeader(alias)))
+        ? total + 1
+        : total
+    ), 0);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  });
+  if (bestIndex === -1 || bestScore < 3) {
+    throw validationError('Không tìm thấy dòng tiêu đề hợp lệ. Cần có các cột Title, Chapter, Error và Editor trong sheet lỗi.');
+  }
+  return bestIndex;
+}
+
+function getErrorSheetValue(row, headerIndex, key) {
+  const index = getErrorSheetHeaderIndex(headerIndex, key);
+  return index === undefined ? '' : String(row[index] ?? '').trim();
+}
+
+function isDecorativeErrorSheetRow(row, headerIndex) {
+  return ERROR_SHEET_COLUMNS.every((key) => !getErrorSheetValue(row, headerIndex, key));
+}
+
+function isIncompleteErrorSheetRow(row, headerIndex) {
+  return !getErrorSheetValue(row, headerIndex, 'title')
+    || !getErrorSheetValue(row, headerIndex, 'chapter')
+    || !getErrorSheetValue(row, headerIndex, 'error');
+}
+
+async function readErrorGoogleSheet(field, sheetUrl) {
+  const { spreadsheetId, gid } = parseGoogleSheetReference(sheetUrl);
+  const metadata = await getGoogleSheetMetadata(spreadsheetId);
+  const sheets = metadata.sheets || [];
+  const selectedSheet = gid
+    ? sheets.find((sheet) => String(sheet.properties?.sheetId) === String(gid))
+    : sheets[0];
+  if (!selectedSheet?.properties?.title) {
+    throw new Error(`Không tìm thấy tab của sheet lỗi cho mảng "${field}".`);
+  }
+  const range = `${quoteGoogleSheetTitle(selectedSheet.properties.title)}!A:ZZ`;
+  const rangeMeta = parseGoogleSheetA1Range(range);
+  const valuesResult = await readGoogleSheetValues(spreadsheetId, range);
+  const headerRowIndex = findErrorSheetHeaderRow(valuesResult.values);
+  const headers = valuesResult.values[headerRowIndex].map(normalizeSheetHeader);
+  return {
+    field,
+    sourceUrl: sheetUrl,
+    spreadsheetId,
+    sheetId: selectedSheet.properties.sheetId,
+    sheetTitle: selectedSheet.properties.title,
+    range,
+    rangeMeta,
+    ...valuesResult,
+    headerRowIndex,
+    headerIndex: new Map(headers.map((header, index) => [header, index]))
+  };
+}
+
+function getFreelancerId(row) {
+  return row?.fIld ?? row?.fId ?? row?.id ?? null;
+}
+
+function resolveErrorEditor(value, freelancers) {
+  const text = String(value ?? '').trim();
+  if (!text) return { id: null, name: '' };
+  const normalized = text.toLowerCase();
+  const numeric = Number(text);
+  const match = freelancers.find((freelancer) => (
+    (Number.isInteger(numeric) && String(getFreelancerId(freelancer)) === String(numeric))
+      || String(freelancer.name || '').trim().toLowerCase() === normalized
+      || String(freelancer.email || '').trim().toLowerCase() === normalized
+  ));
+  return match
+    ? { id: getFreelancerId(match), name: match.name || match.email || text }
+    : { id: null, name: text };
+}
+
+function buildImportedError(row, headerIndex, freelancers, sourceRow, field, sourceUrl) {
+  const editor = resolveErrorEditor(getErrorSheetValue(row, headerIndex, 'editor'), freelancers);
+  return {
+    field,
+    title: getErrorSheetValue(row, headerIndex, 'title').slice(0, 255),
+    chapter: getErrorSheetValue(row, headerIndex, 'chapter').slice(0, 100),
+    errorType: normalizeErrorType(getErrorSheetValue(row, headerIndex, 'errorType')),
+    error: getErrorSheetValue(row, headerIndex, 'error'),
+    note: nullableText(getErrorSheetValue(row, headerIndex, 'note')),
+    editor: editor.name || null,
+    editorFreelancerId: editor.id,
+    fixCheck: parseImportedBoolean(getErrorSheetValue(row, headerIndex, 'fixCheck')),
+    sourceRow,
+    sourceUrl,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function normalizeErrorSyncValue(value, column) {
+  if (value === null || value === undefined || value === '') return '';
+  if (column === 'fixCheck') return Boolean(value) ? 'true' : 'false';
+  return String(value).trim();
+}
+
+function hasErrorSheetChanges(current, imported) {
+  return ['field', 'title', 'chapter', 'errorType', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl']
+    .some((column) => normalizeErrorSyncValue(current[column], column) !== normalizeErrorSyncValue(imported[column], column));
+}
+
+function getErrorRowNumberFromAppendResponse(response) {
+  const updatedRange = String(response?.updates?.updatedRange || response?.updates?.tableRange || '');
+  const match = updatedRange.match(/![A-Z]+(\d+)(?::[A-Z]+\d+)?$/i);
+  return match ? Number(match[1]) : null;
+}
+
+function getErrorSheetCellValue(row, key) {
+  if (key === 'fixCheck') return Boolean(row.fixCheck);
+  return row[key] ?? '';
+}
+
+async function writeErrorGoogleSheetCells(sheet, rowNumber, row) {
+  const data = ERROR_SHEET_COLUMNS
+    .map((key) => {
+      const columnIndex = getErrorSheetHeaderIndex(sheet.headerIndex, key);
+      if (columnIndex === undefined) return null;
+      return {
+        range: `${quoteGoogleSheetTitle(sheet.sheetTitle)}!${googleSheetIndexToColumn(sheet.rangeMeta.startColumn + columnIndex)}${rowNumber}`,
+        values: [[getErrorSheetCellValue(row, key)]]
+      };
+    })
+    .filter(Boolean);
+  if (data.length === 0) return { skipped: true };
+  return googleSheetsRequest(`spreadsheets/${encodeURIComponent(sheet.spreadsheetId)}/values:batchUpdate`, {
+    method: 'POST',
+    body: { valueInputOption: 'USER_ENTERED', data }
+  });
+}
+
+async function appendErrorGoogleSheetRow(sheet, row) {
+  const mappedColumns = ERROR_SHEET_COLUMNS
+    .map((key) => getErrorSheetHeaderIndex(sheet.headerIndex, key))
+    .filter((index) => index !== undefined);
+  if (mappedColumns.length < 3) throw new Error(`Sheet lỗi của mảng "${sheet.field}" thiếu cột Title, Chapter hoặc Error.`);
+  const lastColumn = Math.max(...mappedColumns);
+  const values = Array.from({ length: lastColumn + 1 }, () => '');
+  ERROR_SHEET_COLUMNS.forEach((key) => {
+    const columnIndex = getErrorSheetHeaderIndex(sheet.headerIndex, key);
+    if (columnIndex !== undefined) values[columnIndex] = getErrorSheetCellValue(row, key);
+  });
+  const startColumn = googleSheetIndexToColumn(sheet.rangeMeta.startColumn);
+  const endColumn = googleSheetIndexToColumn(sheet.rangeMeta.startColumn + lastColumn);
+  return googleSheetsRequest(`spreadsheets/${encodeURIComponent(sheet.spreadsheetId)}/values/${encodeURIComponent(`${quoteGoogleSheetTitle(sheet.sheetTitle)}!${startColumn}:${endColumn}`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS&includeValuesInResponse=true`, {
+    method: 'POST',
+    body: { majorDimension: 'ROWS', values: [values] }
+  });
+}
+
+async function deleteErrorGoogleSheetRow(sheet, rowNumber) {
+  if (sheet.sheetId === undefined || sheet.sheetId === null) throw new Error(`Không xác định được sheetId của tab lỗi "${sheet.sheetTitle}".`);
+  return googleSheetsRequest(`spreadsheets/${encodeURIComponent(sheet.spreadsheetId)}:batchUpdate`, {
+    method: 'POST',
+    body: {
+      requests: [{
+        deleteDimension: {
+          range: {
+            sheetId: Number(sheet.sheetId),
+            dimension: 'ROWS',
+            startIndex: rowNumber - 1,
+            endIndex: rowNumber
+          }
+        }
+      }]
+    }
+  });
+}
+
+async function syncErrorWithGoogleSheet(row, { action = 'update' } = {}) {
+  const settings = await getGeneralSettings();
+  const sheetUrl = getConfiguredErrorSheetUrl(settings.errorSheetUrls, row.field) || normalizeGoogleSheetUrl(row.sourceUrl);
+  if (!sheetUrl) return { skipped: true, reason: 'sheet-not-configured' };
+  if (!row.sourceRow) return { skipped: true, reason: 'row-not-linked' };
+  const sheet = await readErrorGoogleSheet(row.field, sheetUrl);
+  if (action === 'delete') return deleteErrorGoogleSheetRow(sheet, Number(row.sourceRow));
+  return writeErrorGoogleSheetCells(sheet, Number(row.sourceRow), row);
+}
+
+async function syncErrorsWithGoogleSheets(user) {
+  const settings = await getGeneralSettings();
+  const configuredUrls = normalizeErrorSheetUrls(settings.errorSheetUrls);
+  const mappings = Object.entries(configuredUrls)
+    .filter(([field]) => canManagerManageField(user, field));
+  if (mappings.length === 0) throw validationError('Chưa cấu hình sheet lỗi cho mảng được phép quản lý.');
+
+  const [freelancers, currentRows] = await Promise.all([
+    getCollection('freelancers'),
+    getCollection('errors')
+  ]);
+  const sheets = [];
+  for (const [field, url] of mappings) {
+    sheets.push(await readErrorGoogleSheet(field, url));
+  }
+
+  const sourceKeysByField = new Map();
+  const warnings = [];
+  let inserted = 0;
+  let updated = 0;
+  let appended = 0;
+  let deleted = 0;
+  let skipped = 0;
+
+  for (const sheet of sheets) {
+    const sourceKeys = new Set();
+    sourceKeysByField.set(sheet.field.toLowerCase(), sourceKeys);
+    for (let index = sheet.headerRowIndex + 1; index < sheet.values.length; index += 1) {
+      const row = sheet.values[index] || [];
+      if (sheet.hiddenRows?.has(index)) continue;
+      if (isDecorativeErrorSheetRow(row, sheet.headerIndex)) continue;
+      const sourceRow = sheet.rangeMeta.startRow + index + 1;
+      sourceKeys.add(sourceRow);
+      if (isIncompleteErrorSheetRow(row, sheet.headerIndex)) {
+        skipped += 1;
+        warnings.push(`${sheet.field}: bỏ qua dòng ${sourceRow} thiếu Title/Chapter/Error.`);
+        continue;
+      }
+      const imported = buildImportedError(row, sheet.headerIndex, freelancers, sourceRow, sheet.field, sheet.sourceUrl);
+      const importedErrorTypeValue = getErrorSheetValue(row, sheet.headerIndex, 'errorType');
+      if (importedErrorTypeValue && !imported.errorType) {
+        warnings.push(`${sheet.field}, dòng ${sourceRow}: Error Type "${importedErrorTypeValue}" không nằm trong danh sách cho phép.`);
+      }
+      if (imported.editor && !imported.editorFreelancerId) {
+        warnings.push(`${sheet.field}, dòng ${sourceRow}: không tìm thấy Editor "${imported.editor}" trong danh sách freelancer.`);
+      }
+      const current = currentRows.find((item) => (
+        String(item.field).toLowerCase() === String(sheet.field).toLowerCase()
+          && Number(item.sourceRow) === sourceRow
+      )) || currentRows.find((item) => (
+        String(item.field).toLowerCase() === String(sheet.field).toLowerCase()
+          && !item.sourceRow
+          && String(item.title).trim() === imported.title
+          && String(item.chapter).trim() === imported.chapter
+          && String(item.error).trim() === imported.error
+      ));
+      if (getErrorSheetHeaderIndex(sheet.headerIndex, 'errorType') === undefined && current?.errorType) {
+        imported.errorType = current.errorType;
+      }
+      if (current) {
+        if (hasErrorSheetChanges(current, imported)) {
+          await updateRowById('errors', current.id, imported, ['field', 'title', 'chapter', 'errorType', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'updatedAt']);
+          updated += 1;
+        }
+      } else {
+        await insertRow('errors', { ...imported, createdAt: imported.updatedAt }, ['field', 'title', 'chapter', 'errorType', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'createdAt', 'updatedAt']);
+        inserted += 1;
+      }
+    }
+  }
+
+  const sheetByField = new Map(sheets.map((sheet) => [sheet.field.toLowerCase(), sheet]));
+  const localRows = await getCollection('errors');
+  for (const row of localRows.filter((item) => canManagerManageField(user, item.field) && !item.sourceRow)) {
+    const sheet = sheetByField.get(String(row.field).toLowerCase());
+    if (!sheet) {
+      warnings.push(`${row.field}: chưa cấu hình sheet nên chưa thể thêm lỗi "${row.title}".`);
+      continue;
+    }
+    const response = await appendErrorGoogleSheetRow(sheet, row);
+    const sourceRow = getErrorRowNumberFromAppendResponse(response);
+    if (!sourceRow) {
+      warnings.push(`${row.field}: đã thêm lỗi vào sheet nhưng không xác định được số dòng nguồn.`);
+      continue;
+    }
+    await updateRowById('errors', row.id, {
+      sourceRow,
+      sourceUrl: sheet.sourceUrl,
+      updatedAt: new Date().toISOString()
+    }, ['sourceRow', 'sourceUrl', 'updatedAt']);
+    appended += 1;
+  }
+
+  const rowsAfterImport = await getCollection('errors');
+  for (const row of rowsAfterImport.filter((item) => canManagerManageField(user, item.field) && item.sourceRow)) {
+    const sourceKeys = sourceKeysByField.get(String(row.field).toLowerCase());
+    if (sourceKeys && !sourceKeys.has(Number(row.sourceRow))) {
+      await deleteRowById('errors', row.id);
+      deleted += 1;
+    }
+  }
+
+  return {
+    inserted,
+    updated,
+    appended,
+    deleted,
+    skipped,
+    total: (await getCollection('errors')).filter((row) => canManagerManageField(user, row.field)).length,
+    warnings: warnings.slice(0, 30),
+    syncedAt: new Date().toISOString()
+  };
+}
+
 function getTaskStatus(task) {
   const value = String(task?.status || task?.statusRaw || '').trim().toLowerCase();
   if (value === 'doing' || /đang thực hiện|đang làm/.test(value)) return 'doing';
@@ -2494,7 +2958,7 @@ function getTaskStatus(task) {
 }
 
 function isTaskComplete(task) {
-  return getTaskStatus(task) === 'done';
+  return getTaskStatus(task) === 'submitted';
 }
 
 function getTaskDueTime(task) {
@@ -2506,9 +2970,21 @@ function getTaskDueTime(task) {
 
 function isTaskDueSoon(task, now = Date.now()) {
   const dueTime = getTaskDueTime(task);
-  if (dueTime === null || ['submitted', 'done'].includes(getTaskStatus(task))) return false;
-  const remaining = dueTime - now;
-  return remaining >= 0 && remaining <= 3 * 60 * 60 * 1000;
+  if (dueTime === null || getTaskStatus(task) === 'submitted') return false;
+  return getCalendarDateKey(dueTime) === getCalendarDateKey(now);
+}
+
+function getCalendarDateKey(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function decorateDeadlineTiming(deadline) {
@@ -2563,6 +3039,32 @@ function buildStatusTransition(current, nextStatus) {
     workDurationSeconds: completedSeconds,
     submittedAt: nextStatus === 'submitted' ? new Date().toISOString() : (current.submittedAt || null)
   };
+}
+
+function buildImportedTimingTransition(current, nextStatus) {
+  const currentStatus = getTaskStatus(current);
+  if (currentStatus === nextStatus) {
+    if (nextStatus === 'doing' && !current.doingStartedAt) {
+      return {
+        doingStartedAt: new Date().toISOString(),
+        workDurationSeconds: Math.max(0, Number(current.workDurationSeconds || 0)),
+        submittedAt: null
+      };
+    }
+    if (nextStatus === 'submitted' && !current.submittedAt) {
+      return {
+        doingStartedAt: null,
+        workDurationSeconds: Math.max(0, Number(current.workDurationSeconds || 0)),
+        submittedAt: new Date().toISOString()
+      };
+    }
+    return {
+      doingStartedAt: current.doingStartedAt || null,
+      workDurationSeconds: Math.max(0, Number(current.workDurationSeconds || 0)),
+      submittedAt: current.submittedAt || null
+    };
+  }
+  return buildStatusTransition(current, nextStatus);
 }
 
 function calculateReceivePrice(price, completionPercent) {
@@ -2770,14 +3272,17 @@ function validateDeadlineCreatePayload(payload) {
     throw validationError('% hoàn thành phải là số nguyên từ 0 đến 200.');
   }
 
+  const status = validateTaskStatus(payload.status);
+  const submittedAt = normalizeDeadlineDate(payload.submittedAt, 'Ngày nộp');
+
   return {
     seriesId,
     chapterNumber,
     endTask: normalizeDeadlineDate(payload.endTask, 'Hạn DL'),
-    submittedAt: normalizeDeadlineDate(payload.submittedAt, 'Ngày nộp'),
+    submittedAt: status === 'submitted' ? (submittedAt || new Date().toISOString()) : submittedAt,
     seriesName: nullableText(payload.seriesName),
     type,
-    status: validateTaskStatus(payload.status),
+    status,
     doingStartedAt: null,
     workDurationSeconds: 0,
     statusRaw: nullableText(payload.statusRaw) || 'Đang thực hiện',
@@ -2795,6 +3300,105 @@ function validateDeadlineCreatePayload(payload) {
 function nullableText(value) {
   const text = String(value ?? '').trim();
   return text || null;
+}
+
+function normalizeErrorType(value, { required = false } = {}) {
+  const text = String(value ?? '').trim();
+  const normalized = ERROR_TYPE_OPTIONS.find((option) => option.toLowerCase() === text.toLowerCase()) || null;
+  if (!normalized && required) {
+    throw validationError(`Error Type phải là một trong: ${ERROR_TYPE_OPTIONS.join(', ')}.`);
+  }
+  return normalized;
+}
+
+async function validateErrorPayload(payload, user) {
+  if (!payload || typeof payload !== 'object') throw validationError('Dữ liệu lỗi không hợp lệ.');
+  const field = normalizeConfiguredFieldName(payload.field);
+  assertManagerCanManageField(user, field);
+  await assertConfiguredFields([field]);
+  const title = String(payload.title ?? '').trim();
+  const chapter = String(payload.chapter ?? '').trim();
+  const errorType = normalizeErrorType(payload.errorType, { required: true });
+  const errorText = String(payload.error ?? '').trim();
+  if (!title || title.length > 255) throw validationError('Title không được để trống và tối đa 255 ký tự.');
+  if (!chapter || chapter.length > 100) throw validationError('Chapter không được để trống và tối đa 100 ký tự.');
+  if (!errorText) throw validationError('Error không được để trống.');
+  const freelancers = await getCollection('freelancers');
+  const editor = resolveErrorEditor(payload.editorFreelancerId ?? payload.editor, freelancers);
+  if (!editor.id) throw validationError('Editor phải là một freelancer đã có trong hệ thống.');
+  return {
+    field,
+    title,
+    chapter,
+    errorType,
+    error: errorText,
+    note: nullableText(payload.note),
+    editor: editor.name,
+    editorFreelancerId: Number(editor.id)
+  };
+}
+
+async function validateErrorUpdatePayload(payload, user, current) {
+  if (!payload || typeof payload !== 'object') throw validationError('Dữ liệu cập nhật lỗi không hợp lệ.');
+  const updates = {};
+  const nextField = Object.prototype.hasOwnProperty.call(payload, 'field')
+    ? normalizeConfiguredFieldName(payload.field)
+    : current.field;
+  assertManagerCanManageField(user, nextField);
+  if (Object.prototype.hasOwnProperty.call(payload, 'field')) {
+    await assertConfiguredFields([nextField]);
+    updates.field = nextField;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'title')) {
+    const title = String(payload.title ?? '').trim();
+    if (!title || title.length > 255) throw validationError('Title không được để trống và tối đa 255 ký tự.');
+    updates.title = title;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'chapter')) {
+    const chapter = String(payload.chapter ?? '').trim();
+    if (!chapter || chapter.length > 100) throw validationError('Chapter không được để trống và tối đa 100 ký tự.');
+    updates.chapter = chapter;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'errorType')) {
+    updates.errorType = normalizeErrorType(payload.errorType, { required: true });
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'error')) {
+    const errorText = String(payload.error ?? '').trim();
+    if (!errorText) throw validationError('Error không được để trống.');
+    updates.error = errorText;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'note')) updates.note = nullableText(payload.note);
+  if (Object.prototype.hasOwnProperty.call(payload, 'fixCheck')) updates.fixCheck = parseBooleanInput(payload.fixCheck, 'Fix/Check');
+  if (Object.prototype.hasOwnProperty.call(payload, 'editor') || Object.prototype.hasOwnProperty.call(payload, 'editorFreelancerId')) {
+    const freelancers = await getCollection('freelancers');
+    const editor = resolveErrorEditor(payload.editorFreelancerId ?? payload.editor, freelancers);
+    if (!editor.id) throw validationError('Editor phải là một freelancer đã có trong hệ thống.');
+    updates.editor = editor.name;
+    updates.editorFreelancerId = Number(editor.id);
+  }
+  if (Object.keys(updates).length === 0) throw validationError('Cần có ít nhất một trường để cập nhật lỗi.');
+  return updates;
+}
+
+function validateFreelancerErrorUpdatePayload(payload, current, user) {
+  if (String(current.editorFreelancerId ?? '') !== String(user.freelancerId ?? '')) {
+    throw authorizationError('Bạn chỉ được cập nhật lỗi được giao cho mình.');
+  }
+  if (!payload || typeof payload !== 'object') throw validationError('Dữ liệu cập nhật lỗi không hợp lệ.');
+  const updates = {};
+  if (Object.prototype.hasOwnProperty.call(payload, 'note')) updates.note = nullableText(payload.note);
+  if (Object.prototype.hasOwnProperty.call(payload, 'fixCheck')) updates.fixCheck = parseBooleanInput(payload.fixCheck, 'Fix/Check');
+  const unsupported = Object.keys(payload).filter((key) => !['note', 'fixCheck'].includes(key));
+  if (unsupported.length > 0) throw authorizationError('Freelancer chỉ được cập nhật Note và Fix/Check.');
+  if (Object.keys(updates).length === 0) throw validationError('Cần có Note hoặc Fix/Check để cập nhật.');
+  return updates;
+}
+
+function parseBooleanInput(value, label) {
+  if (typeof value === 'boolean') return value;
+  if ([true, 1, '1', 'true', 'yes', 'y', 'done', 'checked', 'fix'].includes(value)) return true;
+  if ([false, 0, '0', 'false', 'no', 'n', ''].includes(value)) return false;
+  throw validationError(`${label} phải là checkbox hợp lệ.`);
 }
 
 const LATE_OPTIONS = ['≤0h', '1~3h', '3~6h', '6~10h', '>10h'];
@@ -2911,6 +3515,12 @@ function validationError(message) {
   return error;
 }
 
+function authorizationError(message) {
+  const error = new Error(message);
+  error.statusCode = 403;
+  return error;
+}
+
 function requireAuth(req, res, next) {
   const user = getAuthUser(req);
   if (!user) return res.status(401).json({ success: false, message: 'Vui lòng đăng nhập.' });
@@ -2961,6 +3571,46 @@ function filterRowsForUser(rows, user) {
   if (user?.role !== 'Freelancer') return rows;
   if (user.freelancerId === null || user.freelancerId === undefined || user.freelancerId === '') return [];
   return rows.filter((row) => String(row.fIld ?? row.fId ?? row.freelancerId ?? '') === String(user.freelancerId));
+}
+
+function filterFreelancerRowsForUser(rows, user) {
+  if (user?.role === 'Admin') return rows;
+  if (user?.role === 'QC') {
+    const allowedFields = normalizeStoredFields(user.fields, user.field).map((field) => field.toLowerCase());
+    return rows.filter((row) => {
+      const rowFields = normalizeStoredFields(row.fields, row.field).map((field) => field.toLowerCase());
+      return rowFields.some((field) => allowedFields.includes(field));
+    });
+  }
+  if (user?.role === 'Freelancer') {
+    return rows.filter((row) => String(getFreelancerId(row)) === String(user.freelancerId ?? ''));
+  }
+  return [];
+}
+
+function canManagerManageField(user, field) {
+  if (user?.role === 'Admin') return true;
+  if (user?.role !== 'QC') return false;
+  const allowedFields = normalizeStoredFields(user.fields, user.field).map((item) => item.toLowerCase());
+  return allowedFields.includes(String(field ?? '').trim().toLowerCase());
+}
+
+function assertManagerCanManageField(user, field) {
+  if (!canManagerManageField(user, field)) {
+    throw authorizationError('Bạn không có quyền quản lý lỗi của mảng này.');
+  }
+}
+
+function filterErrorRowsForUser(rows, user) {
+  if (user?.role === 'Admin') return rows;
+  if (user?.role === 'QC') {
+    const allowedFields = normalizeStoredFields(user.fields, user.field).map((field) => field.toLowerCase());
+    return rows.filter((row) => allowedFields.includes(String(row.field ?? '').trim().toLowerCase()));
+  }
+  if (user?.role === 'Freelancer') {
+    return rows.filter((row) => String(row.editorFreelancerId ?? '') === String(user.freelancerId ?? ''));
+  }
+  return [];
 }
 
 function filterSalaryRowsForUser(rows, user) {

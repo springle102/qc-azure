@@ -17,7 +17,8 @@ const tables = {
   difficultyPricing: process.env.SUPABASE_TABLE_DIFFICULTY_PRICING || 'DifficultyPricing',
   bonusSettings: process.env.SUPABASE_TABLE_BONUS_SETTINGS || 'BonusSettings',
   fields: process.env.SUPABASE_TABLE_FIELDS || 'Fields',
-  generalSettings: process.env.SUPABASE_TABLE_GENERAL_SETTINGS || 'GeneralSettings'
+  generalSettings: process.env.SUPABASE_TABLE_GENERAL_SETTINGS || 'GeneralSettings',
+  errors: process.env.SUPABASE_TABLE_ERRORS || 'Errors'
 };
 
 export function isSupabaseConfigured() {

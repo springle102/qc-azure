@@ -12,7 +12,7 @@ import {
 } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 
-const isComplete = (item) => ['hoàn thành', 'completed', 'done', 'complete'].includes(String(item?.status || item?.statusRaw || '').trim().toLowerCase());
+const isComplete = (item) => normalizeStatus(item) === 'submitted';
 const isAssigned = (item) => Boolean(item?.fId || item?.fIld || item?.freelancerId || item?.assignedToId || item?.assignedTo);
 const isAssignedToQC = (item) => Boolean(item?.qcId || item?.qcld || item?.qcID || item?.qcName);
 const needsQC = (item) => {
@@ -23,9 +23,8 @@ const isDoing = (item) => normalizeStatus(item) === 'doing';
 const isUpcoming = (item) => {
   const dueAt = getDueDate(item);
   const status = normalizeStatus(item);
-  if (!dueAt || ['submitted', 'done'].includes(status)) return false;
-  const remaining = dueAt.getTime() - Date.now();
-  return remaining >= 0 && remaining <= 3 * 60 * 60 * 1000;
+  if (!dueAt || status === 'submitted') return false;
+  return getCalendarDateKey(dueAt) === getCalendarDateKey(Date.now());
 };
 
 function formatDate(value) {
@@ -153,7 +152,7 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
       <div className="dashboard-two-column">
         {isFreelancer ? (
           <>
-            <RecentChaptersPanel title="Deadline của tôi" chapters={recentChaptersByRole.freelancer} onNavigate={onNavigate} />
+            <RecentChaptersPanel title="Deadline của tôi" chapters={recentChaptersByRole.freelancer} onNavigate={onNavigate} showDeadlineStatus />
             <UpcomingTasksPanel tasks={upcomingTasks} onNavigate={onNavigate} />
           </>
         ) : (
@@ -182,7 +181,7 @@ function UpcomingTasksPanel({ tasks, onNavigate }) {
         <div className="empty-state compact">
           <IconCheckCircle size={26} />
           <strong>Không có task sắp đến hạn</strong>
-          <span>Các task còn tối đa 3 giờ và chưa Submitted sẽ xuất hiện ở đây.</span>
+          <span>Các task có Hạn DL trong ngày hôm nay và chưa Submitted sẽ xuất hiện ở đây.</span>
         </div>
       ) : (
         <div className="upcoming-tasks-table-wrap">
@@ -192,7 +191,7 @@ function UpcomingTasksPanel({ tasks, onNavigate }) {
                 <th>Task</th>
                 <th>Hạn</th>
                 <th>Còn lại</th>
-                <th>Trạng thái</th>
+                <th>Nhắc hạn</th>
               </tr>
             </thead>
             <tbody>
@@ -204,7 +203,7 @@ function UpcomingTasksPanel({ tasks, onNavigate }) {
                   </td>
                   <td>{formatDateTime(getDueDate(task))}</td>
                   <td><span className="upcoming-time-badge">{formatTimeRemaining(getDueDate(task))}</span></td>
-                  <td><span className="data-status pending">{task.statusRaw || task.status || 'Chưa bắt đầu'}</span></td>
+                  <td><DeadlineStatusBadge item={task} upcoming /></td>
                 </tr>
               ))}
             </tbody>
@@ -215,7 +214,7 @@ function UpcomingTasksPanel({ tasks, onNavigate }) {
   );
 }
 
-function RecentChaptersPanel({ title, chapters, onNavigate }) {
+function RecentChaptersPanel({ title, chapters, onNavigate, showDeadlineStatus = false }) {
   return (
     <section className="glass-panel dashboard-section">
       <div className="section-heading">
@@ -240,15 +239,22 @@ function RecentChaptersPanel({ title, chapters, onNavigate }) {
                 <strong>{chapter.seriesName || chapter.series || 'Chưa đặt tên bộ truyện'}</strong>
                 <span>Chapter {chapter.chapterNumber ?? chapter.chapter ?? '—'} · Hạn {formatDate(chapter.endTask || chapter.deadline)}</span>
               </div>
-              <span className={`data-status ${isComplete(chapter) ? 'success' : 'pending'}`}>
-                {chapter.statusRaw || chapter.status || 'Chưa có trạng thái'}
-              </span>
+              {showDeadlineStatus ? <DeadlineStatusBadge item={chapter} /> : (
+                <span className={`data-status ${isComplete(chapter) ? 'success' : 'pending'}`}>
+                  {chapter.statusRaw || chapter.status || 'Chưa có trạng thái'}
+                </span>
+              )}
             </div>
           ))}
         </div>
       )}
     </section>
   );
+}
+
+function DeadlineStatusBadge({ item, upcoming = false }) {
+  const status = upcoming ? getUpcomingTaskStatus(item) : getDashboardDeadlineStatus(item);
+  return <span className={`data-status ${status.className}`}>{status.label}</span>;
 }
 
 function normalizeStatus(item) {
@@ -266,6 +272,38 @@ function getDueDate(item) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function isDeadlineOverdue(item) {
+  const dueAt = getDueDate(item);
+  return Boolean(dueAt && dueAt.getTime() < Date.now() && !isComplete(item));
+}
+
+function getDashboardDeadlineStatus(item) {
+  if (isComplete(item)) return { label: 'Đã hoàn thành', className: 'success' };
+  if (isDeadlineOverdue(item)) return { label: 'Đã quá hạn', className: 'overdue' };
+  return { label: 'Sắp đến hạn', className: 'pending' };
+}
+
+function getUpcomingTaskStatus(item) {
+  if (isDeadlineOverdue(item)) return { label: 'Đã quá hạn', className: 'overdue' };
+  const dueAt = getDueDate(item);
+  if (!dueAt) return { label: 'Sắp đến hạn', className: 'pending' };
+  const dayMonth = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit' }).format(dueAt);
+  return { label: `Hôm nay ${dayMonth}`, className: 'pending' };
+}
+
+function getCalendarDateKey(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 function formatDateTime(value) {
   if (!value) return '—';
   return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(value);
@@ -273,7 +311,8 @@ function formatDateTime(value) {
 
 function formatTimeRemaining(value) {
   if (!value) return '—';
-  const minutes = Math.max(0, Math.ceil((value.getTime() - Date.now()) / 60000));
+  const minutes = Math.ceil((value.getTime() - Date.now()) / 60000);
+  if (minutes <= 0) return 'Đã quá hạn';
   if (minutes < 60) return `${minutes} phút`;
   return `${Math.floor(minutes / 60)} giờ ${minutes % 60} phút`;
 }

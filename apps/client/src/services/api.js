@@ -113,6 +113,17 @@ export const api = {
     body: JSON.stringify(settings)
   }),
   syncGoogleSheet: () => request('/google-sheet/sync', { method: 'POST', timeoutMs: 120000 }),
+  getErrors: () => request('/errors'),
+  createError: (error) => request('/errors', {
+    method: 'POST',
+    body: JSON.stringify(error)
+  }),
+  updateError: (id, error) => request(`/errors/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(error)
+  }),
+  deleteError: (id) => request(`/errors/${id}`, { method: 'DELETE' }),
+  syncErrors: () => request('/errors/sync', { method: 'POST', timeoutMs: 120000 }),
   getDifficultyLevels: () => request('/difficulty-levels'),
   createDifficultyLevel: (level) => request('/difficulty-levels', {
     method: 'POST',
