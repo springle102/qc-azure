@@ -1116,7 +1116,8 @@ async function findGoogleDriveFolders(folderName, parentId = '') {
   const queryParams = {
     q: `name = '${escapeGoogleDriveQueryValue(normalizedFolderName)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false${parentFilter}`,
     spaces: 'drive',
-    corpora: 'allDrives',
+    // Keep the default `user` corpus so folders shared from My Drive are
+    // searchable. includeItemsFromAllDrives still keeps Shared Drive support.
     includeItemsFromAllDrives: 'true',
     supportsAllDrives: 'true',
     pageSize: '100',
