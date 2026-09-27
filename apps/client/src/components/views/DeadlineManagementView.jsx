@@ -45,9 +45,10 @@ const EDIT_FIELDS = [
   ['late', 'Late', 'late-select']
 ];
 
-const EDITABLE_FIELDS = EDIT_FIELDS.filter(([, , , readOnly]) => !readOnly).map(([key]) => key);
-const CREATE_FIELDS = EDIT_FIELDS.filter(([key]) => !['price', 'receivePrice'].includes(key)).map(([key]) => key);
-const NUMERIC_FIELDS = new Set(['fIld', 'qcId', 'price', 'receivePrice', 'completionPercent']);
+const ASSIGNMENT_FIELD = 'assignedAdminId';
+const EDITABLE_FIELDS = [...EDIT_FIELDS.filter(([, , , readOnly]) => !readOnly).map(([key]) => key), ASSIGNMENT_FIELD];
+const CREATE_FIELDS = [...EDIT_FIELDS.filter(([key]) => !['price', 'receivePrice'].includes(key)).map(([key]) => key), ASSIGNMENT_FIELD];
+const NUMERIC_FIELDS = new Set(['fIld', 'assignedAdminId', 'qcId', 'price', 'receivePrice', 'completionPercent']);
 const DATE_FIELDS = new Set(['endTask']);
 const MONTH_FILTER_COLUMNS = new Set(['endTask', 'submittedAt']);
 const STRING_SORT_COLUMNS = new Set(['seriesName', 'type', 'urlSeries', 'difficulty', 'feedback', 'late']);
@@ -61,7 +62,7 @@ const STATUS_OPTIONS = [
   { value: 'done', label: 'Done', className: 'task-status-done' }
 ];
 
-export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs = [], fields = [], difficultyLevels = [], difficultyPrices = [], isLoading, onRefresh, onUpdate, onCreate, onDelete, readOnly = false, title = 'Quản lý deadline' }) {
+export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs = [], fields = [], difficultyLevels = [], difficultyPrices = [], currentUser = {}, isLoading, onRefresh, onUpdate, onCreate, onDelete, readOnly = false, title = 'Quản lý deadline' }) {
   const [field, setField] = useState('');
   const [seriesId, setSeriesId] = useState('');
   const [freelancer, setFreelancer] = useState('');
@@ -94,23 +95,23 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
     visibleColumns
       .filter(([key]) => key !== 'edit')
       .map(([key]) => {
-        const values = uniqueFilterValues(deadlines.map((item) => getColumnFilterValue(item, key, freelancerOptions)));
+        const values = uniqueFilterValues(deadlines.map((item) => getColumnFilterValue(item, key, freelancerOptions, currentUser)));
         return [key, sortFilterValues(key === 'late' ? LATE_OPTIONS : values, key)];
       })
-  ), [deadlines, freelancerOptions, visibleColumns]);
+  ), [currentUser, deadlines, freelancerOptions, visibleColumns]);
 
   const filteredDeadlines = useMemo(() => {
     const filtered = deadlines.filter((item) => {
     const text = [
       ...Object.values(item),
-      getPersonName(item.fIld ?? item.fId, freelancerOptions)
+      getAssignedPersonName(item, freelancerOptions, currentUser)
     ].join(' ').toLowerCase();
     const matchesColumnFilters = Object.entries(columnFilters).every(([key, selectedValues]) => (
-      selectedValues.includes(getColumnFilterValue(item, key, freelancerOptions))
+      selectedValues.includes(getColumnFilterValue(item, key, freelancerOptions, currentUser))
     ));
     return (!field || String(item.type || '') === field)
       && (!seriesId || String(item.seriesId || '') === seriesId)
-      && (!freelancer || getPersonName(item.fIld ?? item.fId, freelancerOptions) === freelancer)
+      && (!freelancer || getAssignedPersonName(item, freelancerOptions, currentUser) === freelancer)
       && (!qc || String(item.qcId ?? '') === qc)
       && (!search.trim() || text.includes(search.trim().toLowerCase()))
       && matchesColumnFilters;
@@ -119,7 +120,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
     const sortKind = getColumnSortKind(columnSort.key);
     if (!sortKind) return filtered;
     return [...filtered].sort((left, right) => compareColumnValues(left, right, columnSort.key, sortKind, columnSort.direction));
-  }, [columnFilters, columnSort, deadlines, field, freelancer, freelancerOptions, qc, search, seriesId]);
+  }, [columnFilters, columnSort, currentUser, deadlines, field, freelancer, freelancerOptions, qc, search, seriesId]);
 
   const updateColumnFilter = (key, selectedValues) => {
     setColumnFilters((current) => {
@@ -437,7 +438,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
                           disabled={readOnly || paymentUpdatingKey === String(item.seriesId) + '-' + String(item.chapterNumber)}
                           aria-label={'Thanh toán: ' + (getPaymentDisplayValue(item, paymentOverrides) ? 'đã chọn' : 'chưa chọn')}
                         />
-                      ) : renderValue(key === 'fIld' ? (item.fIld ?? item.fId) : item[key], key, item.type, difficultyLevels, freelancerOptions, qcOptions, item)}
+                      ) : renderValue(key === 'fIld' ? (item.fIld ?? item.fId) : item[key], key, item.type, difficultyLevels, freelancerOptions, qcOptions, item, currentUser)}
                     </td>
                   ))}
                 </tr>
@@ -457,6 +458,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
           difficultyPrices={difficultyPrices}
           fieldOptions={fieldOptions}
           statusOptions={STATUS_OPTIONS}
+          currentUser={currentUser}
           isSaving={isSaving}
           onChange={updateEditField}
           onClose={closeEdit}
@@ -496,17 +498,12 @@ function sortFilterValues(values, key) {
   return [...values].sort((left, right) => left.localeCompare(right, 'vi', { numeric: true }));
 }
 
-function getColumnFilterValue(item, key, freelancers = []) {
+function getColumnFilterValue(item, key, freelancers = [], currentUser = {}) {
   if (key === 'paymentApproved') return isPaymentApproved(item.paymentApproved) ? 'true' : 'false';
   if (key === 'late') return normalizeLateValue(item.late);
-  const value = key === 'fIld' ? getPersonName(item.fIld ?? item.fId, freelancers) : item[key];
+  const value = key === 'fIld' ? getAssignedPersonName(item, freelancers, currentUser) : item[key];
   if (MONTH_FILTER_COLUMNS.has(key)) return getMonthFilterValue(value);
   return value === null || value === undefined ? '' : String(value);
-}
-
-function getPersonName(id, people = []) {
-  if (id === null || id === undefined || id === '') return '';
-  return people.find((person) => String(person.id) === String(id))?.name || String(id);
 }
 
 function isPaymentApproved(value) {
@@ -706,7 +703,7 @@ function ColumnFilterButton({ columnKey, label, values, activeValues, sortKind, 
   );
 }
 
-function renderValue(value, key, field, difficultyLevels, freelancers, qcs, item = {}) {
+function renderValue(value, key, field, difficultyLevels, freelancers, qcs, item = {}, currentUser = {}) {
   if (key === 'statusRaw') {
     return <input className="raw-status-checkbox" type="checkbox" checked={isRawChecked(value)} readOnly disabled aria-label={`File: ${value || 'chưa hoàn thành'}`} />;
   }
@@ -720,6 +717,9 @@ function renderValue(value, key, field, difficultyLevels, freelancers, qcs, item
         <span className="task-duration">Tổng: {formatDuration(item.workDurationSeconds)}</span>
       </div>
     );
+  }
+  if (key === 'fIld' && item.assignedAdminId !== null && item.assignedAdminId !== undefined && item.assignedAdminId !== '') {
+    return getAdminAssignmentLabel(item.assignedAdminId, currentUser);
   }
   if (value === null || value === undefined || value === '') return '—';
   if (key === 'urlSeries') return /^https?:\/\//i.test(String(value))
@@ -742,6 +742,23 @@ function renderValue(value, key, field, difficultyLevels, freelancers, qcs, item
 
 function findPersonName(value, people) {
   return people.find((person) => String(person.id) === String(value))?.name || String(value);
+}
+
+function getAssignedPersonName(item, freelancers, currentUser = {}) {
+  if (item?.assignedAdminId !== null && item?.assignedAdminId !== undefined && item?.assignedAdminId !== '') {
+    return getAdminAssignmentLabel(item.assignedAdminId, currentUser);
+  }
+  const freelancerId = item?.fIld ?? item?.fId;
+  return freelancerId === null || freelancerId === undefined || freelancerId === ''
+    ? ''
+    : findPersonName(freelancerId, freelancers);
+}
+
+function getAdminAssignmentLabel(adminId, currentUser = {}) {
+  const currentAdminName = currentUser?.displayName || currentUser?.name;
+  return String(adminId) === String(currentUser?.id) && currentAdminName
+    ? `Admin — ${currentAdminName}`
+    : `Admin #${adminId}`;
 }
 
 function formatMoney(value) {
@@ -1096,6 +1113,7 @@ function createNewEditState(difficultyLevels, difficultyPrices, freelancers, qcs
     status: '',
     urlSeries: '',
     fIld: freelancers[0]?.id ?? '',
+    assignedAdminId: '',
     difficulty,
     qcId: qcs[0]?.id ?? '',
     completionPercent: 100,
@@ -1118,6 +1136,7 @@ function createEditState(deadline, difficultyPrices) {
     completionPercent: deadline.completionPercent ?? 100,
     urlSeries: deadline.urlSeries ?? '',
     fIld: deadline.fIld ?? deadline.fId ?? '',
+    assignedAdminId: deadline.assignedAdminId ?? '',
     difficulty: deadline.difficulty ?? '',
     qcId: deadline.qcId ?? '',
     price: deadline.price ?? getConfiguredPrice(deadline.type, deadline.difficulty, difficultyPrices) ?? '',
@@ -1166,8 +1185,9 @@ function formatDuration(seconds) {
   return `${hours}h ${minutes}m`;
 }
 
-function DeadlineEditModal({ value, isCreate, freelancers, qcs, difficultyLevels, difficultyPrices, fieldOptions = [], statusOptions, isSaving, onChange, onClose, onSubmit }) {
+function DeadlineEditModal({ value, isCreate, freelancers, qcs, difficultyLevels, difficultyPrices, fieldOptions = [], statusOptions, currentUser = {}, isSaving, onChange, onClose, onSubmit }) {
   const difficultyOptions = getDifficultyOptions(value.type, difficultyLevels, difficultyPrices);
+  const assignmentValue = value.assignedAdminId ? `admin:${value.assignedAdminId}` : (value.fIld ?? '');
   return createPortal(
     <div className="modal-overlay" onClick={onClose} role="presentation">
       <form className="modal-content modal-lg deadline-edit-modal" onSubmit={onSubmit} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="deadline-edit-modal-title">
@@ -1183,7 +1203,7 @@ function DeadlineEditModal({ value, isCreate, freelancers, qcs, difficultyLevels
 
         <div className="modal-body">
           <div className="deadline-edit-note">
-            {isCreate ? 'Chọn Freelancer và QC từ danh sách lấy trực tiếp trong database.' : 'ID bộ truyện và Chapter là khóa liên kết nên không thể chỉnh sửa.'}
+            {isCreate ? 'Chọn Freelancer, Admin hoặc QC từ danh sách lấy trực tiếp trong database.' : 'ID bộ truyện và Chapter là khóa liên kết nên không thể chỉnh sửa.'}
           </div>
           <div className="deadline-edit-grid">
             {EDIT_FIELDS.map(([key, label, type, readOnly]) => (
@@ -1212,12 +1232,24 @@ function DeadlineEditModal({ value, isCreate, freelancers, qcs, difficultyLevels
                   <select
                     id={'deadline-' + key}
                     className="form-select"
-                    value={value[key] ?? ''}
-                    onChange={(event) => onChange(key, event.target.value)}
+                    value={assignmentValue}
+                    onChange={(event) => {
+                      const selectedValue = event.target.value;
+                      if (selectedValue.startsWith('admin:')) {
+                        onChange(key, '');
+                        onChange(ASSIGNMENT_FIELD, selectedValue.slice('admin:'.length));
+                      } else {
+                        onChange(ASSIGNMENT_FIELD, '');
+                        onChange(key, selectedValue);
+                      }
+                    }}
                     disabled={isSaving}
                   >
                     <option value="">Chưa phân công</option>
                     {freelancers.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+                    {currentUser.role === 'Admin' && currentUser.id !== null && currentUser.id !== undefined && currentUser.id !== '' && (
+                      <option value={`admin:${currentUser.id}`}>Tôi — {currentUser.displayName || currentUser.name || 'Admin'}</option>
+                    )}
                   </select>
                 ) : type === 'status-select' ? (
                   <select

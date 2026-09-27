@@ -111,7 +111,7 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
     const completed = trackedTaskSource
       .filter((item) => isDashboardTaskComplete(item, req.authUser.role))
       .length;
-    const assigned = scopedTasks.filter((item) => item.fId || item.fIld || item.freelancerId || item.assignedToId || item.assignedTo).length;
+    const assigned = scopedTasks.filter((item) => item.fId || item.fIld || item.freelancerId || item.assignedAdminId || item.assignedToId || item.assignedTo).length;
     const review = trackedTaskSource.filter((item) => getTaskStatus(item) === 'submitted').length;
 
     res.json({
@@ -680,6 +680,12 @@ app.post('/api/deadlines', requireManager, async (req, res) => {
   try {
     const payload = validateDeadlineCreatePayload(req.body);
     await assertConfiguredFields([payload.type]);
+    if (payload.assignedAdminId !== null) {
+      if (req.authUser.role !== 'Admin') {
+        return res.status(403).json({ success: false, message: 'Chỉ Admin được giao task cho tài khoản Admin.' });
+      }
+      await assertAdminAssignment(payload.assignedAdminId);
+    }
     if (payload.status === 'doing') payload.doingStartedAt = new Date().toISOString();
     const prices = await selectRows('difficultyPricing');
     const configuredPrice = prices.find((item) => item.field === payload.type && item.difficulty === payload.difficulty);
@@ -691,7 +697,7 @@ app.post('/api/deadlines', requireManager, async (req, res) => {
     payload.receivePrice = calculateReceivePrice(payload.price, payload.completionPercent);
     const data = await insertDeadlineAndGoogleSheet(
       payload,
-      ['seriesId', 'chapterNumber', 'endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'completionPercent']
+      ['seriesId', 'chapterNumber', 'endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'assignedAdminId', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'completionPercent']
     );
     res.status(201).json({ success: true, data: decorateDeadlineTiming(data) });
   } catch (error) {
@@ -782,6 +788,13 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber', requireAuth, async (req, re
       updates.status = validateTaskStatus(updates.status);
       Object.assign(updates, buildStatusTransition(current, updates.status));
     }
+    if (Object.prototype.hasOwnProperty.call(updates, 'assignedAdminId')) {
+      if (req.authUser.role !== 'Admin') {
+        return res.status(403).json({ success: false, message: 'Chỉ Admin được giao task cho tài khoản Admin.' });
+      }
+      updates.assignedAdminId = nullableInteger(updates.assignedAdminId, 'Admin');
+      await assertAdminAssignment(updates.assignedAdminId);
+    }
     if (Object.prototype.hasOwnProperty.call(updates, 'paymentApproved') && typeof updates.paymentApproved !== 'boolean') {
       return res.status(400).json({ success: false, message: 'Trạng thái Thanh toán phải là true hoặc false.' });
     }
@@ -825,7 +838,7 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber', requireAuth, async (req, re
     const data = await updateDeadlineAndGoogleSheet(
       { seriesId, chapterNumber },
       updates,
-      ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'paymentApproved', 'completionPercent']
+      ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'assignedAdminId', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'paymentApproved', 'completionPercent']
     );
     res.json({ success: true, data: decorateDeadlineTiming(data) });
   } catch (error) {
@@ -1822,6 +1835,7 @@ const googleSheetHeaderAliases = {
   status: ['status', 'taskstatus', 'trangthaicodinh'],
   urlSeries: ['urlseries', 'seriesurl', 'url', 'link', 'linktruyen'],
   fIld: ['fild', 'freelancerid', 'freelancer', 'freelancername', 'nguoiduocgiao'],
+  assignedAdminId: ['assignedadminid', 'adminid', 'adminassigneeid', 'adminassignee', 'adminnguoigiao'],
   qcId: ['qcid', 'qc', 'qcname', 'nguoiqc', 'qcincharge'],
   difficulty: ['difficulty', 'level', 'dokho', 'mucdo'],
   price: ['price', 'priceperchapter', 'dongia', 'rate'],
@@ -1993,6 +2007,7 @@ function buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qc
     throw validationError(`Dòng ${rowNumber}: completionPercent phải là số nguyên từ 0 đến 200.`);
   }
   const fIld = resolveImportedReference(getSheetValue(row, headerIndex, 'fIld'), freelancers, ['fIld', 'fId', 'id'], ['name', 'email']);
+  const assignedAdminId = parseImportedInteger(getSheetValue(row, headerIndex, 'assignedAdminId'), 'assignedAdminId', rowNumber);
   const qcId = resolveImportedReference(getSheetValue(row, headerIndex, 'qcId'), qcs, ['qcId', 'id'], ['name', 'email']);
   const lateHeaderIndex = getGoogleSheetHeaderIndex(headerIndex, 'late', fieldOverride);
   const paymentHeaderIndex = getGoogleSheetHeaderIndex(headerIndex, 'paymentApproved', fieldOverride);
@@ -2007,6 +2022,7 @@ function buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qc
     status,
     urlSeries: normalizeUrlSeries(getSheetValue(row, headerIndex, 'urlSeries')),
     fIld,
+    assignedAdminId,
     qcId,
     difficulty,
     feedback: nullableText(getSheetValue(row, headerIndex, 'feedback')),
@@ -2026,7 +2042,7 @@ function normalizeSyncValue(value, column) {
     const timestamp = new Date(value).getTime();
     if (Number.isFinite(timestamp)) return String(timestamp);
   }
-  if (['seriesId', 'chapterNumber', 'fIld', 'qcId', 'price', 'receivePrice', 'completionPercent'].includes(column)) {
+  if (['seriesId', 'chapterNumber', 'fIld', 'assignedAdminId', 'qcId', 'price', 'receivePrice', 'completionPercent'].includes(column)) {
     const numeric = Number(value);
     if (Number.isFinite(numeric)) return String(numeric);
   }
@@ -2039,7 +2055,7 @@ function hasDeadlineSheetChanges(current, imported, columns) {
 
 const GOOGLE_SHEET_DEADLINE_COLUMNS = [
   'seriesId', 'chapterNumber', 'endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status',
-  'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice',
+  'urlSeries', 'fIld', 'assignedAdminId', 'qcId', 'difficulty', 'price', 'receivePrice',
   'feedback', 'late', 'completionPercent', 'paymentApproved'
 ];
 
@@ -2469,7 +2485,7 @@ async function syncGoogleSheet() {
     }
     let uniqueRows = [...uniqueRowsByKey.values()];
 
-    const allowedColumns = ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'completionPercent', 'paymentApproved'];
+    const allowedColumns = ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'assignedAdminId', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'completionPercent', 'paymentApproved'];
     const currentRowsByKey = new Map(currentRows.map((item) => [
       `${Number(item.seriesId)}:${Number(item.chapterNumber)}`,
       item
@@ -3288,6 +3304,7 @@ function validateDeadlineCreatePayload(payload) {
     statusRaw: nullableText(payload.statusRaw) || 'Đang thực hiện',
     urlSeries: nullableText(payload.urlSeries),
     fIld: nullableInteger(payload.fIld, 'Freelancer'),
+    assignedAdminId: nullableInteger(payload.assignedAdminId, 'Admin'),
     qcId: nullableInteger(payload.qcId, 'QC'),
     difficulty,
     feedback: nullableText(payload.feedback),
@@ -3440,6 +3457,13 @@ function nullableInteger(value, label) {
   const number = Number(value);
   if (!Number.isInteger(number) || number < 0) throw validationError(label + ' phải là số nguyên không âm.');
   return number;
+}
+
+async function assertAdminAssignment(adminId) {
+  if (adminId === null || adminId === undefined || adminId === '') return;
+  const accounts = await getCollection('accounts');
+  const account = accounts.find((item) => String(item.id) === String(adminId) && item.role === 'Admin' && item.isActive !== false);
+  if (!account) throw validationError('Tài khoản Admin được giao không tồn tại hoặc đã bị khóa.');
 }
 
 function nullableField(value, role) {

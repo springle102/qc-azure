@@ -15,7 +15,7 @@ import { showToast } from '../common/ToastContainer';
 const isComplete = (item) => normalizeStatus(item) === 'submitted';
 const isKpiComplete = (item, role) => normalizeStatus(item) === (role === 'Freelancer' ? 'submitted' : 'done');
 const isFinishedForDashboard = (item) => ['submitted', 'checking', 'fixing', 'done'].includes(normalizeStatus(item));
-const isAssigned = (item) => Boolean(item?.fId || item?.fIld || item?.freelancerId || item?.assignedToId || item?.assignedTo);
+const isAssigned = (item) => Boolean(item?.fId || item?.fIld || item?.freelancerId || item?.assignedAdminId || item?.assignedToId || item?.assignedTo);
 const isAssignedToQC = (item) => Boolean(item?.qcId || item?.qcld || item?.qcID || item?.qcName);
 const needsQC = (item) => {
   const status = String(item?.status || item?.statusRaw || '').trim().toLowerCase();

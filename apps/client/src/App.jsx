@@ -309,7 +309,7 @@ export function App() {
       case 'errors':
         return <ErrorManagementView {...commonProps} errors={data.errors} fields={data.fields} freelancers={data.freelancers} generalSettings={data.generalSettings} currentUser={profile} onUpdate={handleUpdateError} onCreate={handleCreateError} onDelete={handleDeleteError} />;
       case 'deadlines':
-        return <DeadlineManagementView {...commonProps} deadlines={data.deadlines} freelancers={data.freelancers} qcs={data.qcs} fields={data.fields} difficultyLevels={data.difficultyLevels} difficultyPrices={data.difficultyPrices} onUpdate={handleUpdateDeadline} onCreate={handleCreateDeadline} onDelete={handleDeleteDeadline} readOnly={profile.role === 'Freelancer'} title={profile.role === 'Freelancer' ? 'Deadline của tôi' : 'Quản lý deadline'} />;
+        return <DeadlineManagementView {...commonProps} deadlines={data.deadlines} freelancers={data.freelancers} qcs={data.qcs} fields={data.fields} difficultyLevels={data.difficultyLevels} difficultyPrices={data.difficultyPrices} currentUser={profile} onUpdate={handleUpdateDeadline} onCreate={handleCreateDeadline} onDelete={handleDeleteDeadline} readOnly={profile.role === 'Freelancer'} title={profile.role === 'Freelancer' ? 'Deadline của tôi' : 'Quản lý deadline'} />;
       case 'profile':
         return <ProfileView currentUser={profile} onSaveProfile={handleSaveProfile} />;
       case 'dashboard':

@@ -192,6 +192,7 @@ CREATE TABLE IF NOT EXISTS "SeriesList" (
   "workDurationSeconds" integer NOT NULL DEFAULT 0,
   "urlSeries" text,
   "fIld" integer,
+  "assignedAdminId" bigint,
   "qcId" integer,
   "difficulty" varchar(50),
   "price" numeric(14, 2),
@@ -206,6 +207,8 @@ CREATE TABLE IF NOT EXISTS "SeriesList" (
   CONSTRAINT "SeriesList_pkey" PRIMARY KEY ("seriesId", "chapterNumber"),
   CONSTRAINT "SeriesList_freelancer_fkey"
     FOREIGN KEY ("fIld") REFERENCES "Freelancer" ("fIld"),
+  CONSTRAINT "SeriesList_admin_fkey"
+    FOREIGN KEY ("assignedAdminId") REFERENCES "Accounts" ("id") ON DELETE SET NULL,
   CONSTRAINT "SeriesList_qc_fkey"
     FOREIGN KEY ("qcId") REFERENCES "QC" ("qcId")
 );
@@ -216,6 +219,7 @@ ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "status" varchar(20);
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "doingStartedAt" timestamptz;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "workDurationSeconds" integer;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "submittedAt" timestamptz;
+ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "assignedAdminId" bigint;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "late" text;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "paymentApproved" boolean;
 ALTER TABLE "SeriesList" DROP COLUMN IF EXISTS "startTask";
@@ -231,6 +235,17 @@ ALTER TABLE "SeriesList" ALTER COLUMN "paymentApproved" SET DEFAULT false;
 ALTER TABLE "SeriesList" ALTER COLUMN "paymentApproved" SET NOT NULL;
 ALTER TABLE "SeriesList" ALTER COLUMN "late" SET DEFAULT '≤0h';
 ALTER TABLE "SeriesList" ALTER COLUMN "late" SET NOT NULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'SeriesList_admin_fkey'
+  ) THEN
+    ALTER TABLE "SeriesList"
+      ADD CONSTRAINT "SeriesList_admin_fkey"
+      FOREIGN KEY ("assignedAdminId") REFERENCES "Accounts" ("id") ON DELETE SET NULL;
+  END IF;
+END $$;
 
 ALTER TABLE "SeriesList" DROP CONSTRAINT IF EXISTS "SeriesList_late_check";
 ALTER TABLE "SeriesList"
