@@ -378,7 +378,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
                           />
                         </div>
                       ) : key === 'late' ? (
-                        <LateSelect
+                        <LateControl
                           value={item.late}
                           disabled={readOnly || lateUpdatingKey === String(item.seriesId) + '-' + String(item.chapterNumber)}
                           onChange={(value) => updateLate(item, value)}
@@ -660,7 +660,7 @@ function renderValue(value, key, field, difficultyLevels, freelancers, qcs, item
   }
   if (key === 'completionPercent' && (value === null || value === undefined || value === '')) value = 100;
   if (key === 'status') return <TaskStatusBadge value={value} />;
-  if (key === 'late') return <LateSelect value={value} disabled />;
+  if (key === 'late') return <LateControl value={value} disabled />;
   if (key === 'submittedAt') {
     return (
       <div className="submitted-at-cell">
@@ -867,18 +867,102 @@ function getLateClass(value) {
   }[normalizeLateValue(value)] || 'late-within';
 }
 
-function LateSelect({ value, disabled = false, onChange }) {
+function LateControl({ value, disabled = false, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState(null);
+  const dropdownRef = useRef(null);
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
   const normalizedValue = normalizeLateValue(value);
+  const selectedClassName = getLateClass(normalizedValue);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (!dropdownRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) setIsOpen(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setMenuPosition(null);
+      return undefined;
+    }
+
+    const updateMenuPosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const menuWidth = Math.max(142, rect.width);
+      const menuHeight = LATE_OPTIONS.length * 34 + 10;
+      const shouldOpenUp = rect.bottom + 6 + menuHeight > window.innerHeight && rect.top > menuHeight + 6;
+      const top = shouldOpenUp ? rect.top - menuHeight - 6 : rect.bottom + 6;
+      const left = Math.min(Math.max(8, rect.left), window.innerWidth - menuWidth - 8);
+      setMenuPosition({ top: Math.max(8, top), left, width: menuWidth });
+    };
+
+    updateMenuPosition();
+    window.addEventListener('resize', updateMenuPosition);
+    window.addEventListener('scroll', updateMenuPosition, true);
+    return () => {
+      window.removeEventListener('resize', updateMenuPosition);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+    };
+  }, [isOpen]);
+
+  const selectLate = (nextValue) => {
+    setIsOpen(false);
+    onChange?.(nextValue);
+  };
+
   return (
-    <select
-      className={`late-select ${getLateClass(normalizedValue)}`}
-      value={normalizedValue}
-      disabled={disabled}
-      onChange={(event) => onChange?.(event.target.value)}
-      aria-label="Late"
-    >
-      {LATE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-    </select>
+    <div ref={dropdownRef} className={`task-status-dropdown late-dropdown ${isOpen ? 'is-open' : ''}`}>
+      <button
+        type="button"
+        ref={triggerRef}
+        className={`task-status-trigger late-trigger ${selectedClassName}`}
+        onClick={() => setIsOpen((open) => !open)}
+        disabled={disabled}
+        aria-label="Late"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+      >
+        <span className="task-status-trigger-label">
+          <span className="task-status-dot" aria-hidden="true" />
+          {normalizedValue}
+        </span>
+        <span className="task-status-chevron" aria-hidden="true">⌄</span>
+      </button>
+      {isOpen && menuPosition && createPortal(
+        <div ref={menuRef} className="task-status-menu late-menu" style={menuPosition} role="listbox" aria-label="Chọn Late">
+          {LATE_OPTIONS.map((option) => (
+            <button
+              type="button"
+              key={option}
+              className={`task-status-option late-option ${getLateClass(option)} ${normalizedValue === option ? 'is-selected' : ''}`}
+              role="option"
+              aria-selected={normalizedValue === option}
+              onClick={() => selectLate(option)}
+            >
+              <span className="task-status-dot" aria-hidden="true" />
+              {option}
+            </button>
+          ))}
+        </div>,
+        document.body
+      )}
+    </div>
   );
 }
 
@@ -1076,7 +1160,7 @@ function DeadlineEditModal({ value, isCreate, freelancers, qcs, difficultyLevels
                     {fieldOptions.map((option) => <option key={option} value={option}>{option}</option>)}
                   </select>
                 ) : type === 'late-select' ? (
-                  <LateSelect
+                  <LateControl
                     value={value[key]}
                     onChange={(nextValue) => onChange(key, nextValue)}
                     disabled={isSaving}
