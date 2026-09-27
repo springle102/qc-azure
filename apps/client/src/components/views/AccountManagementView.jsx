@@ -6,6 +6,7 @@ import { api } from '../../services/api';
 
 const ROLE_OPTIONS = ['Admin', 'QC', 'Freelancer'];
 const FIELD_OPTIONS = ['Japan', 'Latin', 'QC'];
+const EMPTY_ROWS = [];
 const ACCOUNT_FILTER_COLUMNS = [
   { key: 'username', label: 'Username', sortKind: 'string' },
   { key: 'displayName', label: 'Họ và tên', sortKind: 'string' },
@@ -29,7 +30,10 @@ const INITIAL_FORM = {
 };
 
 export function AccountManagementView({ accounts = [], freelancers = [], fields = [], isLoading, onRefresh, embedded = false }) {
-  const fieldOptions = useMemo(() => fields.length > 0 ? fields.map((field) => field.name || field).filter(Boolean) : FIELD_OPTIONS, [fields]);
+  const accountRows = Array.isArray(accounts) ? accounts : EMPTY_ROWS;
+  const freelancerRows = Array.isArray(freelancers) ? freelancers : EMPTY_ROWS;
+  const fieldRows = Array.isArray(fields) ? fields : EMPTY_ROWS;
+  const fieldOptions = useMemo(() => fieldRows.length > 0 ? fieldRows.map((field) => field.name || field).filter(Boolean) : FIELD_OPTIONS, [fieldRows]);
   const [form, setForm] = useState(INITIAL_FORM);
   const [editingAccount, setEditingAccount] = useState(null);
   const [editForm, setEditForm] = useState(INITIAL_FORM);
@@ -40,32 +44,32 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
   const accountFilterOptions = useMemo(() => Object.fromEntries(
     ACCOUNT_FILTER_COLUMNS.map(({ key }) => {
       const values = key === 'fields'
-        ? [...fieldOptions, ...accounts.flatMap((account) => getMemberFields(account))]
-        : accounts.map((account) => getAccountFilterValue(account, key, freelancers));
+        ? [...fieldOptions, ...accountRows.flatMap((account) => getMemberFields(account))]
+        : accountRows.map((account) => getAccountFilterValue(account, key, freelancerRows));
       return [key, [...new Set(values.map((value) => String(value ?? '')))].sort((left, right) => left.localeCompare(right, 'vi', { numeric: true, sensitivity: 'base' }))];
     })
-  ), [accounts, fieldOptions, freelancers]);
+  ), [accountRows, fieldOptions, freelancerRows]);
 
   const filteredAccounts = useMemo(() => {
-    const filtered = accounts.filter((account) => Object.entries(columnFilters).every(([key, selectedValues]) => {
+    const filtered = accountRows.filter((account) => Object.entries(columnFilters).every(([key, selectedValues]) => {
       if (key === 'fields') {
         const memberFields = getMemberFields(account).map((value) => String(value).toLowerCase());
         return selectedValues.some((value) => memberFields.includes(String(value).toLowerCase()));
       }
-      return selectedValues.includes(getAccountFilterValue(account, key, freelancers));
+      return selectedValues.includes(getAccountFilterValue(account, key, freelancerRows));
     }));
     if (!columnSort) return filtered;
     const sortColumn = ACCOUNT_FILTER_COLUMNS.find(({ key }) => key === columnSort.key);
     if (!sortColumn?.sortKind) return filtered;
     return [...filtered].sort((left, right) => {
-      const comparison = getAccountFilterValue(left, columnSort.key, freelancers).localeCompare(
-        getAccountFilterValue(right, columnSort.key, freelancers),
+      const comparison = getAccountFilterValue(left, columnSort.key, freelancerRows).localeCompare(
+        getAccountFilterValue(right, columnSort.key, freelancerRows),
         'vi',
         { numeric: true, sensitivity: 'base' }
       );
       return columnSort.direction === 'desc' ? -comparison : comparison;
     });
-  }, [accounts, columnFilters, columnSort, freelancers]);
+  }, [accountRows, columnFilters, columnSort, freelancerRows]);
 
   const updateColumnFilter = (key, selectedValues) => {
     setColumnFilters((current) => {
@@ -253,7 +257,7 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
                   <td>{account.email || '—'}</td>
                   <td><span className={'role-badge role-' + String(account.role || '').toLowerCase()}>{account.role}</span></td>
                   <td>{formatFields(account.fields, account.field)}</td>
-                  <td>{account.freelancerName || getFreelancerName(account.freelancerId, freelancers)}</td>
+                  <td>{account.freelancerName || getFreelancerName(account.freelancerId, freelancerRows)}</td>
                   <td><span className={'data-status ' + (account.isActive ? 'completed' : 'pending')}>{account.isActive ? 'Đang hoạt động' : 'Đã khóa'}</span></td>
                   <td>{formatDate(account.createdAt)}</td>
                   <td>
@@ -363,14 +367,21 @@ function formatAccountFilterValue(value, filterKind) {
   return value;
 }
 
-function getFreelancerName(id, freelancers) {
+function getFreelancerName(id, freelancers = EMPTY_ROWS) {
   if (id === null || id === undefined || id === '') return '—';
-  return freelancers.find((freelancer) => String(getFreelancerId(freelancer)) === String(id))?.name || String(id);
+  const freelancerRows = Array.isArray(freelancers) ? freelancers : EMPTY_ROWS;
+  return freelancerRows.find((freelancer) => String(getFreelancerId(freelancer)) === String(id))?.name || String(id);
 }
 
 function formatFields(fields, fallback) {
   const values = Array.isArray(fields) && fields.length > 0 ? fields : (fallback ? [fallback] : []);
   return values.length > 0 ? values.join(', ') : '—';
+}
+
+function getMemberFields(member = {}) {
+  if (!member || typeof member !== 'object') return [];
+  if (Array.isArray(member.fields) && member.fields.length > 0) return member.fields;
+  return member.field ? [member.field] : [];
 }
 
 function FieldCheckboxes({ options = FIELD_OPTIONS, value = [], onChange, disabled = false }) {
@@ -521,7 +532,7 @@ function ColumnFilterButton({ label, values, activeValues, filterKind, sortKind,
   );
 }
 
-function getFreelancerId(freelancer) {
+function getFreelancerId(freelancer = {}) {
   return freelancer.fIld ?? freelancer.fId ?? freelancer.id;
 }
 

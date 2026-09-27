@@ -5,16 +5,20 @@ import { api } from '../../services/api';
 import { AccountManagementView } from './AccountManagementView';
 
 const FIELD_OPTIONS = ['Japan', 'Latin', 'QC'];
+const EMPTY_ROWS = [];
 
 export function FreelancerManagementView({ freelancers = [], accounts = [], fields = [], isLoading, onRefresh, canManageAccounts = false, canEdit = false }) {
-  const fieldOptions = useMemo(() => fields.length > 0 ? fields.map((field) => field.name || field).filter(Boolean) : FIELD_OPTIONS, [fields]);
+  const freelancerRows = Array.isArray(freelancers) ? freelancers : EMPTY_ROWS;
+  const accountRows = Array.isArray(accounts) ? accounts : EMPTY_ROWS;
+  const fieldRows = Array.isArray(fields) ? fields : EMPTY_ROWS;
+  const fieldOptions = useMemo(() => fieldRows.length > 0 ? fieldRows.map((field) => field.name || field).filter(Boolean) : FIELD_OPTIONS, [fieldRows]);
   const [field, setField] = useState('');
   const [search, setSearch] = useState('');
   const [editingFreelancer, setEditingFreelancer] = useState(null);
   const [form, setForm] = useState({ name: '', email: '', field: '', note: '' });
   const [isSaving, setIsSaving] = useState(false);
 
-  const filteredFreelancers = useMemo(() => freelancers.filter((freelancer) => {
+  const filteredFreelancers = useMemo(() => freelancerRows.filter((freelancer) => {
     const memberFields = getMemberFields(freelancer);
     const matchesField = !field || memberFields.some((value) => value.toLowerCase() === field.toLowerCase());
     const query = search.trim().toLowerCase();
@@ -27,7 +31,7 @@ export function FreelancerManagementView({ freelancers = [], accounts = [], fiel
       freelancer.accountUsername
     ].some((value) => String(value || '').toLowerCase().includes(query));
     return matchesField && matchesSearch;
-  }), [field, search, freelancers]);
+  }), [field, search, freelancerRows]);
 
   const openEdit = (freelancer) => {
     setEditingFreelancer(freelancer);
@@ -76,9 +80,9 @@ export function FreelancerManagementView({ freelancers = [], accounts = [], fiel
       {canManageAccounts && (
         <AccountManagementView
           embedded
-          accounts={accounts}
-          freelancers={freelancers}
-          fields={fields}
+          accounts={accountRows}
+          freelancers={freelancerRows}
+          fields={fieldRows}
           isLoading={isLoading}
           onRefresh={onRefresh}
         />
@@ -179,7 +183,8 @@ function EmptyTable({ icon, text }) {
   return <div className="empty-state table-empty">{icon}<strong>{text}</strong></div>;
 }
 
-function getMemberFields(member) {
+function getMemberFields(member = {}) {
+  if (!member || typeof member !== 'object') return [];
   if (Array.isArray(member.fields) && member.fields.length > 0) return member.fields;
   return member.field ? [member.field] : [];
 }
