@@ -276,6 +276,18 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
     }
   };
 
+  const updateFeedback = async (deadline, feedback) => {
+    try {
+      const updatedDeadline = await api.updateDeadline(deadline.seriesId, deadline.chapterNumber, { feedback });
+      onUpdate?.(updatedDeadline);
+      showToast('Đã cập nhật Feedback.', 'success');
+      return updatedDeadline;
+    } catch (error) {
+      showToast(error.message || 'Không thể cập nhật Feedback.', 'error');
+      throw error;
+    }
+  };
+
   const deleteDeadline = async (deadline) => {
     if (!window.confirm(`Xóa deadline ${deadline.seriesId} - Chapter ${deadline.chapterNumber}? Dòng này cũng sẽ bị xóa trên Google Sheet.`)) return;
     const rowKey = String(deadline.seriesId) + '-' + String(deadline.chapterNumber);
@@ -297,7 +309,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
         <div>
           <span className="qc-kicker">TIẾN ĐỘ</span>
           <h2 className="page-title">{title}</h2>
-          <p className="page-subtitle">{readOnly ? 'Chỉ xem các deadline được giao cho tài khoản của bạn.' : 'Lọc và theo dõi các trường trong bảng SeriesList.'}</p>
+          <p className="page-subtitle">{readOnly ? 'Bạn được sửa Status và Feedback của deadline được giao.' : 'Lọc và theo dõi các trường trong bảng SeriesList.'}</p>
         </div>
         <div className="page-header-actions">
           {!readOnly && <button type="button" className="btn btn-primary" onClick={openCreate} disabled={isSaving}>
@@ -374,6 +386,8 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
                             <IconTrash size={14} /> Xóa
                           </button>
                         </div>
+                      ) : key === 'feedback' && readOnly ? (
+                        <FeedbackEditor value={item.feedback} onSave={(value) => updateFeedback(item, value)} />
                       ) : key === 'statusRaw' ? (
                         <input
                           className="raw-status-checkbox"
@@ -850,6 +864,39 @@ function TaskStatusControl({ value, options, disabled, onChange }) {
         document.body
       )}
     </div>
+  );
+}
+
+function FeedbackEditor({ value, onSave }) {
+  const [draft, setDraft] = useState(value ?? '');
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isSaving) setDraft(value ?? '');
+  }, [isSaving, value]);
+
+  const save = async () => {
+    if (isSaving || String(draft ?? '') === String(value ?? '')) return;
+    setIsSaving(true);
+    try {
+      await onSave(draft);
+    } catch {
+      setDraft(value ?? '');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <textarea
+      className="feedback-inline-editor"
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={save}
+      disabled={isSaving}
+      placeholder="Nhập feedback..."
+      aria-label="Feedback"
+    />
   );
 }
 

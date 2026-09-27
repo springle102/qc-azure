@@ -430,6 +430,26 @@
   min-height: 80px;
 }
 
+.feedback-inline-editor {
+  width: 100%;
+  min-width: 180px;
+  min-height: 42px;
+  padding: 7px 9px;
+  resize: vertical;
+  background: var(--surface-input, rgba(10, 16, 32, 0.85));
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-main);
+  font: inherit;
+  font-size: 13px;
+}
+
+.feedback-inline-editor:focus {
+  outline: none;
+  border-color: var(--blue-glow);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
 /* ==========================================
    Dashboard KPI Cards
    ========================================== */

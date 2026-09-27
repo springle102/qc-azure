@@ -106,9 +106,10 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
     const legacyLinks = req.authUser.role === 'Freelancer'
       ? { guideUrl: fieldResources[0]?.guideUrl || '', resourceUrl: fieldResources[0]?.resourceUrl || '' }
       : { guideUrl: process.env.GUIDE_URL || '', resourceUrl: process.env.RESOURCE_URL || '' };
-    const completed = scopedTasks.filter((item) => isTaskComplete(item)).length;
+    const trackedTaskSource = scopedDeadlines.length > 0 ? scopedDeadlines : scopedTasks;
+    const completed = trackedTaskSource.filter((item) => isTaskComplete(item)).length;
     const assigned = scopedTasks.filter((item) => item.fId || item.fIld || item.freelancerId || item.assignedToId || item.assignedTo).length;
-    const review = scopedTasks.filter((item) => /qc|review|duyệt|kiểm/i.test(item.status || item.statusRaw || '')).length;
+    const review = trackedTaskSource.filter((item) => getTaskStatus(item) === 'submitted').length;
 
     res.json({
       success: true,
@@ -533,13 +534,14 @@ app.get('/api/salaries', requireAuth, async (req, res) => {
       || deadline.paymentApproved === 1
       || String(deadline.paymentApproved).toLowerCase() === 'true'
     ));
+    const payableQCDebt = payableDeadlines.filter((deadline) => getTaskStatus(deadline) === 'done');
     res.json({
       success: true,
-      data: scopedDeadlines.length === 0
+        data: scopedDeadlines.length === 0
         ? []
         : [
             ...buildSalaryRows(scopedFreelancers, payableDeadlines, bonusSettings),
-            ...buildQCSalaryRows(scopedQcs, payableDeadlines, bonusSettings)
+            ...buildQCSalaryRows(scopedQcs, payableQCDebt, bonusSettings)
           ]
     });
   } catch (error) {
@@ -638,7 +640,7 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber/status', requireAuth, async (
   }
 });
 
-app.patch('/api/deadlines/:seriesId/:chapterNumber', requireManager, async (req, res) => {
+app.patch('/api/deadlines/:seriesId/:chapterNumber', requireAuth, async (req, res) => {
   const seriesId = Number(req.params.seriesId);
   const chapterNumber = Number(req.params.chapterNumber);
   if (!Number.isInteger(seriesId) || !Number.isInteger(chapterNumber)) {
@@ -649,6 +651,39 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber', requireManager, async (req,
     const currentRows = await selectRows('deadlines');
     const current = currentRows.find((item) => Number(item.seriesId) === seriesId && Number(item.chapterNumber) === chapterNumber);
     if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy deadline cần cập nhật.' });
+
+    if (req.authUser.role === 'Freelancer') {
+      if (String(current.fIld ?? '') !== String(req.authUser.freelancerId ?? '')) {
+        return res.status(403).json({ success: false, message: 'Freelancer chỉ được sửa task của mình.' });
+      }
+      const freelancerUpdates = req.body && typeof req.body === 'object' ? req.body : {};
+      const forbiddenFields = Object.keys(freelancerUpdates).filter((key) => !['status', 'feedback'].includes(key));
+      if (forbiddenFields.length > 0) {
+        return res.status(403).json({ success: false, message: 'Freelancer chỉ được sửa cột Status và Feedback.' });
+      }
+
+      const updates = {};
+      if (Object.prototype.hasOwnProperty.call(freelancerUpdates, 'feedback')) {
+        updates.feedback = nullableText(freelancerUpdates.feedback);
+      }
+      if (Object.prototype.hasOwnProperty.call(freelancerUpdates, 'status')) {
+        const status = validateTaskStatus(freelancerUpdates.status);
+        if (!['doing', 'submitted'].includes(status)) {
+          return res.status(403).json({ success: false, message: 'Freelancer chỉ được chọn Doing hoặc Submitted.' });
+        }
+        Object.assign(updates, buildStatusTransition(current, status));
+      }
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ success: false, message: 'Freelancer chỉ được sửa cột Status và Feedback.' });
+      }
+
+      const data = await updateDeadlineAndGoogleSheet(
+        { seriesId, chapterNumber },
+        updates,
+        ['status', 'doingStartedAt', 'workDurationSeconds', 'submittedAt', 'feedback']
+      );
+      return res.json({ success: true, data: decorateDeadlineTiming(data) });
+    }
 
     const updates = { ...(req.body || {}) };
     if (Object.prototype.hasOwnProperty.call(updates, 'endTask')) {
@@ -2142,9 +2177,12 @@ async function updateDeadlineAndGoogleSheet(keys, updates, allowedColumns) {
   const current = currentRows.find((item) => Object.entries(keys).every(([key, value]) => String(item[key]) === String(value)));
   if (!current) throw new Error('Không tìm thấy deadline cần cập nhật.');
   const data = await updateRow('deadlines', keys, updates, allowedColumns);
-  const changedColumns = allowedColumns.filter((column) => Object.prototype.hasOwnProperty.call(updates, column));
   try {
-    await syncDeadlineWithGoogleSheet(data, { action: 'update', columns: changedColumns });
+    // Web edits are database-only except for Status. When Status changes,
+    // update that exact existing Sheet cell and never append or rewrite a row.
+    if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
+      await syncDeadlineWithGoogleSheet(data, { action: 'update', columns: ['status'] });
+    }
     return data;
   } catch (error) {
     const rollback = Object.fromEntries(allowedColumns

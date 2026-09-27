@@ -15,7 +15,10 @@ import { showToast } from '../common/ToastContainer';
 const isComplete = (item) => ['hoàn thành', 'completed', 'done', 'complete'].includes(String(item?.status || item?.statusRaw || '').trim().toLowerCase());
 const isAssigned = (item) => Boolean(item?.fId || item?.fIld || item?.freelancerId || item?.assignedToId || item?.assignedTo);
 const isAssignedToQC = (item) => Boolean(item?.qcId || item?.qcld || item?.qcID || item?.qcName);
-const needsQC = (item) => /qc|review|duyệt|kiểm/i.test(String(item?.status || item?.statusRaw || ''));
+const needsQC = (item) => {
+  const status = String(item?.status || item?.statusRaw || '').trim().toLowerCase();
+  return status === 'submitted' || /đã gửi|chờ qc|qc|review|duyệt|kiểm/.test(status);
+};
 const isDoing = (item) => normalizeStatus(item) === 'doing';
 const isUpcoming = (item) => {
   const dueAt = getDueDate(item);
