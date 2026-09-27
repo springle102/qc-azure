@@ -17,8 +17,8 @@ const NAV_ITEMS = [
   { id: 'deadlines', label: 'Quản lý Deadline', icon: IconTasks },
   { id: 'errors', label: 'Quản lý lỗi', icon: IconAlertTriangle },
   { id: 'pricing', label: 'Giá tiền', icon: IconDollarSign },
-  { id: 'settings', label: 'Cấu hình chung', icon: IconSettings },
   { id: 'salary', label: 'Lương', icon: IconBanknote },
+  { id: 'settings', label: 'Cấu hình chung', icon: IconSettings },
   { id: 'profile', label: 'Hồ sơ cá nhân', icon: IconUser }
 ];
 
