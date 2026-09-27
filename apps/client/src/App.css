@@ -2591,7 +2591,7 @@
 .deadline-table th.deadline-column-chapterNumber .deadline-column-header > span,
 .deadline-table th.deadline-column-type .deadline-column-header > span {
   white-space: normal;
-  line-height: 1.1;
+  line-height: 1.25;
 }
 
 .deadline-table .deadline-column-seriesId .column-filter-button,
