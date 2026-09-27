@@ -3,7 +3,7 @@ import { IconEye, IconRefresh, IconSearch, IconUsers, IconX } from '../common/Ic
 
 const SALARY_ROLES = ['Freelancer', 'QC'];
 
-export function SalaryManagementView({ salaries = [], fields = [], bonusSettings, isLoading, onRefresh }) {
+export function SalaryManagementView({ salaries = [], fields = [], isLoading, onRefresh }) {
   const [search, setSearch] = useState('');
   const [field, setField] = useState('');
   const [role, setRole] = useState('');
@@ -34,11 +34,6 @@ export function SalaryManagementView({ salaries = [], fields = [], bonusSettings
         <div>
           <span className="qc-kicker">NHÂN SỰ</span>
           <h2 className="page-title">Lương</h2>
-          <p className="page-subtitle">
-            Tổng lương = tổng tiền freelancer nhận từ các task + bonus.
-            {bonusSettings && ' Mức thưởng và giá QC được cấu hình riêng theo từng mảng.'}
-            {bonusSettings && ' QC nhận giá mặc định theo mảng + phần tiền tương ứng với % member chưa hoàn thành.'}
-          </p>
         </div>
         <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading}>
           <IconRefresh size={16} /> {isLoading ? 'Đang tải...' : 'Làm mới'}

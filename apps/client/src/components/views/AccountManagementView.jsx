@@ -207,10 +207,8 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
           <div className="form-group">
             <span className="form-label">Mảng</span>
             <FieldCheckboxes options={fieldOptions} value={form.fields} onChange={(fields) => updateField('fields', fields)} />
-            <span className="form-help account-create-link-help">Freelancer chọn một mảng; QC có thể chọn một hoặc nhiều mảng được Admin cấp.</span>
           </div>
           <div className="account-create-actions">
-            <span className="form-help">Password được lưu dạng hash trong database và không hiển thị lại.</span>
             <button type="submit" className="btn btn-primary" disabled={isSaving}>
               <IconPlus size={16} /> {isSaving ? 'Đang tạo...' : 'Cấp account'}
             </button>

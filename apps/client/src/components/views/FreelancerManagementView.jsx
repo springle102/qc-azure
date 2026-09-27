@@ -122,7 +122,6 @@ export function FreelancerManagementView({ freelancers = [], accounts = [], fiel
         <div>
           <span className="qc-kicker">NHÂN SỰ</span>
           <h2 className="page-title">Quản lý freelancer</h2>
-          <p className="page-subtitle">Quản lý hồ sơ Freelancer và account liên kết trên cùng một tab.</p>
         </div>
         <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading || isSaving}>
           <IconRefresh size={16} /> {isLoading ? 'Đang tải...' : 'Làm mới'}

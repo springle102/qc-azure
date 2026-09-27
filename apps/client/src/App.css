@@ -3508,7 +3508,8 @@
 .error-entry-launcher {
   display: flex;
   justify-content: flex-end;
-  padding: 14px 20px;
+  margin-top: 14px;
+  padding: 14px 0 0;
 }
 
 .error-entry-modal {
@@ -3558,6 +3559,19 @@
   vertical-align: top;
 }
 
+.error-table th {
+  text-align: center;
+}
+
+.error-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 24px;
+  text-align: center;
+}
+
 .error-table th:nth-child(1) { min-width: 180px; }
 .error-table th:nth-child(2) { min-width: 90px; }
 .error-table th:nth-child(3) { min-width: 150px; }
@@ -3565,19 +3579,6 @@
 .error-table th:nth-child(5) { min-width: 240px; }
 .error-table th:nth-child(6) { min-width: 150px; }
 .error-table th:nth-child(7) { min-width: 120px; }
-
-.error-sort-select {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 4px 6px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 6px;
-  background: rgba(15, 23, 42, 0.8);
-  color: inherit;
-  font: inherit;
-  font-size: 11px;
-  text-transform: none;
-}
 
 .error-type-badge,
 .error-type-select,

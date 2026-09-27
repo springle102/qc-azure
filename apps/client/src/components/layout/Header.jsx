@@ -173,7 +173,7 @@ function buildNotifications(deadlines, errors, currentUser) {
       });
 
     visibleDeadlines
-      .filter((deadline) => isRawReady(deadline))
+      .filter((deadline) => !hasTaskStatus(deadline) && isRawReady(deadline))
       .forEach((deadline) => {
         notifications.push({
           id: `raw-${deadline.seriesId}-${deadline.chapterNumber}`,
@@ -230,6 +230,10 @@ function normalizeHeaderStatus(item) {
   if (value === 'fixing' || /sửa|fix/.test(value)) return 'fixing';
   if (value === 'done' || /hoàn thành|completed|complete/.test(value)) return 'done';
   return value;
+}
+
+function hasTaskStatus(item) {
+  return String(item?.status ?? '').trim() !== '';
 }
 
 function isRawReady(deadline) {

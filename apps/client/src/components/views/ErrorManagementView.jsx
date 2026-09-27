@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { IconCheck, IconExternalLink, IconPlus, IconRefresh, IconTrash, IconX } from '../common/Icons';
+import { IconCheck, IconExternalLink, IconFilter, IconPlus, IconRefresh, IconTrash, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
 
@@ -108,6 +108,133 @@ function ErrorTypeControl({ value, disabled = false, onChange, ariaLabel = 'Ch�
   );
 }
 
+function ErrorColumnFilterButton({ columnKey, label, values = [], activeValues, activeSortDirection, onApply, onSort }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState('');
+  const [draftValues, setDraftValues] = useState([]);
+  const [menuPosition, setMenuPosition] = useState(null);
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
+  const isActive = Array.isArray(activeValues) || Boolean(activeSortDirection);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const updatePosition = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = 250;
+      setMenuPosition({
+        top: rect.bottom + 6,
+        left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))
+      });
+    };
+    const handleOutsidePointer = (event) => {
+      if (!buttonRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) setIsOpen(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+
+    updatePosition();
+    document.addEventListener('pointerdown', handleOutsidePointer);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointer);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [isOpen]);
+
+  const openFilter = (event) => {
+    event.stopPropagation();
+    if (isOpen) {
+      setIsOpen(false);
+      return;
+    }
+    setSearchValue('');
+    setDraftValues(Array.isArray(activeValues) ? [...activeValues] : [...values]);
+    setIsOpen(true);
+  };
+
+  const visibleValues = values.filter((value) => value.toLowerCase().includes(searchValue.trim().toLowerCase()));
+  const allSelected = values.length > 0 && draftValues.length === values.length;
+
+  const toggleValue = (value) => {
+    setDraftValues((current) => current.includes(value)
+      ? current.filter((item) => item !== value)
+      : [...current, value]);
+  };
+
+  const applyFilter = () => {
+    onApply?.(draftValues.length === values.length ? null : draftValues);
+    setIsOpen(false);
+  };
+
+  const clearFilter = () => {
+    if (columnKey === 'title') onSort?.(null);
+    else onApply?.(null);
+    setIsOpen(false);
+  };
+
+  const applySort = (direction) => {
+    onSort?.(activeSortDirection === direction ? null : direction);
+    setIsOpen(false);
+  };
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={`column-filter-button${isActive ? ' active' : ''}`}
+        onClick={openFilter}
+        aria-label={`Lọc cột ${label}`}
+        aria-expanded={isOpen}
+        title={`Lọc cột ${label}`}
+      >
+        <IconFilter size={14} />
+      </button>
+      {isOpen && menuPosition && createPortal(
+        <div ref={menuRef} className="column-filter-menu" style={menuPosition} onClick={(event) => event.stopPropagation()}>
+          <div className="column-filter-menu-title">Lọc {label}</div>
+          {columnKey === 'title' && (
+            <div className="column-filter-sort">
+              <div className="column-filter-section-label">Sắp xếp</div>
+              <button type="button" className={`column-filter-sort-button${activeSortDirection === 'asc' ? ' active' : ''}`} onClick={() => applySort('asc')}>A → Z</button>
+              <button type="button" className={`column-filter-sort-button${activeSortDirection === 'desc' ? ' active' : ''}`} onClick={() => applySort('desc')}>Z → A</button>
+            </div>
+          )}
+          {values.length > 0 && (
+            <>
+              <input className="form-input column-filter-search" value={searchValue} onChange={(event) => setSearchValue(event.target.value)} placeholder="Tìm Error Type..." autoFocus />
+              <label className="column-filter-option column-filter-select-all">
+                <input type="checkbox" checked={allSelected} onChange={() => setDraftValues(allSelected ? [] : [...values])} />
+                <span>Chọn tất cả</span>
+              </label>
+              <div className="column-filter-options">
+                {visibleValues.length > 0 ? visibleValues.map((value) => (
+                  <label className="column-filter-option" key={value}>
+                    <input type="checkbox" checked={draftValues.includes(value)} onChange={() => toggleValue(value)} />
+                    <span>{value}</span>
+                  </label>
+                )) : <span className="column-filter-empty">Không có option phù hợp.</span>}
+              </div>
+              <div className="column-filter-actions">
+                <button type="button" className="btn btn-outline btn-sm" onClick={clearFilter}>Xóa lọc</button>
+                <button type="button" className="btn btn-primary btn-sm" onClick={applyFilter}>Áp dụng</button>
+              </div>
+            </>
+          )}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 export function ErrorManagementView({
   errors = [],
   fields = [],
@@ -122,7 +249,8 @@ export function ErrorManagementView({
 }) {
   const canManage = ['Admin', 'QC'].includes(currentUser.role);
   const [activeField, setActiveField] = useState(fields[0]?.name || '');
-  const [sortDirection, setSortDirection] = useState('asc');
+  const [titleSortDirection, setTitleSortDirection] = useState(null);
+  const [errorTypeFilter, setErrorTypeFilter] = useState(null);
   const [localErrors, setLocalErrors] = useState(errors);
   const [draftNotes, setDraftNotes] = useState({});
   const [errorSheetUrls, setErrorSheetUrls] = useState(generalSettings?.errorSheetUrls || {});
@@ -145,12 +273,16 @@ export function ErrorManagementView({
   }, [generalSettings]);
 
   const activeSheetUrl = errorSheetUrls[activeField] || '';
-  const activeErrors = useMemo(() => localErrors
-    .filter((row) => matchesField(row, activeField))
-    .sort((left, right) => {
+  const activeErrors = useMemo(() => {
+    const filtered = localErrors
+      .filter((row) => matchesField(row, activeField))
+      .filter((row) => !Array.isArray(errorTypeFilter) || errorTypeFilter.includes(String(row.errorType ?? '')));
+    if (!titleSortDirection) return filtered;
+    return filtered.sort((left, right) => {
       const compared = String(left.title || '').localeCompare(String(right.title || ''), 'vi', { sensitivity: 'base' });
-      return sortDirection === 'asc' ? compared : -compared;
-    }), [activeField, localErrors, sortDirection]);
+      return titleSortDirection === 'asc' ? compared : -compared;
+    });
+  }, [activeField, errorTypeFilter, localErrors, titleSortDirection]);
 
   const editorOptions = freelancers.filter((freelancer) => (
     !activeField || getFreelancerFields(freelancer).some((field) => field.toLowerCase() === activeField.toLowerCase())
@@ -261,7 +393,6 @@ export function ErrorManagementView({
         <div>
           <span className="qc-kicker">QUALITY CONTROL</span>
           <h2 className="page-title">Quản lý lỗi</h2>
-          <p className="page-subtitle">Theo dõi lỗi theo từng mảng. Freelancer chỉ cần xem lỗi và tick Fix/Check sau khi đã kiểm tra.</p>
         </div>
         <div className="page-header-actions">
           {canManage && <button type="button" className="btn btn-primary" onClick={handleSync} disabled={isLoading || isSaving}><IconRefresh size={16} /> Đồng bộ lỗi</button>}
@@ -272,7 +403,7 @@ export function ErrorManagementView({
       {canManage && currentUser.role === 'Admin' && (
         <section className="glass-panel error-sheet-config-panel">
           <div className="section-heading">
-          <div><span className="qc-kicker">SHEET LỖI GỐC</span><h3>Cấu hình sheet lỗi theo mảng</h3><p className="form-help">Mỗi mảng dùng một Google Sheet riêng. Sheet cần có các cột Title, Chapter, Error Type, Error, Note, Editor và Fix/Check.</p></div>
+          <div><span className="qc-kicker">SHEET LỖI GỐC</span><h3>Cấu hình sheet lỗi theo mảng</h3></div>
           </div>
           <form className="error-sheet-config-form" onSubmit={handleSaveSheetUrls}>
             <div className="error-sheet-config-grid">
@@ -303,15 +434,14 @@ export function ErrorManagementView({
               <span>Sheet lỗi gốc: </span>
               {activeSheetUrl ? <a href={activeSheetUrl} target="_blank" rel="noreferrer">Mở sheet để xem screenshot <IconExternalLink size={14} /></a> : <em>Chưa cấu hình</em>}
             </div>
+            {canManage && (
+              <div className="error-entry-launcher">
+                <button type="button" className="btn btn-primary" onClick={() => setIsCreatingError(true)} disabled={isSaving}>
+                  <IconPlus size={16} /> Thêm lỗi
+                </button>
+              </div>
+            )}
           </section>
-
-          {canManage && (
-            <section className="glass-panel error-entry-panel error-entry-launcher">
-              <button type="button" className="btn btn-primary" onClick={() => setIsCreatingError(true)} disabled={isSaving}>
-                <IconPlus size={16} /> Thêm lỗi
-              </button>
-            </section>
-          )}
 
           {canManage && isCreatingError && createPortal(
             <div className="modal-overlay" onClick={() => !isSaving && setIsCreatingError(false)} role="presentation">
@@ -343,7 +473,18 @@ export function ErrorManagementView({
             <div className="section-heading error-table-heading"><div><span className="qc-kicker">DANH SÁCH LỖI</span><h3>Lỗi mảng {activeField}</h3></div><span className="error-count-label">{activeErrors.length} lỗi</span></div>
             <div className="table-wrapper-flat error-table-wrapper">
               <table className="custom-table error-table">
-                <thead><tr><th>Title <select className="error-sort-select" value={sortDirection} onChange={(event) => setSortDirection(event.target.value)} aria-label="Sắp xếp Title"><option value="asc">A-Z</option><option value="desc">Z-A</option></select></th><th>Chapter</th><th>Error Type</th><th>Error</th><th>Note của FL hoặc QC</th><th>Editor</th><th>Fix/Check</th>{canManage && <th>Thao tác</th>}</tr></thead>
+                <thead>
+                  <tr>
+                    <th><div className="error-column-header"><span>Title</span><ErrorColumnFilterButton columnKey="title" label="Title" activeSortDirection={titleSortDirection} onSort={setTitleSortDirection} /></div></th>
+                    <th><div className="error-column-header"><span>Chapter</span></div></th>
+                    <th><div className="error-column-header"><span>Error Type</span><ErrorColumnFilterButton columnKey="errorType" label="Error Type" values={ERROR_TYPE_OPTIONS} activeValues={errorTypeFilter} onApply={setErrorTypeFilter} /></div></th>
+                    <th><div className="error-column-header"><span>Error</span></div></th>
+                    <th><div className="error-column-header"><span>Note của FL hoặc QC</span></div></th>
+                    <th><div className="error-column-header"><span>Editor</span></div></th>
+                    <th><div className="error-column-header"><span>Fix/Check</span></div></th>
+                    {canManage && <th><div className="error-column-header"><span>Thao tác</span></div></th>}
+                  </tr>
+                </thead>
                 <tbody>
                   {activeErrors.length === 0 ? <tr><td colSpan={canManage ? 8 : 7} className="table-empty">Chưa có lỗi trong mảng này.</td></tr> : activeErrors.map((row) => {
                     const rowNote = draftNotes[row.id] ?? row.note ?? '';

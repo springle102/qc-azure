@@ -240,7 +240,6 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
                 <span className="form-help">Hiện tại: {formatPrice(activeBonusConfig.qcDefaultPrice)}. QC nhận thêm phần tiền tương ứng với % member chưa hoàn thành.</span>
               </div>
               <div className="bonus-settings-actions">
-                <span className="muted-inline">Ví dụ: x = 20, y = 10,000 ₫ thì task thứ 21 được cộng 10,000 ₫; giá QC tính riêng theo từng task của mảng này.</span>
                 <button type="submit" className="btn btn-primary" disabled={isSaving}>{isSaving ? 'Đang lưu...' : `Lưu cấu hình ${fieldName}`}</button>
               </div>
             </form>
