@@ -1798,6 +1798,13 @@ function normalizeImportedField(value, fields, rowNumber) {
   return field.name;
 }
 
+function getSheetDeadlineKey(row, headerIndex, fieldOverride = null) {
+  const seriesId = Number(String(getSheetValue(row, headerIndex, 'seriesId', fieldOverride)).replace(/,/g, '').trim());
+  const chapterNumber = Number(String(getSheetValue(row, headerIndex, 'chapterNumber')).replace(/,/g, '').trim());
+  if (!Number.isInteger(seriesId) || seriesId < 0 || !Number.isInteger(chapterNumber) || chapterNumber < 1) return null;
+  return `${seriesId}:${chapterNumber}`;
+}
+
 function buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qcs, rowNumber, fieldOverride = null) {
   const seriesIdLabel = normalizeSheetHeader(fieldOverride) === 'latin' ? 'AZ ID' : 'seriesId';
   const seriesId = parseImportedInteger(getSheetValue(row, headerIndex, 'seriesId', fieldOverride), seriesIdLabel, rowNumber, { required: true });
@@ -2169,6 +2176,8 @@ async function syncGoogleSheet() {
     }
     const mappedRows = [];
     const skippedRows = [];
+    const invalidRows = [];
+    const invalidSheetKeys = new Set();
     let hiddenRows = 0;
     for (const tab of tabs) {
       const headerRowIndex = findGoogleSheetHeaderRow(tab.values);
@@ -2186,10 +2195,16 @@ async function syncGoogleSheet() {
             skippedRows.push({ tab: tab.range, rowNumber });
             return;
           }
-          mappedRows.push({
-            tab: tab.range,
-           data: buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qcs, rowNumber, fieldOverride)
-          });
+          try {
+            mappedRows.push({
+              tab: tab.range,
+              data: buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qcs, rowNumber, fieldOverride)
+            });
+          } catch (error) {
+            invalidRows.push({ tab: tab.range, rowNumber, message: error.message });
+            const invalidKey = getSheetDeadlineKey(row, headerIndex, fieldOverride);
+            if (invalidKey) invalidSheetKeys.add(invalidKey);
+          }
         });
     }
     const uniqueRowsByKey = new Map();
@@ -2249,7 +2264,10 @@ async function syncGoogleSheet() {
     // Reconcile deletions against valid imported ID + Chapter keys, even when
     // other rows were skipped because their identifiers are incomplete.
     let deleted = 0;
-    const sheetKeys = new Set(uniqueRows.map(({ data }) => `${data.seriesId}:${data.chapterNumber}`));
+    const sheetKeys = new Set([
+      ...uniqueRows.map(({ data }) => `${data.seriesId}:${data.chapterNumber}`),
+      ...invalidSheetKeys
+    ]);
     const missingFields = new Set(missingTabs.map(({ field }) => String(field ?? '').trim().toLowerCase()).filter(Boolean));
     const rowsToDelete = currentRows.filter((current) => {
       // A missing configured tab is not evidence that its existing rows were
@@ -2276,6 +2294,12 @@ async function syncGoogleSheet() {
     if (skippedRows.length || duplicateRows) {
       syncWarnings.push(`Bỏ qua ${skippedRows.length} dòng thiếu dữ liệu và ${duplicateRows} dòng trùng series ID + Chap; ưu tiên bản ghi cuối.`);
     }
+    if (invalidRows.length) {
+      const invalidSummary = invalidRows.slice(0, 5)
+        .map(({ rowNumber, message }) => `Dòng ${rowNumber}: ${String(message).replace(/^Dòng \d+:\s*/i, '')}`)
+        .join('; ');
+      syncWarnings.push(`Bỏ qua ${invalidRows.length} dòng lỗi dữ liệu nhưng vẫn giữ khóa dòng trên Sheet để không xóa nhầm: ${invalidSummary}.`);
+    }
     if (driveLinkResult.missing) {
       syncWarnings.push(`Không tìm thấy folder Google Drive cho ${driveLinkResult.missing} ID bộ truyện.`);
     }
@@ -2297,7 +2321,7 @@ async function syncGoogleSheet() {
         googleSheetLastSyncError: syncWarnings.join(' ')
       }, ['googleSheetLastSyncedAt', 'googleSheetLastSyncCount', 'googleSheetLastSyncError']);
     }
-    return { inserted, updated, deleted, total: uniqueRows.length, sheetRows: uniqueRows.length, skipped: skippedRows.length, duplicates: duplicateRows, hidden: hiddenRows, driveLinked: driveLinkResult.linked, driveMissing: driveLinkResult.missing, driveError: driveLinkResult.error, skippedRows: skippedRows.slice(0, 20), syncedAt };
+    return { inserted, updated, deleted, total: uniqueRows.length, sheetRows: uniqueRows.length, skipped: skippedRows.length + invalidRows.length, invalid: invalidRows.length, duplicates: duplicateRows, hidden: hiddenRows, driveLinked: driveLinkResult.linked, driveMissing: driveLinkResult.missing, driveError: driveLinkResult.error, skippedRows: [...skippedRows, ...invalidRows].slice(0, 20), syncedAt };
   })().catch(async (error) => {
     try {
       const currentSettings = (await getCollection('generalSettings'))[0];
