@@ -1110,10 +1110,13 @@ async function findGoogleDriveFolder(folderName, parentId = '') {
     includeItemsFromAllDrives: 'true',
     supportsAllDrives: 'true',
     pageSize: '10',
-    fields: 'files(id,name,webViewLink,driveId)'
+    fields: 'files(id,name,webViewLink,driveId,parents)'
   });
   const payload = await googleDriveRequest(`files?${query.toString()}`);
-  const folder = payload.files?.[0] || null;
+  const folders = payload.files || [];
+  const folder = normalizedParentId
+    ? (folders[0] || null)
+    : (folders.find((candidate) => candidate.driveId && candidate.parents?.includes(candidate.driveId)) || folders[0] || null);
   googleDriveFolderCache.set(cacheKey, { checkedAt: now, folder });
   return folder;
 }
@@ -1121,7 +1124,7 @@ async function findGoogleDriveFolder(folderName, parentId = '') {
 async function findGoogleDriveFolderUrl(seriesId, field, googleDriveFolders = {}) {
   const seriesFolderName = String(seriesId ?? '').trim();
   const fieldName = String(field ?? '').trim();
-  const rootFolderName = String(googleDriveFolders[fieldName] ?? '').trim();
+  const rootFolderName = getConfiguredDriveRootFolder(fieldName, googleDriveFolders);
   if (!seriesFolderName) return '';
 
   const cacheKey = `url::${fieldName}::${rootFolderName}::${seriesFolderName}`;
@@ -1143,9 +1146,18 @@ function googleDriveLookupKey(field, seriesId) {
   return `${String(field ?? '').trim()}::${String(seriesId ?? '').trim()}`;
 }
 
+function getConfiguredDriveRootFolder(field, googleDriveFolders = {}) {
+  const fieldName = String(field ?? '').trim();
+  const exactFolder = googleDriveFolders[fieldName];
+  if (exactFolder) return String(exactFolder).trim();
+  const matchingEntry = Object.entries(googleDriveFolders)
+    .find(([configuredField]) => String(configuredField).trim().toLowerCase() === fieldName.toLowerCase());
+  return String(matchingEntry?.[1] ?? '').trim();
+}
+
 async function enrichRowsWithGoogleDriveLinks(rows, lookupRows = rows, googleDriveFolders = {}) {
   const lookups = [...new Map(lookupRows
-    .filter(({ data }) => !isHttpUrl(data.urlSeries))
+    .filter(({ data }) => !isHttpUrl(data.urlSeries) || Boolean(getConfiguredDriveRootFolder(data.type, googleDriveFolders)))
     .map(({ data }) => {
       const field = String(data.type ?? '').trim();
       const seriesId = String(data.seriesId ?? '').trim();
@@ -1167,7 +1179,8 @@ async function enrichRowsWithGoogleDriveLinks(rows, lookupRows = rows, googleDri
   const urlsByLookupKey = new Map(lookupResults.map(({ key, field, seriesId, url }) => [key || googleDriveLookupKey(field, seriesId), url]));
   let linked = 0;
   const enrichedRows = rows.map((entry) => {
-    if (isHttpUrl(entry.data.urlSeries)) return entry;
+    const hasConfiguredRoot = Boolean(getConfiguredDriveRootFolder(entry.data.type, googleDriveFolders));
+    if (isHttpUrl(entry.data.urlSeries) && !hasConfiguredRoot) return entry;
     const driveUrl = urlsByLookupKey.get(googleDriveLookupKey(entry.data.type, entry.data.seriesId));
     if (!driveUrl) return entry;
     linked += 1;
@@ -1184,8 +1197,8 @@ async function enrichStoredDeadlineUrls(deadlines, googleDriveFolders = {}) {
     }));
     const result = await enrichRowsWithGoogleDriveLinks(entries, entries, googleDriveFolders);
     const linkedEntries = result.rows.filter(({ data }, index) => {
-      const previousUrl = deadlines[index]?.urlSeries;
-      return !isHttpUrl(previousUrl) && isHttpUrl(data.urlSeries);
+      const previousUrl = normalizeUrlSeries(deadlines[index]?.urlSeries);
+      return isHttpUrl(data.urlSeries) && data.urlSeries !== previousUrl;
     });
 
     await runWithConcurrency(linkedEntries, async ({ data }) => {
@@ -1571,8 +1584,11 @@ async function syncGoogleSheet() {
         ? { ...entry, data: { ...entry.data, urlSeries: currentUrl } }
         : entry;
     });
-    const rowsMissingUrls = rowsWithPreservedUrls.filter((entry) => !isHttpUrl(entry.data.urlSeries));
-    const driveLinkResult = await enrichRowsWithGoogleDriveLinks(rowsWithPreservedUrls, rowsMissingUrls, settings.googleDriveFolders);
+    const rowsToLookup = rowsWithPreservedUrls.filter((entry) => (
+      !isHttpUrl(entry.data.urlSeries)
+      || Boolean(getConfiguredDriveRootFolder(entry.data.type, settings.googleDriveFolders))
+    ));
+    const driveLinkResult = await enrichRowsWithGoogleDriveLinks(rowsWithPreservedUrls, rowsToLookup, settings.googleDriveFolders);
     uniqueRows = driveLinkResult.rows;
     const writeResults = await runWithConcurrency(uniqueRows, async ({ data: row }) => {
       const key = `${row.seriesId}:${row.chapterNumber}`;
