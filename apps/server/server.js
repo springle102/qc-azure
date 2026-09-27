@@ -19,6 +19,7 @@ const sessions = new Map();
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24;
 const GOOGLE_REQUEST_TIMEOUT_MS = 30_000;
 const SYNC_WRITE_CONCURRENCY = 8;
+const GOOGLE_DRIVE_FOLDER_CACHE_TTL_MS = 10 * 60 * 1000;
 
 app.use(cors());
 app.use(express.json({ limit: '5mb' }));
@@ -554,7 +555,7 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber', requireManager, async (req,
 });
 
 const DEFAULT_FIELDS = ['Japan', 'Latin', 'QC'];
-const difficultyLevelFields = ['field', 'difficulty', 'color'];
+const difficultyLevelFields = ['field', 'difficulty', 'color', 'textColor'];
 const pricingFields = ['field', 'difficulty', 'price'];
 const bonusSettingsFields = ['taskThreshold', 'bonusPerTask'];
 
@@ -884,6 +885,7 @@ async function getGeneralSettings() {
 
 let googleAccessTokenCache = null;
 let googleSheetSyncPromise = null;
+const googleDriveFolderCache = new Map();
 
 function normalizeGoogleSheetUrl(value) {
   const urlText = nullableText(value);
@@ -962,7 +964,10 @@ async function getGoogleAccessToken() {
   const header = encodeBase64Url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
   const claimSet = encodeBase64Url(JSON.stringify({
     iss: credentials.client_email,
-    scope: 'https://www.googleapis.com/auth/spreadsheets.readonly',
+    scope: [
+      'https://www.googleapis.com/auth/spreadsheets.readonly',
+      'https://www.googleapis.com/auth/drive.readonly'
+    ].join(' '),
     aud: 'https://oauth2.googleapis.com/token',
     iat: issuedAt,
     exp: issuedAt + 3600
@@ -1027,6 +1032,90 @@ async function googleSheetsRequest(path) {
     throw new Error(`Google Sheets API trả về lỗi ${response.status}: ${message}`);
   }
   return response.json();
+}
+
+async function googleDriveRequest(path) {
+  const token = await getGoogleAccessToken();
+  let response;
+  try {
+    response = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/${path}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    }, GOOGLE_REQUEST_TIMEOUT_MS);
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Google Drive API phản hồi quá lâu. Hãy kiểm tra Internet hoặc proxy của máy chạy backend.');
+    }
+    throw new Error('Không thể kết nối Google Drive API. Hãy kiểm tra Internet của máy chạy backend.');
+  }
+  if (!response.ok) {
+    const message = await response.text();
+    if (response.status === 403 && /SERVICE_DISABLED|has not been used in project|Drive API/i.test(message)) {
+      throw new Error('Google Drive API đang bị tắt. Hãy bật Google Drive API trong Google Cloud project rồi thử lại sau vài phút.');
+    }
+    if (response.status === 403 && /permission|not have access|does not have permission/i.test(message)) {
+      throw new Error('Service Account chưa được cấp quyền đọc Drive tổng. Hãy chia sẻ Drive hoặc folder tổng cho email client_email trong file JSON.');
+    }
+    throw new Error(`Google Drive API trả về lỗi ${response.status}: ${message}`);
+  }
+  return response.json();
+}
+
+function escapeGoogleDriveQueryValue(value) {
+  return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+async function findGoogleDriveFolderUrl(seriesId) {
+  const folderName = String(seriesId ?? '').trim();
+  if (!folderName) return '';
+
+  const now = Date.now();
+  const cached = googleDriveFolderCache.get(folderName);
+  if (cached && now - cached.checkedAt < GOOGLE_DRIVE_FOLDER_CACHE_TTL_MS) return cached.url;
+
+  const query = new URLSearchParams({
+    q: `name = '${escapeGoogleDriveQueryValue(folderName)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    spaces: 'drive',
+    corpora: 'allDrives',
+    includeItemsFromAllDrives: 'true',
+    supportsAllDrives: 'true',
+    pageSize: '10',
+    fields: 'files(id,name,webViewLink,driveId)'
+  });
+  const payload = await googleDriveRequest(`files?${query.toString()}`);
+  const folder = payload.files?.[0];
+  const url = folder?.webViewLink || (folder?.id ? `https://drive.google.com/drive/folders/${folder.id}` : '');
+  googleDriveFolderCache.set(folderName, { checkedAt: now, url });
+  return url;
+}
+
+async function enrichRowsWithGoogleDriveLinks(rows, lookupRows = rows) {
+  const seriesIds = [...new Set(lookupRows
+    .filter(({ data }) => !String(data.urlSeries ?? '').trim())
+    .map(({ data }) => String(data.seriesId ?? '').trim())
+    .filter(Boolean))];
+  if (seriesIds.length === 0) return { rows, linked: 0, missing: 0, error: '' };
+
+  let firstError = '';
+  const lookupResults = await runWithConcurrency(seriesIds, async (seriesId) => {
+    if (firstError) return { seriesId, url: '', error: firstError };
+    try {
+      return { seriesId, url: await findGoogleDriveFolderUrl(seriesId), error: '' };
+    } catch (error) {
+      firstError = error.message || 'Không thể tìm folder trên Google Drive.';
+      return { seriesId, url: '', error: firstError };
+    }
+  });
+  const urlsBySeriesId = new Map(lookupResults.map(({ seriesId, url }) => [seriesId, url]));
+  let linked = 0;
+  const enrichedRows = rows.map((entry) => {
+    if (String(entry.data.urlSeries ?? '').trim()) return entry;
+    const driveUrl = urlsBySeriesId.get(String(entry.data.seriesId ?? '').trim());
+    if (!driveUrl) return entry;
+    linked += 1;
+    return { ...entry, data: { ...entry.data, urlSeries: driveUrl } };
+  });
+  const missing = lookupResults.filter(({ url, error }) => !url && !error).length;
+  return { rows: enrichedRows, linked, missing, error: firstError };
 }
 
 function parseGoogleSheetReference(sheetUrl) {
@@ -1354,13 +1443,30 @@ async function syncGoogleSheet() {
       if (uniqueRowsByKey.has(key)) duplicateRows += 1;
       uniqueRowsByKey.set(key, entry);
     }
-    const uniqueRows = [...uniqueRowsByKey.values()];
+    let uniqueRows = [...uniqueRowsByKey.values()];
 
     const allowedColumns = ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'completionPercent'];
     const currentRowsByKey = new Map(currentRows.map((item) => [
       `${Number(item.seriesId)}:${Number(item.chapterNumber)}`,
       item
     ]));
+    // Preserve a URL that was previously filled automatically when the Sheet
+    // still has an empty URL column. New rows without a URL are enriched from
+    // a matching Google Drive folder named after their series ID.
+    const rowsWithPreservedUrls = uniqueRows.map((entry) => {
+      if (String(entry.data.urlSeries ?? '').trim()) return entry;
+      const key = `${Number(entry.data.seriesId)}:${Number(entry.data.chapterNumber)}`;
+      const currentUrl = currentRowsByKey.get(key)?.urlSeries;
+      return String(currentUrl ?? '').trim()
+        ? { ...entry, data: { ...entry.data, urlSeries: currentUrl } }
+        : entry;
+    });
+    const newRows = rowsWithPreservedUrls.filter((entry) => {
+      const key = `${Number(entry.data.seriesId)}:${Number(entry.data.chapterNumber)}`;
+      return !currentRowsByKey.has(key);
+    });
+    const driveLinkResult = await enrichRowsWithGoogleDriveLinks(rowsWithPreservedUrls, newRows);
+    uniqueRows = driveLinkResult.rows;
     const writeResults = await runWithConcurrency(uniqueRows, async ({ data: row }) => {
       const key = `${row.seriesId}:${row.chapterNumber}`;
       const current = currentRowsByKey.get(key);
@@ -1398,17 +1504,25 @@ async function syncGoogleSheet() {
     deleted = deletedCounts.reduce((total, count) => total + count, 0);
 
     const syncedAt = new Date().toISOString();
+    const syncWarnings = [];
+    if (skippedRows.length || duplicateRows) {
+      syncWarnings.push(`Bỏ qua ${skippedRows.length} dòng thiếu dữ liệu và ${duplicateRows} dòng trùng series ID + Chap; ưu tiên bản ghi cuối.`);
+    }
+    if (driveLinkResult.missing) {
+      syncWarnings.push(`Không tìm thấy folder Google Drive cho ${driveLinkResult.missing} ID bộ truyện.`);
+    }
+    if (driveLinkResult.error) {
+      syncWarnings.push(`Không thể tự gắn link Google Drive: ${driveLinkResult.error}`);
+    }
     const currentSettings = (await getCollection('generalSettings'))[0];
     if (currentSettings) {
       await updateRow('generalSettings', { id: currentSettings.id }, {
         googleSheetLastSyncedAt: syncedAt,
         googleSheetLastSyncCount: uniqueRows.length,
-        googleSheetLastSyncError: skippedRows.length || duplicateRows
-          ? `Bỏ qua ${skippedRows.length} dòng thiếu dữ liệu và ${duplicateRows} dòng trùng series ID + Chap; ưu tiên bản ghi cuối.`
-          : ''
+        googleSheetLastSyncError: syncWarnings.join(' ')
       }, ['googleSheetLastSyncedAt', 'googleSheetLastSyncCount', 'googleSheetLastSyncError']);
     }
-    return { inserted, updated, deleted, total: uniqueRows.length, sheetRows: uniqueRows.length, skipped: skippedRows.length, duplicates: duplicateRows, hidden: hiddenRows, skippedRows: skippedRows.slice(0, 20), syncedAt };
+    return { inserted, updated, deleted, total: uniqueRows.length, sheetRows: uniqueRows.length, skipped: skippedRows.length, duplicates: duplicateRows, hidden: hiddenRows, driveLinked: driveLinkResult.linked, driveMissing: driveLinkResult.missing, driveError: driveLinkResult.error, skippedRows: skippedRows.slice(0, 20), syncedAt };
   })().catch(async (error) => {
     try {
       const currentSettings = (await getCollection('generalSettings'))[0];
@@ -1560,6 +1674,11 @@ function validateDifficultyLevelPayload(payload, partial = false) {
     const color = String(payload.color ?? '').trim();
     if (!/^#[0-9a-f]{6}$/i.test(color)) throw validationError('Màu phải ở định dạng HEX, ví dụ #B20823.');
     result.color = color.toUpperCase();
+  }
+  if (!partial || Object.prototype.hasOwnProperty.call(payload, 'textColor')) {
+    const textColor = String(payload.textColor ?? '#FFFFFF').trim();
+    if (!/^#[0-9a-f]{6}$/i.test(textColor)) throw validationError('Màu chữ phải ở định dạng HEX, ví dụ #FFFFFF.');
+    result.textColor = textColor.toUpperCase();
   }
   if (Object.keys(result).length === 0) throw validationError('Cần có ít nhất một trường để cập nhật.');
   return result;

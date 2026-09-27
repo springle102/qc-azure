@@ -5,6 +5,8 @@ import { api } from '../../services/api';
 
 const FIELDS = ['Latin', 'Japan', 'QC'];
 const DEFAULT_BONUS_CONFIG = { taskThreshold: 20, bonusPerTask: 10000 };
+const DEFAULT_LEVEL_COLOR = '#64748B';
+const DEFAULT_LEVEL_TEXT_COLOR = '#FFFFFF';
 
 export function PriceManagementView({ difficultyLevels = [], difficultyPrices = [], fields = [], bonusConfig, isLoading, onRefresh }) {
   const [field, setField] = useState('');
@@ -100,11 +102,11 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
   };
 
   const openCreateLevel = () => {
-    setEditingLevel({ id: null, field: levelManagerField, difficulty: '', color: '#64748B' });
+    setEditingLevel({ id: null, field: levelManagerField, difficulty: '', color: DEFAULT_LEVEL_COLOR, textColor: DEFAULT_LEVEL_TEXT_COLOR });
   };
 
   const openEditLevel = (level) => {
-    setEditingLevel({ id: level.id, field: level.field, difficulty: level.difficulty, color: level.color || '#64748B' });
+    setEditingLevel({ id: level.id, field: level.field, difficulty: level.difficulty, color: level.color || DEFAULT_LEVEL_COLOR, textColor: level.textColor || DEFAULT_LEVEL_TEXT_COLOR });
   };
 
   const updateLevelField = (key, value) => {
@@ -123,7 +125,8 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
       const payload = {
         field: editingLevel.field,
         difficulty: editingLevel.difficulty.trim(),
-        color: editingLevel.color
+        color: editingLevel.color,
+        textColor: editingLevel.textColor
       };
       if (editingLevel.id) {
         await api.updateDifficultyLevel(editingLevel.id, payload);
@@ -236,8 +239,7 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
               </div>
               <div className="difficulty-level-chips">
                 {levels.length === 0 ? <span className="muted-inline">Chưa set độ khó</span> : levels.map((level) => (
-                  <span className="difficulty-level-chip" key={level.id}>
-                    <span className="difficulty-color-dot" style={{ backgroundColor: level.color || '#64748B' }} />
+                  <span className="difficulty-level-chip" key={level.id} style={{ backgroundColor: level.color || DEFAULT_LEVEL_COLOR, color: level.textColor || DEFAULT_LEVEL_TEXT_COLOR, borderColor: level.color || DEFAULT_LEVEL_COLOR }}>
                     {level.difficulty}
                   </span>
                 ))}
@@ -268,7 +270,7 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
               ) : rows.map((row) => (
                 <tr key={row.id || `${row.field}-${row.difficulty}`}>
                   <td><span className="field-badge">{row.field}</span></td>
-                  <td><span className="difficulty-badge difficulty-custom-badge" style={{ '--difficulty-color': row.color || '#64748B' }}>{row.difficulty}</span></td>
+                  <td><span className="difficulty-badge difficulty-custom-badge" style={{ '--difficulty-color': row.color || DEFAULT_LEVEL_COLOR, '--difficulty-text-color': row.textColor || DEFAULT_LEVEL_TEXT_COLOR }}>{row.difficulty}</span></td>
                   <td className="salary-cell">{row.priceRow ? formatPrice(row.priceRow.price) : <span className="muted-inline">Chưa nhập giá</span>}</td>
                   <td>
                     <div className="table-actions">
@@ -328,9 +330,9 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
               <div className="difficulty-level-manager-list">
                 {difficultyLevels.filter((level) => level.field === levelManagerField).map((level) => (
                   <div className="difficulty-level-manager-row" key={level.id}>
-                    <span className="difficulty-color-dot large" style={{ backgroundColor: level.color || '#64748B' }} />
-                    <strong>{level.difficulty}</strong>
-                    <span className="difficulty-level-hex">{level.color || '#64748B'}</span>
+                    <span className="difficulty-level-preview" style={{ backgroundColor: level.color || DEFAULT_LEVEL_COLOR, color: level.textColor || DEFAULT_LEVEL_TEXT_COLOR }}>{level.difficulty}</span>
+                    <span className="difficulty-level-hex">Nền {level.color || DEFAULT_LEVEL_COLOR}</span>
+                    <span className="difficulty-level-hex">Chữ {level.textColor || DEFAULT_LEVEL_TEXT_COLOR}</span>
                     <div className="table-actions"><button type="button" className="btn btn-secondary btn-sm" onClick={() => openEditLevel(level)} disabled={isSaving}><IconEdit size={14} /> Sửa</button><button type="button" className="btn btn-danger btn-sm" onClick={() => removeLevel(level)} disabled={isSaving}><IconTrash size={14} /> Xóa</button></div>
                   </div>
                 ))}
@@ -341,7 +343,8 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
                   <div className="difficulty-level-form-heading">{editingLevel.id ? 'Chỉnh sửa độ khó' : 'Thêm độ khó'}</div>
                   <div className="difficulty-level-form-grid">
                     <div className="form-group"><label className="form-label" htmlFor="level-name">Tên độ khó</label><input id="level-name" className="form-input" value={editingLevel.difficulty} onChange={(event) => updateLevelField('difficulty', event.target.value)} maxLength="100" required disabled={isSaving} /></div>
-                    <div className="form-group"><label className="form-label" htmlFor="level-color">Màu</label><div className="color-input-row"><input id="level-color" className="color-input" type="color" value={editingLevel.color} onChange={(event) => updateLevelField('color', event.target.value)} disabled={isSaving} /><input className="form-input" value={editingLevel.color} onChange={(event) => updateLevelField('color', event.target.value)} maxLength="7" pattern="#[0-9A-Fa-f]{6}" required disabled={isSaving} /></div></div>
+                    <div className="form-group"><label className="form-label" htmlFor="level-color">Màu nền</label><div className="color-input-row"><input id="level-color" className="color-input" type="color" value={editingLevel.color} onChange={(event) => updateLevelField('color', event.target.value)} disabled={isSaving} /><input className="form-input" value={editingLevel.color} onChange={(event) => updateLevelField('color', event.target.value)} maxLength="7" pattern="#[0-9A-Fa-f]{6}" required disabled={isSaving} /></div></div>
+                    <div className="form-group"><label className="form-label" htmlFor="level-text-color">Màu chữ</label><div className="color-input-row"><input id="level-text-color" className="color-input" type="color" value={editingLevel.textColor} onChange={(event) => updateLevelField('textColor', event.target.value)} disabled={isSaving} /><input className="form-input" value={editingLevel.textColor} onChange={(event) => updateLevelField('textColor', event.target.value)} maxLength="7" pattern="#[0-9A-Fa-f]{6}" required disabled={isSaving} /></div></div>
                   </div>
                   <div className="modal-inline-actions"><button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingLevel(null)} disabled={isSaving}>Hủy</button><button type="submit" className="btn btn-primary btn-sm" disabled={isSaving}>{isSaving ? 'Đang lưu...' : 'Lưu độ khó'}</button></div>
                 </form>

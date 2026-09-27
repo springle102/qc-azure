@@ -81,7 +81,10 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
       const duplicateMessage = result.duplicates ? ' Có ' + result.duplicates + ' dòng trùng, đã ưu tiên bản ghi cuối.' : '';
       const deletedMessage = result.deleted ? ' Đã xóa ' + result.deleted + ' dòng không còn trên Sheet.' : '';
       const hiddenMessage = result.hidden ? ' Bỏ qua ' + result.hidden + ' dòng đang ẩn.' : '';
-      showToast('Đã đồng bộ ' + (result.sheetRows ?? result.total) + ' dòng hợp lệ từ Sheet (' + result.inserted + ' mới, ' + result.updated + ' cập nhật).' + deletedMessage + skippedMessage + duplicateMessage + hiddenMessage, 'success');
+      const driveLinkedMessage = result.driveLinked ? ' Đã tự gắn ' + result.driveLinked + ' link folder Google Drive.' : '';
+      const driveMissingMessage = result.driveMissing ? ' Không tìm thấy folder cho ' + result.driveMissing + ' ID bộ truyện.' : '';
+      const driveErrorMessage = result.driveError ? ' Lỗi gắn link Drive: ' + result.driveError : '';
+      showToast('Đã đồng bộ ' + (result.sheetRows ?? result.total) + ' dòng hợp lệ từ Sheet (' + result.inserted + ' mới, ' + result.updated + ' cập nhật).' + deletedMessage + skippedMessage + duplicateMessage + hiddenMessage + driveLinkedMessage + driveMissingMessage + driveErrorMessage, 'success');
       await onRefresh?.();
     } catch (error) {
       showToast(error.message || 'Không thể đồng bộ Google Sheet.', 'error');

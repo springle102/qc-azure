@@ -325,9 +325,9 @@ function renderValue(value, key, field, difficultyLevels, freelancers, qcs, item
   if (key === 'difficulty') {
     const configuredLevel = difficultyLevels.find((level) => level.field === field && level.difficulty === String(value));
     if (configuredLevel) {
-      return <span className="difficulty-badge difficulty-custom-badge" style={{ '--difficulty-color': configuredLevel.color || '#64748B' }}>{String(value)}</span>;
+      return <span className="difficulty-badge difficulty-custom-badge" style={{ '--difficulty-color': configuredLevel.color || '#64748B', '--difficulty-text-color': configuredLevel.textColor || '#FFFFFF' }}>{String(value)}</span>;
     }
-    return <span className={`difficulty-badge ${difficultyClass(value)}`}>{String(value)}</span>;
+    return <span className="difficulty-badge">{String(value)}</span>;
   }
   return String(value);
 }
@@ -470,16 +470,6 @@ function TaskStatusControl({ value, options, disabled, onChange }) {
   );
 }
 
-function difficultyClass(value) {
-  const difficulty = String(value).trim().toLowerCase().replace(/\s+/g, ' ');
-  if (difficulty === 'training') return 'difficulty-training';
-  if (difficulty === 'normal') return 'difficulty-normal';
-  if (difficulty === 'medium') return 'difficulty-medium';
-  if (difficulty === 'hard') return 'difficulty-hard';
-  if (difficulty === 'very hard') return 'difficulty-very-hard';
-  return 'difficulty-unknown';
-}
-
 function isRawChecked(value) {
   const normalized = String(value ?? '').trim().toLowerCase();
   return ['true', '1', 'yes', 'done', 'completed', 'hoàn thành', 'đã hoàn thành', 'đã up raw'].includes(normalized);
@@ -506,7 +496,7 @@ function getDifficultyOptions(field, difficultyLevels, difficultyPrices) {
   if (levels.length > 0) return levels;
   return difficultyPrices
     .filter((price) => price.field === field)
-    .map((price) => ({ id: 'price-' + price.id, difficulty: price.difficulty, color: '#64748B' }));
+    .map((price) => ({ id: 'price-' + price.id, difficulty: price.difficulty, color: '#64748B', textColor: '#FFFFFF' }));
 }
 
 function createNewEditState(difficultyLevels, difficultyPrices, freelancers, qcs, fieldOptions = FIELD_OPTIONS) {

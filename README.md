@@ -24,7 +24,7 @@ Các bảng giao diện bám theo schema trong `docs/database diagram.png` và s
 
 - `Freelancer`: `fIld`, `name`, `email`, `field`, `note`, `salary`, `imageQR`
 - `SeriesList`: thông tin deadline, chapter, status tiến độ, thời gian làm và `% hoàn thành`
-- `DifficultyLevels`: danh sách độ khó và màu tùy chỉnh theo từng mảng
+- `DifficultyLevels`: danh sách độ khó, màu nền và màu chữ tùy chỉnh theo từng mảng
 - `DifficultyPricing`: giá theo mảng và độ khó do người dùng tự định nghĩa cho từng mảng
 - `Fields`: danh sách mảng dùng chung cho account, freelancer, deadline, giá tiền và link Guide/Tài nguyên theo từng mảng
 - `GeneralSettings`: cấu hình deadline mặc định theo giờ và kết nối Google Sheet
@@ -57,7 +57,7 @@ GOOGLE_SERVICE_ACCOUNT_FILE=
 Tài khoản Admin mẫu trong `docs/sample-database.sql`: username `admin`, password `admin123`.
 Khi cấp account role `Freelancer` hoặc `QC`, Admin chọn mảng từ danh sách cấu hình; QC có thể chọn nhiều mảng. Freelancer chỉ được chỉnh status `Doing`/`Submitted`, còn QC/Admin được chỉnh các status còn lại. Khi task chuyển sang `Doing`, hệ thống bắt đầu lưu thời gian làm; khi rời `Doing`, thời gian được chốt vào `workDurationSeconds`.
 
-Đồng bộ Google Sheet riêng tư: tạo Google Service Account, bật Google Sheets API, chia sẻ file cho email `client_email` của Service Account với quyền Viewer, rồi đặt file key JSON ngoài Git qua `GOOGLE_SERVICE_ACCOUNT_FILE`. Sau đó Admin nhập link Sheet trong tab Cấu hình chung, khai báo mỗi tab tương ứng một mảng (Japan/Latin/QC) và chọn Đồng bộ ngay hoặc bật tự động đồng bộ.
+Đồng bộ Google Sheet riêng tư: tạo Google Service Account, bật Google Sheets API, chia sẻ file cho email `client_email` của Service Account với quyền Viewer, rồi đặt file key JSON ngoài Git qua `GOOGLE_SERVICE_ACCOUNT_FILE`. Sau đó Admin nhập link Sheet trong tab Cấu hình chung, khai báo mỗi tab tương ứng một mảng (Japan/Latin/QC) và chọn Đồng bộ ngay hoặc bật tự động đồng bộ. Để tự gắn URL bộ truyện, bật thêm Google Drive API và chia sẻ Drive tổng (hoặc folder tổng) cho cùng email Service Account với quyền Viewer. Khi đồng bộ, hệ thống tìm folder có tên chính xác bằng `seriesId` và điền link folder vào `urlSeries` nếu dòng chưa có URL.
 
 ## Chạy project
 

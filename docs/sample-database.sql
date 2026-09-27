@@ -277,10 +277,26 @@ CREATE TABLE IF NOT EXISTS "DifficultyLevels" (
   "field" varchar(50) NOT NULL,
   "difficulty" varchar(100) NOT NULL,
   "color" varchar(7) NOT NULL DEFAULT '#64748B' CHECK ("color" ~ '^#[0-9A-Fa-f]{6}$'),
+  "textColor" varchar(7) NOT NULL DEFAULT '#FFFFFF' CHECK ("textColor" ~ '^#[0-9A-Fa-f]{6}$'),
   CONSTRAINT "DifficultyLevels_field_difficulty_key" UNIQUE ("field", "difficulty")
 );
 
 ALTER TABLE "DifficultyLevels" DROP CONSTRAINT IF EXISTS "DifficultyLevels_field_check";
+ALTER TABLE "DifficultyLevels" ADD COLUMN IF NOT EXISTS "textColor" varchar(7) NOT NULL DEFAULT '#FFFFFF';
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'public."DifficultyLevels"'::regclass
+      AND conname = 'DifficultyLevels_textColor_check'
+  ) THEN
+    ALTER TABLE "DifficultyLevels"
+      ADD CONSTRAINT "DifficultyLevels_textColor_check"
+      CHECK ("textColor" ~ '^#[0-9A-Fa-f]{6}$');
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS "BonusSettings" (
   "id" integer PRIMARY KEY,
