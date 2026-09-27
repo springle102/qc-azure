@@ -185,8 +185,8 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
               {fields.map((field) => (
                 <div className="form-group" key={`drive-${field.id || field.name}`}>
                   <label className="form-label" htmlFor={`google-drive-folder-${field.id || field.name}`}>Folder Drive của mảng {field.name}</label>
-                  <input id={`google-drive-folder-${field.id || field.name}`} className="form-input" value={googleDriveFolders[field.name] ?? ''} onChange={(event) => updateGoogleDriveFolder(field.name, event.target.value)} placeholder={field.name === 'Japan' ? 'JP' : field.name} disabled={isSaving} />
-                  <span className="form-help">Ví dụ: {field.name === 'Japan' ? 'JP' : field.name}/&lt;seriesId&gt;</span>
+                  <input id={`google-drive-folder-${field.id || field.name}`} className="form-input" value={googleDriveFolders[field.name] ?? ''} onChange={(event) => updateGoogleDriveFolder(field.name, event.target.value)} placeholder={field.name} disabled={isSaving} />
+                  <span className="form-help">Ví dụ: {field.name}/&lt;seriesId&gt;</span>
                 </div>
               ))}
             </div>

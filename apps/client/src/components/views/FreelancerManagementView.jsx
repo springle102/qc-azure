@@ -5,7 +5,6 @@ import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
 import { AccountManagementView } from './AccountManagementView';
 
-const FIELD_OPTIONS = ['Japan', 'Latin', 'QC'];
 const EMPTY_ROWS = [];
 const FREELANCER_FILTER_COLUMNS = [
   { key: 'fId', label: 'fId', sortKind: 'string' },
@@ -21,7 +20,7 @@ export function FreelancerManagementView({ freelancers = [], accounts = [], fiel
   const freelancerRows = Array.isArray(freelancers) ? freelancers : EMPTY_ROWS;
   const accountRows = Array.isArray(accounts) ? accounts : EMPTY_ROWS;
   const fieldRows = Array.isArray(fields) ? fields : EMPTY_ROWS;
-  const fieldOptions = useMemo(() => fieldRows.length > 0 ? fieldRows.map((field) => field.name || field).filter(Boolean) : FIELD_OPTIONS, [fieldRows]);
+  const fieldOptions = useMemo(() => fieldRows.map((field) => field.name || field).filter(Boolean), [fieldRows]);
   const [field, setField] = useState('');
   const [search, setSearch] = useState('');
   const [editingFreelancer, setEditingFreelancer] = useState(null);

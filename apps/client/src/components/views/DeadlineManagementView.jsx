@@ -53,7 +53,6 @@ const MONTH_FILTER_COLUMNS = new Set(['endTask', 'submittedAt']);
 const STRING_SORT_COLUMNS = new Set(['seriesName', 'type', 'urlSeries', 'difficulty', 'feedback', 'late']);
 const NUMBER_SORT_COLUMNS = new Set(['seriesId', 'chapterNumber', 'fIld', 'qcId', 'completionPercent', 'price', 'receivePrice']);
 const DATE_SORT_COLUMNS = new Set(['endTask']);
-const FIELD_OPTIONS = ['Latin', 'Japan', 'QC'];
 const STATUS_OPTIONS = [
   { value: 'doing', label: 'Doing', className: 'task-status-doing' },
   { value: 'submitted', label: 'Submitted', className: 'task-status-submitted' },
@@ -80,7 +79,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
   const [deletingKey, setDeletingKey] = useState('');
   const [columnFilters, setColumnFilters] = useState({});
   const [columnSort, setColumnSort] = useState(null);
-  const fieldOptions = useMemo(() => fields.length > 0 ? fields.map((field) => field.name || field).filter(Boolean) : FIELD_OPTIONS, [fields]);
+  const fieldOptions = useMemo(() => fields.map((field) => field.name || field).filter(Boolean), [fields]);
   const visibleColumns = useMemo(() => readOnly ? columns.filter(([key]) => key !== 'edit') : columns, [readOnly]);
 
   const freelancerOptions = useMemo(() => peopleOptions(freelancers, 'fIld', 'fId'), [freelancers]);
@@ -1083,7 +1082,7 @@ function getDifficultyOptions(field, difficultyLevels, difficultyPrices) {
     .map((price) => ({ id: 'price-' + price.id, difficulty: price.difficulty, color: '#64748B', textColor: '#FFFFFF' }));
 }
 
-function createNewEditState(difficultyLevels, difficultyPrices, freelancers, qcs, fieldOptions = FIELD_OPTIONS) {
+function createNewEditState(difficultyLevels, difficultyPrices, freelancers, qcs, fieldOptions = []) {
   const type = fieldOptions[0] || '';
   const difficulty = getDifficultyOptions(type, difficultyLevels, difficultyPrices)[0]?.difficulty || '';
   const price = getConfiguredPrice(type, difficulty, difficultyPrices) ?? '';
@@ -1167,7 +1166,7 @@ function formatDuration(seconds) {
   return `${hours}h ${minutes}m`;
 }
 
-function DeadlineEditModal({ value, isCreate, freelancers, qcs, difficultyLevels, difficultyPrices, fieldOptions = FIELD_OPTIONS, statusOptions, isSaving, onChange, onClose, onSubmit }) {
+function DeadlineEditModal({ value, isCreate, freelancers, qcs, difficultyLevels, difficultyPrices, fieldOptions = [], statusOptions, isSaving, onChange, onClose, onSubmit }) {
   const difficultyOptions = getDifficultyOptions(value.type, difficultyLevels, difficultyPrices);
   return createPortal(
     <div className="modal-overlay" onClick={onClose} role="presentation">

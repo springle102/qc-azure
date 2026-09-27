@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { IconEye, IconRefresh, IconSearch, IconUsers, IconX } from '../common/Icons';
 
-const SALARY_FIELDS = ['Japan', 'Latin', 'QC'];
 const SALARY_ROLES = ['Freelancer', 'QC'];
 
 export function SalaryManagementView({ salaries = [], fields = [], bonusSettings, isLoading, onRefresh }) {
@@ -10,7 +9,7 @@ export function SalaryManagementView({ salaries = [], fields = [], bonusSettings
   const [role, setRole] = useState('');
   const [selectedQR, setSelectedQR] = useState(null);
   const members = useMemo(() => Array.isArray(salaries) ? salaries : [], [salaries]);
-  const fieldOptions = useMemo(() => fields.length > 0 ? fields.map((item) => item.name || item).filter(Boolean) : SALARY_FIELDS, [fields]);
+  const fieldOptions = useMemo(() => fields.map((item) => item.name || item).filter(Boolean), [fields]);
 
   const filteredFreelancers = useMemo(() => members.filter((freelancer) => {
     const query = search.trim().toLowerCase();

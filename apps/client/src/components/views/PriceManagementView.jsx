@@ -3,7 +3,6 @@ import { IconEdit, IconPlus, IconRefresh, IconSearch, IconTasks, IconTrash, Icon
 import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
 
-const FIELDS = ['Latin', 'Japan', 'QC'];
 const DEFAULT_BONUS_CONFIG = { taskThreshold: 20, bonusPerTask: 10000, qcDefaultPrice: 0 };
 const DEFAULT_LEVEL_COLOR = '#64748B';
 const DEFAULT_LEVEL_TEXT_COLOR = '#FFFFFF';
@@ -16,7 +15,7 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
   const [editingLevel, setEditingLevel] = useState(null);
   const [bonusDrafts, setBonusDrafts] = useState({});
   const [isSaving, setIsSaving] = useState(false);
-  const fieldNames = useMemo(() => fields.length > 0 ? fields.map((item) => item.name || item).filter(Boolean) : FIELDS, [fields]);
+  const fieldNames = useMemo(() => fields.map((item) => item.name || item).filter(Boolean), [fields]);
 
   const getActiveBonusConfig = (fieldName) => (
     bonusDrafts[fieldName]

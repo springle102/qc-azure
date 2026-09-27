@@ -5,7 +5,6 @@ import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
 
 const ROLE_OPTIONS = ['Admin', 'QC', 'Freelancer'];
-const FIELD_OPTIONS = ['Japan', 'Latin', 'QC'];
 const EMPTY_ROWS = [];
 const ACCOUNT_FILTER_COLUMNS = [
   { key: 'username', label: 'Username', sortKind: 'string' },
@@ -33,7 +32,7 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
   const accountRows = Array.isArray(accounts) ? accounts : EMPTY_ROWS;
   const freelancerRows = Array.isArray(freelancers) ? freelancers : EMPTY_ROWS;
   const fieldRows = Array.isArray(fields) ? fields : EMPTY_ROWS;
-  const fieldOptions = useMemo(() => fieldRows.length > 0 ? fieldRows.map((field) => field.name || field).filter(Boolean) : FIELD_OPTIONS, [fieldRows]);
+  const fieldOptions = useMemo(() => fieldRows.map((field) => field.name || field).filter(Boolean), [fieldRows]);
   const [form, setForm] = useState(INITIAL_FORM);
   const [editingAccount, setEditingAccount] = useState(null);
   const [editForm, setEditForm] = useState(INITIAL_FORM);
@@ -385,7 +384,7 @@ function getMemberFields(member = {}) {
   return member.field ? [member.field] : [];
 }
 
-function FieldCheckboxes({ options = FIELD_OPTIONS, value = [], onChange, disabled = false }) {
+function FieldCheckboxes({ options = [], value = [], onChange, disabled = false }) {
   const selectedFields = Array.isArray(value) ? value : [];
   return (
     <div className="account-field-checkboxes" role="group" aria-label="Mảng">

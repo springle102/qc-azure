@@ -856,7 +856,6 @@ app.delete('/api/deadlines/:seriesId/:chapterNumber', requireManager, async (req
   }
 });
 
-const DEFAULT_FIELDS = ['Japan', 'Latin', 'QC'];
 const difficultyLevelFields = ['field', 'difficulty', 'color', 'textColor'];
 const pricingFields = ['field', 'difficulty', 'price'];
 const bonusSettingsFields = ['field', 'taskThreshold', 'bonusPerTask', 'qcDefaultPrice'];
@@ -1079,8 +1078,7 @@ function applyConfiguredPrices(deadlines, prices) {
 
 async function getConfiguredFields() {
   const rows = await getCollection('fields');
-  if (rows.length > 0) return rows.sort((left, right) => Number(left.id) - Number(right.id));
-  return DEFAULT_FIELDS.map((name, index) => ({ id: index + 1, name, guideUrl: '', resourceUrl: '' }));
+  return rows.sort((left, right) => Number(left.id) - Number(right.id));
 }
 
 async function getVisibleFields(user) {
@@ -2501,7 +2499,7 @@ async function syncGoogleSheet() {
       const rowAllowedColumns = allowedColumns.filter((column) => {
         // A missing Sheet column is not permission to overwrite the web value
         // with a default/null value. The configured tab itself represents the
-        // field for a tab-scoped type column such as Japan or Latin.
+        // field for a tab-scoped type column such as a configured field.
         const hasColumn = column === 'type' && fieldOverride
           ? true
           : getGoogleSheetHeaderIndex(headerIndex, column, fieldOverride) !== undefined;
@@ -3222,7 +3220,7 @@ function buildQCSalaryRows(qcs, deadlines, bonusSettings) {
       qcId,
       id: qc.id ?? qcId,
       name: qc.name || qc.displayName || qc.username || `QC ${qcId}`,
-      fields: Array.isArray(qc.fields) && qc.fields.length > 0 ? qc.fields : (qc.field ? [qc.field] : ['QC']),
+      fields: Array.isArray(qc.fields) && qc.fields.length > 0 ? qc.fields : (qc.field ? [qc.field] : []),
       isQc: true,
       taskCount: qcDeadlines.length,
       earnedAmount: baseAmount.toFixed(2),
