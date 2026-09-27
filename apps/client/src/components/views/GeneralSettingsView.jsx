@@ -179,7 +179,7 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
             <div className="general-settings-subheading">
               <span className="qc-kicker">GOOGLE DRIVE</span>
               <h3>Folder gốc theo mảng</h3>
-              <p className="form-help">Hệ thống tìm folder con có tên đúng bằng seriesId bên trong folder gốc của từng mảng.</p>
+              <p className="form-help">Hệ thống chỉ tìm folder con trực tiếp có tên đúng bằng seriesId trong folder gốc từng mảng.</p>
             </div>
             <div className="general-settings-tab-grid">
               {fields.map((field) => (
