@@ -49,6 +49,7 @@ const DATE_FIELDS = new Set(['endTask']);
 const MONTH_FILTER_COLUMNS = new Set(['endTask', 'submittedAt']);
 const STRING_SORT_COLUMNS = new Set(['seriesName', 'type', 'urlSeries', 'difficulty', 'feedback']);
 const NUMBER_SORT_COLUMNS = new Set(['seriesId', 'chapterNumber', 'fIld', 'qcId', 'completionPercent', 'price', 'receivePrice']);
+const DATE_SORT_COLUMNS = new Set(['endTask']);
 const FIELD_OPTIONS = ['Latin', 'Japan', 'QC'];
 const STATUS_OPTIONS = [
   { value: 'doing', label: 'Doing', className: 'task-status-doing' },
@@ -388,6 +389,7 @@ function formatFilterValue(value, key) {
 function getColumnSortKind(key) {
   if (STRING_SORT_COLUMNS.has(key)) return 'string';
   if (NUMBER_SORT_COLUMNS.has(key)) return 'number';
+  if (DATE_SORT_COLUMNS.has(key)) return 'date';
   return null;
 }
 
@@ -403,6 +405,14 @@ function compareColumnValues(left, right, key, sortKind, direction) {
     if (leftMissing && !rightMissing) comparison = 1;
     else if (!leftMissing && rightMissing) comparison = -1;
     else comparison = (leftNumber || 0) - (rightNumber || 0);
+  } else if (sortKind === 'date') {
+    const leftDate = new Date(leftValue).getTime();
+    const rightDate = new Date(rightValue).getTime();
+    const leftMissing = leftValue === null || leftValue === undefined || String(leftValue).trim() === '' || !Number.isFinite(leftDate);
+    const rightMissing = rightValue === null || rightValue === undefined || String(rightValue).trim() === '' || !Number.isFinite(rightDate);
+    if (leftMissing && !rightMissing) comparison = 1;
+    else if (!leftMissing && rightMissing) comparison = -1;
+    else comparison = (leftDate || 0) - (rightDate || 0);
   } else {
     comparison = String(leftValue ?? '').localeCompare(String(rightValue ?? ''), 'vi', { numeric: true, sensitivity: 'base' });
   }
@@ -416,7 +426,7 @@ function ColumnFilterButton({ columnKey, label, values, activeValues, sortKind, 
   const [menuPosition, setMenuPosition] = useState(null);
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
-  const isActive = Array.isArray(activeValues);
+  const isActive = Array.isArray(activeValues) || Boolean(activeSortDirection);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -505,10 +515,10 @@ function ColumnFilterButton({ columnKey, label, values, activeValues, sortKind, 
             <div className="column-filter-sort">
               <div className="column-filter-section-label">Sắp xếp</div>
               <button type="button" className={'column-filter-sort-button' + (activeSortDirection === 'asc' ? ' active' : '')} onClick={() => applySort('asc')}>
-                {sortKind === 'string' ? 'A → Z' : 'Nhỏ → lớn'}
+                {sortKind === 'string' || sortKind === 'date' ? 'A → Z' : 'Nhỏ → lớn'}
               </button>
               <button type="button" className={'column-filter-sort-button' + (activeSortDirection === 'desc' ? ' active' : '')} onClick={() => applySort('desc')}>
-                {sortKind === 'string' ? 'Z → A' : 'Lớn → nhỏ'}
+                {sortKind === 'string' || sortKind === 'date' ? 'Z → A' : 'Lớn → nhỏ'}
               </button>
             </div>
           )}
