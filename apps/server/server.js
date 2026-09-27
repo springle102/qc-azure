@@ -360,8 +360,10 @@ app.patch('/api/accounts/:id', requireAdmin, async (req, res) => {
 });
 app.get('/api/deadlines', requireAuth, async (req, res) => {
   try {
-    await syncGoogleSheetIfDue();
-    const deadlines = filterRowsForUser(await getCollection('deadlines'), req.authUser);
+    await syncGoogleSheetIfDue({ waitForCompletion: true });
+    const allDeadlines = await getCollection('deadlines');
+    const linkedDeadlines = await enrichStoredDeadlineUrls(allDeadlines);
+    const deadlines = filterRowsForUser(linkedDeadlines, req.authUser);
     const prices = await getCollection('difficultyPricing');
     res.json({ success: true, data: applyConfiguredPrices(deadlines, prices) });
   } catch (error) {
@@ -1118,6 +1120,28 @@ async function enrichRowsWithGoogleDriveLinks(rows, lookupRows = rows) {
   return { rows: enrichedRows, linked, missing, error: firstError };
 }
 
+async function enrichStoredDeadlineUrls(deadlines) {
+  const entries = deadlines.map((data) => ({ data }));
+  const result = await enrichRowsWithGoogleDriveLinks(entries);
+  const linkedEntries = result.rows.filter(({ data }, index) => {
+    const previousUrl = deadlines[index]?.urlSeries;
+    return !String(previousUrl ?? '').trim() && String(data.urlSeries ?? '').trim();
+  });
+
+  if (linkedEntries.length > 0) {
+    await runWithConcurrency(linkedEntries, async ({ data }) => {
+      await updateRow(
+        'deadlines',
+        { seriesId: data.seriesId, chapterNumber: data.chapterNumber },
+        { urlSeries: data.urlSeries },
+        ['urlSeries']
+      );
+    });
+  }
+
+  return result.rows.map(({ data }) => data);
+}
+
 function parseGoogleSheetReference(sheetUrl) {
   const parsed = new URL(sheetUrl);
   const match = parsed.pathname.match(/\/spreadsheets\/d\/([^/]+)/);
@@ -1461,11 +1485,8 @@ async function syncGoogleSheet() {
         ? { ...entry, data: { ...entry.data, urlSeries: currentUrl } }
         : entry;
     });
-    const newRows = rowsWithPreservedUrls.filter((entry) => {
-      const key = `${Number(entry.data.seriesId)}:${Number(entry.data.chapterNumber)}`;
-      return !currentRowsByKey.has(key);
-    });
-    const driveLinkResult = await enrichRowsWithGoogleDriveLinks(rowsWithPreservedUrls, newRows);
+    const rowsMissingUrls = rowsWithPreservedUrls.filter((entry) => !String(entry.data.urlSeries ?? '').trim());
+    const driveLinkResult = await enrichRowsWithGoogleDriveLinks(rowsWithPreservedUrls, rowsMissingUrls);
     uniqueRows = driveLinkResult.rows;
     const writeResults = await runWithConcurrency(uniqueRows, async ({ data: row }) => {
       const key = `${row.seriesId}:${row.chapterNumber}`;
@@ -1539,15 +1560,24 @@ async function syncGoogleSheet() {
   return googleSheetSyncPromise;
 }
 
-async function syncGoogleSheetIfDue() {
+async function syncGoogleSheetIfDue({ waitForCompletion = false } = {}) {
   const settings = await getGeneralSettings();
   if (settings.googleSheetAutoSync !== true || !settings.googleSheetUrl) return;
   const lastSyncedAt = settings.googleSheetLastSyncedAt ? new Date(settings.googleSheetLastSyncedAt).getTime() : 0;
   if (Number.isFinite(lastSyncedAt) && Date.now() - lastSyncedAt < 5 * 60 * 1000) return;
 
-  // Do not block read endpoints on Google OAuth, Sheets API, or row upserts.
-  // The explicit "Đồng bộ ngay" action still awaits syncGoogleSheet().
-  syncGoogleSheet().catch((error) => {
+  const syncPromise = syncGoogleSheet();
+  if (waitForCompletion) {
+    try {
+      await syncPromise;
+    } catch (error) {
+      console.error('Google Sheet auto sync failed:', error.message);
+    }
+    return;
+  }
+
+  // Keep background auto-sync non-blocking for other read endpoints.
+  syncPromise.catch((error) => {
     console.error('Google Sheet auto sync failed:', error.message);
   });
 }
