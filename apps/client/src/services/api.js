@@ -75,7 +75,10 @@ export const api = {
     body: JSON.stringify(freelancer)
   }),
   getQCs: () => request('/qcs'),
-  getDeadlines: () => request('/deadlines', { timeoutMs: 120000 }),
+  getDeadlines: ({ forceDriveRefresh = false } = {}) => request(`/deadlines${forceDriveRefresh ? '?refreshDrive=1' : ''}`, {
+    timeoutMs: 120000,
+    ...(forceDriveRefresh ? { cache: 'no-store' } : {})
+  }),
   createDeadline: (deadline) => request('/deadlines', {
     method: 'POST',
     body: JSON.stringify(deadline)

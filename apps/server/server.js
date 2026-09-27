@@ -360,6 +360,7 @@ app.patch('/api/accounts/:id', requireAdmin, async (req, res) => {
 });
 app.get('/api/deadlines', requireAuth, async (req, res) => {
   try {
+    if (req.query?.refreshDrive === '1') googleDriveFolderCache.clear();
     await syncGoogleSheetIfDue({ waitForCompletion: true });
     const allDeadlines = await getCollection('deadlines');
     const settings = await getGeneralSettings();
@@ -391,6 +392,7 @@ app.patch('/api/general-settings', requireAdmin, async (req, res) => {
   try {
     const current = (await getCollection('generalSettings'))[0];
     const updates = {};
+    const updatesDriveFolders = Object.prototype.hasOwnProperty.call(req.body || {}, 'googleDriveFolders');
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'googleSheetUrl')) {
       updates.googleSheetUrl = normalizeGoogleSheetUrl(req.body.googleSheetUrl);
     }
@@ -409,6 +411,7 @@ app.patch('/api/general-settings', requireAdmin, async (req, res) => {
     const data = current
       ? await updateRow('generalSettings', { id: current.id }, updates, ['googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'googleSheetAutoSync'])
       : await insertRow('generalSettings', { id: 1, ...updates }, ['id', 'googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'googleSheetAutoSync']);
+    if (updatesDriveFolders) googleDriveFolderCache.clear();
     res.json({ success: true, data });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
@@ -416,6 +419,10 @@ app.patch('/api/general-settings', requireAdmin, async (req, res) => {
 });
 app.post('/api/google-sheet/sync', requireAdmin, async (req, res) => {
   try {
+    // A manual sync is also the explicit "recheck Drive" action. Avoid
+    // returning folder results cached before the mapping or Drive structure
+    // was corrected.
+    googleDriveFolderCache.clear();
     const result = await syncGoogleSheet();
     res.json({ success: true, data: result });
   } catch (error) {
@@ -1182,8 +1189,14 @@ async function enrichRowsWithGoogleDriveLinks(rows, lookupRows = rows, googleDri
     const hasConfiguredRoot = Boolean(getConfiguredDriveRootFolder(entry.data.type, googleDriveFolders));
     if (isHttpUrl(entry.data.urlSeries) && !hasConfiguredRoot) return entry;
     const driveUrl = urlsByLookupKey.get(googleDriveLookupKey(entry.data.type, entry.data.seriesId));
+    if (driveUrl) linked += 1;
+    // Once a root is configured, the Drive lookup is authoritative. Do not
+    // keep a stale URL from an older global search when the scoped lookup is
+    // missing or points to a different folder.
+    if (hasConfiguredRoot) {
+      return { ...entry, data: { ...entry.data, urlSeries: driveUrl || '' } };
+    }
     if (!driveUrl) return entry;
-    linked += 1;
     return { ...entry, data: { ...entry.data, urlSeries: driveUrl } };
   });
   const missing = lookupResults.filter(({ url, error }) => !url && !error).length;
@@ -1196,39 +1209,23 @@ async function enrichStoredDeadlineUrls(deadlines, googleDriveFolders = {}) {
       data: { ...data, urlSeries: normalizeUrlSeries(data.urlSeries) }
     }));
     const result = await enrichRowsWithGoogleDriveLinks(entries, entries, googleDriveFolders);
-    const linkedEntries = result.rows.filter(({ data }, index) => {
+    const changedEntries = result.rows.filter(({ data }, index) => {
       const previousUrl = normalizeUrlSeries(deadlines[index]?.urlSeries);
-      return isHttpUrl(data.urlSeries) && data.urlSeries !== previousUrl;
+      return data.urlSeries !== previousUrl;
     });
 
-    await runWithConcurrency(linkedEntries, async ({ data }) => {
+    await runWithConcurrency(changedEntries, async ({ data }) => {
       try {
         await updateRow(
           'deadlines',
           { seriesId: data.seriesId, chapterNumber: data.chapterNumber },
-          { urlSeries: data.urlSeries },
+          { urlSeries: isHttpUrl(data.urlSeries) ? data.urlSeries : null },
           ['urlSeries']
         );
       } catch (error) {
         // A failed automatic URL write must not prevent the deadline table
         // from loading. The link can be retried on the next refresh.
         console.error(`Could not save Drive URL for ${data.seriesId}:`, error.message);
-      }
-    });
-
-    const invalidEntries = result.rows.filter(({ data }, index) => (
-      !isHttpUrl(deadlines[index]?.urlSeries) && !data.urlSeries
-    ));
-    await runWithConcurrency(invalidEntries, async ({ data }) => {
-      try {
-        await updateRow(
-          'deadlines',
-          { seriesId: data.seriesId, chapterNumber: data.chapterNumber },
-          { urlSeries: null },
-          ['urlSeries']
-        );
-      } catch (error) {
-        console.error(`Could not clear invalid URL for ${data.seriesId}:`, error.message);
       }
     });
 

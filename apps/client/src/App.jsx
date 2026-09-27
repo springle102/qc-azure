@@ -107,7 +107,7 @@ export function App() {
 
   const role = profile?.role;
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async ({ forceDriveRefresh = false } = {}) => {
     if (!role) {
       setIsLoading(false);
       return;
@@ -127,7 +127,7 @@ export function App() {
       tasks: api.getTasks,
       freelancers: api.getFreelancers,
       qcs: api.getQCs,
-      deadlines: api.getDeadlines,
+      deadlines: () => api.getDeadlines({ forceDriveRefresh }),
       difficultyLevels: api.getDifficultyLevels,
       difficultyPrices: api.getDifficultyPrices,
       bonusSettings: api.getBonusSettings,
@@ -239,7 +239,7 @@ export function App() {
   const page = useMemo(() => {
     const commonProps = {
       isLoading,
-      onRefresh: loadData
+      onRefresh: () => loadData({ forceDriveRefresh: true })
     };
 
     switch (currentView) {
@@ -316,7 +316,7 @@ export function App() {
           {loadWarning && (
             <div className="data-connection-banner" role="status">
               <span>{loadWarning}</span>
-              <button type="button" className="btn btn-outline btn-sm" onClick={loadData}>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => loadData({ forceDriveRefresh: true })}>
                 Thử lại
               </button>
             </div>
