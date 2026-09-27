@@ -1539,7 +1539,7 @@ async function readGoogleSheetValues(spreadsheetId, range) {
   const query = new URLSearchParams({
     includeGridData: 'true',
     ranges: range,
-    fields: 'sheets(data(startRow,rowMetadata,rowData/values/formattedValue))'
+    fields: 'sheets(data(startRow,rowMetadata(hiddenByFilter,hiddenByUser),rowData/values/formattedValue))'
   });
   const payload = await googleSheetsRequest(
     `spreadsheets/${encodeURIComponent(spreadsheetId)}?${query.toString()}`
@@ -1551,7 +1551,7 @@ async function readGoogleSheetValues(spreadsheetId, range) {
   const hiddenRows = new Set(
     (data.rowMetadata || [])
       .map((metadata, index) => (
-        metadata?.hidden === true || metadata?.hiddenByFilter === true ? index : null
+        metadata?.hidden === true || metadata?.hiddenByFilter === true || metadata?.hiddenByUser === true ? index : null
       ))
       .filter((index) => index !== null)
   );
