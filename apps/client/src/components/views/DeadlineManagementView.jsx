@@ -21,6 +21,7 @@ const columns = [
   ['price', 'Giá'],
   ['receivePrice', 'Tiền nhận'],
   ['feedback', 'Feedback'],
+  ['paymentApproved', 'Thanh toán'],
   ['edit', 'Thao tác']
 ];
 
@@ -70,6 +71,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
   const [isSaving, setIsSaving] = useState(false);
   const [rawStatusUpdatingKey, setRawStatusUpdatingKey] = useState('');
   const [taskStatusUpdatingKey, setTaskStatusUpdatingKey] = useState('');
+  const [paymentUpdatingKey, setPaymentUpdatingKey] = useState('');
   const [columnFilters, setColumnFilters] = useState({});
   const [columnSort, setColumnSort] = useState(null);
   const fieldOptions = useMemo(() => fields.length > 0 ? fields.map((field) => field.name || field).filter(Boolean) : FIELD_OPTIONS, [fields]);
@@ -86,18 +88,21 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
   const columnFilterOptions = useMemo(() => Object.fromEntries(
     visibleColumns
       .filter(([key]) => key !== 'edit')
-      .map(([key]) => [key, uniqueFilterValues(deadlines.map((item) => getColumnFilterValue(item, key))).sort((left, right) => left.localeCompare(right, 'vi', { numeric: true }))])
-  ), [deadlines, visibleColumns]);
+      .map(([key]) => [key, uniqueFilterValues(deadlines.map((item) => getColumnFilterValue(item, key, freelancerOptions))).sort((left, right) => left.localeCompare(right, 'vi', { numeric: true }))])
+  ), [deadlines, freelancerOptions, visibleColumns]);
 
   const filteredDeadlines = useMemo(() => {
     const filtered = deadlines.filter((item) => {
-    const text = Object.values(item).join(' ').toLowerCase();
+    const text = [
+      ...Object.values(item),
+      getPersonName(item.fIld ?? item.fId, freelancerOptions)
+    ].join(' ').toLowerCase();
     const matchesColumnFilters = Object.entries(columnFilters).every(([key, selectedValues]) => (
-      selectedValues.includes(getColumnFilterValue(item, key))
+      selectedValues.includes(getColumnFilterValue(item, key, freelancerOptions))
     ));
     return (!field || String(item.type || '') === field)
       && (!seriesId || String(item.seriesId || '') === seriesId)
-      && (!freelancer || String(item.fIld ?? item.fId ?? '') === freelancer)
+      && (!freelancer || getPersonName(item.fIld ?? item.fId, freelancerOptions) === freelancer)
       && (!qc || String(item.qcId ?? '') === qc)
       && (!search.trim() || text.includes(search.trim().toLowerCase()))
       && matchesColumnFilters;
@@ -106,7 +111,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
     const sortKind = getColumnSortKind(columnSort.key);
     if (!sortKind) return filtered;
     return [...filtered].sort((left, right) => compareColumnValues(left, right, columnSort.key, sortKind, columnSort.direction));
-  }, [columnFilters, columnSort, deadlines, field, freelancer, qc, search, seriesId]);
+  }, [columnFilters, columnSort, deadlines, field, freelancer, freelancerOptions, qc, search, seriesId]);
 
   const updateColumnFilter = (key, selectedValues) => {
     setColumnFilters((current) => {
@@ -217,6 +222,22 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
     }
   };
 
+  const togglePayment = async (deadline, checked) => {
+    const rowKey = String(deadline.seriesId) + '-' + String(deadline.chapterNumber);
+    setPaymentUpdatingKey(rowKey);
+    try {
+      const updatedDeadline = await api.updateDeadline(deadline.seriesId, deadline.chapterNumber, {
+        paymentApproved: checked
+      });
+      onUpdate?.(updatedDeadline);
+      showToast(checked ? 'Đã đánh dấu task được tính lương.' : 'Đã bỏ đánh dấu thanh toán.', 'success');
+    } catch (error) {
+      showToast(error.message || 'Không thể cập nhật trạng thái thanh toán.', 'error');
+    } finally {
+      setPaymentUpdatingKey('');
+    }
+  };
+
   return (
     <div className="fade-in">
       <div className="page-header-row qc-page-heading">
@@ -252,7 +273,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
           {!readOnly && <>
             <select className="form-select toolbar-filter" value={freelancer} onChange={(event) => setFreelancer(event.target.value)}>
               <option value="">Tất cả freelancer</option>
-              {options.freelancers.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+              {options.freelancers.map((person) => <option key={person.id} value={person.name}>{person.name}</option>)}
             </select>
             <select className="form-select toolbar-filter" value={qc} onChange={(event) => setQc(event.target.value)}>
               <option value="">Tất cả QC</option>
@@ -313,6 +334,15 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
                             onChange={(status) => updateTaskStatus(item, status)}
                           />
                         </div>
+                      ) : key === 'paymentApproved' ? (
+                        <input
+                          className="raw-status-checkbox payment-checkbox"
+                          type="checkbox"
+                          checked={isPaymentApproved(item.paymentApproved)}
+                          onChange={(event) => togglePayment(item, event.target.checked)}
+                          disabled={readOnly || paymentUpdatingKey === String(item.seriesId) + '-' + String(item.chapterNumber)}
+                          aria-label={'Thanh toán: ' + (isPaymentApproved(item.paymentApproved) ? 'đã chọn' : 'chưa chọn')}
+                        />
                       ) : renderValue(key === 'fIld' ? (item.fIld ?? item.fId) : item[key], key, item.type, difficultyLevels, freelancerOptions, qcOptions, item)}
                     </td>
                   ))}
@@ -361,10 +391,20 @@ function uniqueFilterValues(values) {
   return [...new Set(values.map((value) => String(value ?? '')))];
 }
 
-function getColumnFilterValue(item, key) {
-  const value = key === 'fIld' ? (item.fIld ?? item.fId) : item[key];
+function getColumnFilterValue(item, key, freelancers = []) {
+  if (key === 'paymentApproved') return isPaymentApproved(item.paymentApproved) ? 'true' : 'false';
+  const value = key === 'fIld' ? getPersonName(item.fIld ?? item.fId, freelancers) : item[key];
   if (MONTH_FILTER_COLUMNS.has(key)) return getMonthFilterValue(value);
   return value === null || value === undefined ? '' : String(value);
+}
+
+function getPersonName(id, people = []) {
+  if (id === null || id === undefined || id === '') return '';
+  return people.find((person) => String(person.id) === String(id))?.name || String(id);
+}
+
+function isPaymentApproved(value) {
+  return value === true || value === 1 || ['true', '1', 'yes'].includes(String(value ?? '').trim().toLowerCase());
 }
 
 function getMonthFilterValue(value) {
@@ -379,6 +419,7 @@ function getMonthFilterValue(value) {
 
 function formatFilterValue(value, key) {
   if (value === '') return '(Trống)';
+  if (key === 'paymentApproved') return value === 'true' ? 'Đã thanh toán' : 'Chưa thanh toán';
   if (MONTH_FILTER_COLUMNS.has(key)) {
     const [year, month] = value.split('-');
     return year && month ? `Tháng ${Number(month)}/${year}` : value;

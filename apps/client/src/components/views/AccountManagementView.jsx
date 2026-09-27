@@ -11,11 +11,11 @@ const ACCOUNT_FILTER_COLUMNS = [
   { key: 'username', label: 'Username', sortKind: 'string' },
   { key: 'displayName', label: 'Họ và tên', sortKind: 'string' },
   { key: 'email', label: 'Email', sortKind: 'string' },
-  { key: 'role', label: 'Role' },
-  { key: 'fields', label: 'Mảng' },
+  { key: 'role', label: 'Role', sortKind: 'string' },
+  { key: 'fields', label: 'Mảng', sortKind: 'string' },
   { key: 'freelancerName', label: 'Freelancer liên kết', sortKind: 'string' },
-  { key: 'status', label: 'Trạng thái' },
-  { key: 'createdAt', label: 'Ngày tạo', filterKind: 'month' }
+  { key: 'status', label: 'Trạng thái', sortKind: 'string' },
+  { key: 'createdAt', label: 'Ngày tạo', filterKind: 'month', sortKind: 'string' }
 ];
 
 const INITIAL_FORM = {
