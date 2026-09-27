@@ -1570,15 +1570,14 @@ async function readGoogleSheetValues(spreadsheetId, range) {
   const query = new URLSearchParams({
     includeGridData: 'true',
     ranges: range,
-    fields: 'sheets(data(startRow,rowMetadata(hiddenByFilter,hiddenByUser),rowData/values/formattedValue))'
+    fields: 'sheets(data(startRow,rowMetadata(hiddenByFilter,hiddenByUser),rowData/values(formattedValue,dataValidation(condition(type,values(userEnteredValue))))))'
   });
   const payload = await googleSheetsRequest(
     `spreadsheets/${encodeURIComponent(spreadsheetId)}?${query.toString()}`
   );
   const data = payload.sheets?.[0]?.data?.[0] || {};
-  const values = (data.rowData || []).map((row) => (
-    row.values || []
-  ).map((cell) => cell.formattedValue ?? ''));
+  const cellData = (data.rowData || []).map((row) => row.values || []);
+  const values = cellData.map((row) => row.map((cell) => cell.formattedValue ?? ''));
   const hiddenRows = new Set(
     (data.rowMetadata || [])
       .map((metadata, index) => (
@@ -1586,7 +1585,7 @@ async function readGoogleSheetValues(spreadsheetId, range) {
       ))
       .filter((index) => index !== null)
   );
-  return { values, hiddenRows, startRow: Number(data.startRow || 0) };
+  return { values, cellData, hiddenRows, startRow: Number(data.startRow || 0) };
 }
 
 function parseGoogleSheetA1Range(range) {
@@ -1977,10 +1976,49 @@ function isGoogleSheetCheckboxColumn(tab, columnIndex) {
     .some((value) => value === 'true' || value === 'false');
 }
 
-function getGoogleSheetCellValue(row, key, fieldOverride = null, asCheckbox = false) {
+function normalizeStatusOption(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (['doing', 'đang thực hiện', 'đang làm'].includes(normalized)) return 'doing';
+  if (['submitted', 'đã gửi', 'chờ qc'].includes(normalized)) return 'submitted';
+  if (['checking', 'đang kiểm tra'].includes(normalized)) return 'checking';
+  if (['fixing', 'đang sửa'].includes(normalized)) return 'fixing';
+  if (['done', 'hoàn thành', 'completed', 'complete'].includes(normalized)) return 'done';
+  return '';
+}
+
+function getGoogleSheetStatusOptions(tab, columnIndex) {
+  return tab.cellData
+    ?.map((row) => row?.[columnIndex]?.dataValidation?.condition)
+    .filter((condition) => condition?.type === 'ONE_OF_LIST')
+    .flatMap((condition) => condition.values || [])
+    .map((value) => String(value?.userEnteredValue ?? '').trim())
+    .filter(Boolean)
+    .filter((value, index, values) => values.indexOf(value) === index) || [];
+}
+
+function getGoogleSheetStatusValue(tab, rowNumber, row, columnIndex) {
+  const status = normalizeStatusOption(row.status);
+  if (!status) return row.status || '';
+
+  const configuredOptions = getGoogleSheetStatusOptions(tab, columnIndex);
+  const matchingOption = configuredOptions.find((option) => normalizeStatusOption(option) === status);
+  if (matchingOption) return matchingOption;
+
+  const rowIndex = rowNumber === null || rowNumber === undefined
+    ? -1
+    : rowNumber - tab.startRow - 1;
+  const currentValue = rowIndex >= 0 ? tab.values[rowIndex]?.[columnIndex] : '';
+  if (/^[A-Z]/.test(String(currentValue || ''))) {
+    return status.charAt(0).toUpperCase() + status.slice(1);
+  }
+  return status;
+}
+
+function getGoogleSheetCellValue(row, key, fieldOverride = null, asCheckbox = false, statusValue = null) {
   if (key === 'type' && fieldOverride) return fieldOverride;
   if (key === 'endTask' || key === 'submittedAt') return formatGoogleSheetDate(row[key]);
   if (key === 'statusRaw' && asCheckbox) return isRawStatusChecked(row.statusRaw);
+  if (key === 'status' && statusValue !== null) return statusValue;
   if (key === 'completionPercent') {
     const completionPercent = Number(row[key]);
     return Number.isFinite(completionPercent) ? `${completionPercent}%` : '';
@@ -2008,9 +2046,12 @@ async function writeGoogleSheetCells(spreadsheetId, tab, rowNumber, row, columns
     .map((key) => {
       const columnIndex = getGoogleSheetHeaderIndex(tab.headerIndex, key, tab.fieldOverride);
       if (columnIndex === undefined) return null;
+      const statusValue = key === 'status'
+        ? getGoogleSheetStatusValue(tab, rowNumber, row, columnIndex)
+        : null;
       return {
         range: `${quoteGoogleSheetTitle(tab.sheetTitle)}!${googleSheetIndexToColumn(tab.startColumn + columnIndex)}${rowNumber}`,
-        values: [[getGoogleSheetCellValue(row, key, tab.fieldOverride, isGoogleSheetCheckboxColumn(tab, columnIndex))]]
+        values: [[getGoogleSheetCellValue(row, key, tab.fieldOverride, isGoogleSheetCheckboxColumn(tab, columnIndex), statusValue)]]
       };
     })
     .filter(Boolean);
@@ -2033,11 +2074,15 @@ async function appendGoogleSheetRow(spreadsheetId, tab, row) {
   GOOGLE_SHEET_DEADLINE_COLUMNS.forEach((key) => {
     const columnIndex = getGoogleSheetHeaderIndex(tab.headerIndex, key, tab.fieldOverride);
     if (columnIndex !== undefined) {
+      const statusValue = key === 'status'
+        ? getGoogleSheetStatusValue(tab, null, row, columnIndex)
+        : null;
       values[columnIndex] = getGoogleSheetCellValue(
         row,
         key,
         tab.fieldOverride,
-        isGoogleSheetCheckboxColumn(tab, columnIndex)
+        isGoogleSheetCheckboxColumn(tab, columnIndex),
+        statusValue
       );
     }
   });
