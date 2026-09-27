@@ -2561,24 +2561,44 @@
 .deadline-table .deadline-column-chapterNumber,
 .deadline-table .deadline-column-type {
   width: 1%;
-  padding-right: 10px;
-  padding-left: 10px;
+  padding-right: 6px;
+  padding-left: 6px;
   white-space: nowrap;
 }
 
 .deadline-table .deadline-column-seriesId {
-  min-width: 142px;
-  max-width: 160px;
+  min-width: 96px;
+  max-width: 116px;
 }
 
 .deadline-table .deadline-column-chapterNumber {
-  min-width: 102px;
-  max-width: 118px;
+  min-width: 82px;
+  max-width: 96px;
 }
 
 .deadline-table .deadline-column-type {
-  min-width: 92px;
-  max-width: 116px;
+  min-width: 76px;
+  max-width: 92px;
+}
+
+.deadline-table th.deadline-column-seriesId .deadline-column-header,
+.deadline-table th.deadline-column-chapterNumber .deadline-column-header,
+.deadline-table th.deadline-column-type .deadline-column-header {
+  gap: 3px;
+}
+
+.deadline-table th.deadline-column-seriesId .deadline-column-header > span,
+.deadline-table th.deadline-column-chapterNumber .deadline-column-header > span,
+.deadline-table th.deadline-column-type .deadline-column-header > span {
+  white-space: normal;
+  line-height: 1.1;
+}
+
+.deadline-table .deadline-column-seriesId .column-filter-button,
+.deadline-table .deadline-column-chapterNumber .column-filter-button,
+.deadline-table .deadline-column-type .column-filter-button {
+  width: 20px;
+  height: 20px;
 }
 
 .deadline-table th.deadline-column-seriesName,
