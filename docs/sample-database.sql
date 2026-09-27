@@ -300,9 +300,17 @@ END $$;
 
 CREATE TABLE IF NOT EXISTS "BonusSettings" (
   "id" integer PRIMARY KEY,
+  "field" varchar(50),
   "taskThreshold" integer NOT NULL DEFAULT 20 CHECK ("taskThreshold" >= 0),
-  "bonusPerTask" numeric(14, 2) NOT NULL DEFAULT 10000 CHECK ("bonusPerTask" >= 0)
+  "bonusPerTask" numeric(14, 2) NOT NULL DEFAULT 10000 CHECK ("bonusPerTask" >= 0),
+  "qcDefaultPrice" numeric(14, 2) NOT NULL DEFAULT 0 CHECK ("qcDefaultPrice" >= 0)
 );
+
+ALTER TABLE "BonusSettings" ADD COLUMN IF NOT EXISTS "field" varchar(50);
+ALTER TABLE "BonusSettings" ADD COLUMN IF NOT EXISTS "qcDefaultPrice" numeric(14, 2) NOT NULL DEFAULT 0;
+CREATE UNIQUE INDEX IF NOT EXISTS "BonusSettings_field_unique"
+  ON "BonusSettings" ("field")
+  WHERE "field" IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS "GeneralSettings" (
   "id" integer PRIMARY KEY,
@@ -346,9 +354,15 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "Accounts" TO postgres;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "Fields" TO postgres;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "GeneralSettings" TO postgres;
 
-INSERT INTO "BonusSettings" ("id", "taskThreshold", "bonusPerTask") VALUES
-  (1, 20, 10000)
+INSERT INTO "BonusSettings" ("id", "field", "taskThreshold", "bonusPerTask", "qcDefaultPrice") VALUES
+  (1, NULL, 20, 10000, 0)
 ON CONFLICT ("id") DO NOTHING;
+
+INSERT INTO "BonusSettings" ("field", "taskThreshold", "bonusPerTask", "qcDefaultPrice")
+SELECT "name", 20, 10000, 0
+FROM "Fields"
+WHERE "name" IN ('Japan', 'Latin', 'QC')
+ON CONFLICT ("field") DO NOTHING;
 
 INSERT INTO "GeneralSettings" ("id") VALUES
   (1)

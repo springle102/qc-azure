@@ -3,7 +3,7 @@ import { IconEye, IconRefresh, IconSearch, IconUsers, IconX } from '../common/Ic
 
 const SALARY_FIELDS = ['Japan', 'Latin', 'QC'];
 
-export function SalaryManagementView({ salaries = [], fields = [], bonusConfig, isLoading, onRefresh }) {
+export function SalaryManagementView({ salaries = [], fields = [], bonusSettings, isLoading, onRefresh }) {
   const [search, setSearch] = useState('');
   const [field, setField] = useState('');
   const [selectedQR, setSelectedQR] = useState(null);
@@ -34,7 +34,8 @@ export function SalaryManagementView({ salaries = [], fields = [], bonusConfig, 
           <h2 className="page-title">Lương</h2>
           <p className="page-subtitle">
             Tổng lương = tổng tiền freelancer nhận từ các task + bonus.
-            {bonusConfig && ` Từ task thứ ${Number(bonusConfig.taskThreshold || 0) + 1}, bonus ${formatSalary(bonusConfig.bonusPerTask)} mỗi task.`}
+            {bonusSettings && ' Mức thưởng và giá QC được cấu hình riêng theo từng mảng.'}
+            {bonusSettings && ' QC nhận giá mặc định theo mảng + phần tiền tương ứng với % member chưa hoàn thành.'}
           </p>
         </div>
         <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading}>
@@ -62,7 +63,7 @@ export function SalaryManagementView({ salaries = [], fields = [], bonusConfig, 
                 <th>Họ và tên</th>
                 <th>Mảng</th>
                 <th>Tổng lương</th>
-                <th>Bonus</th>
+                <th>Bonus / Chuyển QC</th>
                 <th>Mã QR</th>
               </tr>
             </thead>
@@ -77,12 +78,12 @@ export function SalaryManagementView({ salaries = [], fields = [], bonusConfig, 
                   </td>
                 </tr>
               ) : filteredFreelancers.map((freelancer) => (
-                <tr key={freelancer.fId || freelancer.fIld || freelancer.id}>
+                <tr key={`${freelancer.isQc ? 'qc' : 'freelancer'}-${freelancer.fId || freelancer.fIld || freelancer.qcId || freelancer.id}`}>
                   <td className="mono-cell">{freelancer.fId || freelancer.fIld || '—'}</td>
                   <td className="strong-cell">{freelancer.name || '—'}</td>
                   <td><span className="field-badge">{getMemberFields(freelancer).join(', ') || '—'}</span></td>
                   <td className="salary-cell">{formatSalary(freelancer.totalSalary ?? freelancer.salary ?? freelancer.luong)}</td>
-                  <td className="salary-cell">{formatSalary(freelancer.bonus)}</td>
+                  <td className="salary-cell">{freelancer.isQc ? formatSalary(freelancer.transferredAmount) : formatSalary(freelancer.bonus)}</td>
                   <td>
                     {freelancer.imageQR || freelancer.imageQr || freelancer.qrUrl || freelancer.url ? (
                       <button type="button" className="btn btn-secondary btn-sm" onClick={() => setSelectedQR(freelancer)}>

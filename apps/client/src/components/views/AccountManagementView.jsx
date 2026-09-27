@@ -1,10 +1,21 @@
-import React, { useMemo, useState } from 'react';
-import { IconEdit, IconPlus, IconRefresh, IconTrash, IconUsers, IconX } from '../common/Icons';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { IconEdit, IconFilter, IconPlus, IconRefresh, IconTrash, IconUsers, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
 
 const ROLE_OPTIONS = ['Admin', 'QC', 'Freelancer'];
 const FIELD_OPTIONS = ['Japan', 'Latin', 'QC'];
+const ACCOUNT_FILTER_COLUMNS = [
+  { key: 'username', label: 'Username', sortKind: 'string' },
+  { key: 'displayName', label: 'Họ và tên', sortKind: 'string' },
+  { key: 'email', label: 'Email', sortKind: 'string' },
+  { key: 'role', label: 'Role' },
+  { key: 'fields', label: 'Mảng' },
+  { key: 'freelancerName', label: 'Freelancer liên kết', sortKind: 'string' },
+  { key: 'status', label: 'Trạng thái' },
+  { key: 'createdAt', label: 'Ngày tạo', filterKind: 'month' }
+];
 
 const INITIAL_FORM = {
   username: '',
@@ -23,6 +34,51 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
   const [editingAccount, setEditingAccount] = useState(null);
   const [editForm, setEditForm] = useState(INITIAL_FORM);
   const [isSaving, setIsSaving] = useState(false);
+  const [columnFilters, setColumnFilters] = useState({});
+  const [columnSort, setColumnSort] = useState(null);
+
+  const accountFilterOptions = useMemo(() => Object.fromEntries(
+    ACCOUNT_FILTER_COLUMNS.map(({ key }) => {
+      const values = key === 'fields'
+        ? [...fieldOptions, ...accounts.flatMap((account) => getMemberFields(account))]
+        : accounts.map((account) => getAccountFilterValue(account, key, freelancers));
+      return [key, [...new Set(values.map((value) => String(value ?? '')))].sort((left, right) => left.localeCompare(right, 'vi', { numeric: true, sensitivity: 'base' }))];
+    })
+  ), [accounts, fieldOptions, freelancers]);
+
+  const filteredAccounts = useMemo(() => {
+    const filtered = accounts.filter((account) => Object.entries(columnFilters).every(([key, selectedValues]) => {
+      if (key === 'fields') {
+        const memberFields = getMemberFields(account).map((value) => String(value).toLowerCase());
+        return selectedValues.some((value) => memberFields.includes(String(value).toLowerCase()));
+      }
+      return selectedValues.includes(getAccountFilterValue(account, key, freelancers));
+    }));
+    if (!columnSort) return filtered;
+    const sortColumn = ACCOUNT_FILTER_COLUMNS.find(({ key }) => key === columnSort.key);
+    if (!sortColumn?.sortKind) return filtered;
+    return [...filtered].sort((left, right) => {
+      const comparison = getAccountFilterValue(left, columnSort.key, freelancers).localeCompare(
+        getAccountFilterValue(right, columnSort.key, freelancers),
+        'vi',
+        { numeric: true, sensitivity: 'base' }
+      );
+      return columnSort.direction === 'desc' ? -comparison : comparison;
+    });
+  }, [accounts, columnFilters, columnSort, freelancers]);
+
+  const updateColumnFilter = (key, selectedValues) => {
+    setColumnFilters((current) => {
+      const next = { ...current };
+      if (selectedValues === null) delete next[key];
+      else next[key] = selectedValues;
+      return next;
+    });
+  };
+
+  const updateColumnSort = (key, direction) => {
+    setColumnSort(direction ? { key, direction } : null);
+  };
 
   const updateField = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -30,8 +86,8 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
 
   const createAccount = async (event) => {
     event.preventDefault();
-    if (form.role === 'QC' && form.fields.length === 0) {
-      showToast('Hãy chọn ít nhất một mảng cho account QC.', 'error');
+    if (['QC', 'Freelancer'].includes(form.role) && form.fields.length === 0) {
+      showToast('Hãy chọn ít nhất một mảng cho account.', 'error');
       return;
     }
     setIsSaving(true);
@@ -69,8 +125,8 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
   const saveEdit = async (event) => {
     event.preventDefault();
     if (!editingAccount) return;
-    if (editForm.role === 'QC' && editForm.fields.length === 0) {
-      showToast('Hãy chọn ít nhất một mảng cho account QC.', 'error');
+    if (['QC', 'Freelancer'].includes(editForm.role) && editForm.fields.length === 0) {
+      showToast('Hãy chọn ít nhất một mảng cho account.', 'error');
       return;
     }
     setIsSaving(true);
@@ -146,16 +202,9 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
             </select>
           </div>
           <div className="form-group">
-            <label className="form-label" htmlFor="account-field">Mảng</label>
-            {form.role === 'QC' ? (
-              <FieldCheckboxes options={fieldOptions} value={form.fields} onChange={(fields) => updateField('fields', fields)} />
-            ) : (
-              <select id="account-field" className="form-select" value={form.field} onChange={(event) => updateField('field', event.target.value)} required={form.role === 'Freelancer'}>
-                <option value="">Chọn mảng</option>
-                {fieldOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-            )}
-            {form.role === 'QC' && <span className="form-help account-create-link-help">Có thể chọn nhiều mảng.</span>}
+            <span className="form-label">Mảng</span>
+            <FieldCheckboxes options={fieldOptions} value={form.fields} onChange={(fields) => updateField('fields', fields)} />
+            <span className="form-help account-create-link-help">Có thể chọn nhiều mảng; account Freelancer/QC cần chọn ít nhất một mảng.</span>
           </div>
           <div className="account-create-actions">
             <span className="form-help">Password được lưu dạng hash trong database và không hiển thị lại.</span>
@@ -173,12 +222,31 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
         <div className="table-wrapper table-wrapper-flat">
           <table className="custom-table account-table">
             <thead>
-              <tr><th>Username</th><th>Họ và tên</th><th>Email</th><th>Role</th><th>Mảng</th><th>Freelancer liên kết</th><th>Trạng thái</th><th>Ngày tạo</th><th>Thao tác</th></tr>
+              <tr>
+                {ACCOUNT_FILTER_COLUMNS.map(({ key, label, filterKind, sortKind }) => (
+                  <th key={key}>
+                    <div className="deadline-column-header">
+                      <span>{label}</span>
+                      <ColumnFilterButton
+                        label={label}
+                        values={accountFilterOptions[key] || []}
+                        activeValues={columnFilters[key]}
+                        filterKind={filterKind}
+                        sortKind={sortKind}
+                        activeSortDirection={columnSort?.key === key ? columnSort.direction : null}
+                        onApply={(selectedValues) => updateColumnFilter(key, selectedValues)}
+                        onSort={(direction) => updateColumnSort(key, direction)}
+                      />
+                    </div>
+                  </th>
+                ))}
+                <th>Thao tác</th>
+              </tr>
             </thead>
             <tbody>
-              {accounts.length === 0 ? (
+              {filteredAccounts.length === 0 ? (
                 <tr><td colSpan="9"><div className="empty-state table-empty"><IconUsers size={24} /><strong>{isLoading ? 'Đang tải dữ liệu...' : 'Chưa có account.'}</strong></div></td></tr>
-              ) : accounts.map((account) => (
+              ) : filteredAccounts.map((account) => (
                 <tr key={account.id || account.username}>
                   <td className="mono-cell">{account.username}</td>
                   <td className="strong-cell">{account.displayName || '—'}</td>
@@ -235,15 +303,8 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label" htmlFor="edit-account-field">Mảng</label>
-                {editForm.role === 'QC' ? (
-                  <FieldCheckboxes options={fieldOptions} value={editForm.fields} onChange={(fields) => updateEditField('fields', fields)} disabled={isSaving} />
-                ) : (
-                  <select id="edit-account-field" className="form-select" value={editForm.field} onChange={(event) => updateEditField('field', event.target.value)} required={editForm.role === 'Freelancer'} disabled={isSaving}>
-                    <option value="">Chọn mảng</option>
-                    {fieldOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                )}
+                <span className="form-label">Mảng</span>
+                <FieldCheckboxes options={fieldOptions} value={editForm.fields} onChange={(fields) => updateEditField('fields', fields)} disabled={isSaving} />
               </div>
               <label className="form-checkbox-control">
                 <input type="checkbox" checked={editForm.isActive} onChange={(event) => updateEditField('isActive', event.target.checked)} disabled={isSaving} />
@@ -267,12 +328,39 @@ function toApiAccount(form, includePassword) {
     displayName: form.displayName,
     email: form.email,
     role: form.role,
-    field: form.role === 'QC' ? (form.fields[0] || null) : (form.field || null),
-    fields: form.role === 'QC' ? form.fields : (form.field ? [form.field] : [])
+    field: form.fields[0] || null,
+    fields: form.fields
   };
   if (includePassword || form.password) payload.password = form.password;
   if (Object.prototype.hasOwnProperty.call(form, 'isActive')) payload.isActive = form.isActive;
   return payload;
+}
+
+function getAccountFilterValue(account, key, freelancers) {
+  if (key === 'fields') return getMemberFields(account).join(', ');
+  if (key === 'freelancerName') return account.freelancerName || getFreelancerName(account.freelancerId, freelancers);
+  if (key === 'status') return account.isActive ? 'Đang hoạt động' : 'Đã khóa';
+  if (key === 'createdAt') return getMonthFilterValue(account.createdAt);
+  return String(account[key] ?? '');
+}
+
+function getMonthFilterValue(value) {
+  const text = String(value ?? '').trim();
+  const isoMonth = text.match(/^(\d{4})-(\d{2})/);
+  if (isoMonth) return `${isoMonth[1]}-${isoMonth[2]}`;
+  if (!text) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatAccountFilterValue(value, filterKind) {
+  if (value === '') return '(Trống)';
+  if (filterKind === 'month') {
+    const [year, month] = value.split('-');
+    return year && month ? `Tháng ${Number(month)}/${year}` : value;
+  }
+  return value;
 }
 
 function getFreelancerName(id, freelancers) {
@@ -306,6 +394,130 @@ function FieldCheckboxes({ options = FIELD_OPTIONS, value = [], onChange, disabl
         </label>
       ))}
     </div>
+  );
+}
+
+function ColumnFilterButton({ label, values, activeValues, filterKind, sortKind, activeSortDirection, onApply, onSort }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState('');
+  const [draftValues, setDraftValues] = useState([]);
+  const [menuPosition, setMenuPosition] = useState(null);
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
+  const isActive = Array.isArray(activeValues) || Boolean(activeSortDirection);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const updatePosition = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = 280;
+      setMenuPosition({
+        top: rect.bottom + 6,
+        left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))
+      });
+    };
+    const handleOutsidePointer = (event) => {
+      if (!buttonRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) setIsOpen(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+
+    updatePosition();
+    document.addEventListener('pointerdown', handleOutsidePointer);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointer);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [isOpen]);
+
+  const openFilter = (event) => {
+    event.stopPropagation();
+    if (isOpen) {
+      setIsOpen(false);
+      return;
+    }
+    setSearchValue('');
+    setDraftValues(Array.isArray(activeValues) ? [...activeValues] : [...values]);
+    setIsOpen(true);
+  };
+
+  const visibleValues = values.filter((value) => formatAccountFilterValue(value, filterKind).toLowerCase().includes(searchValue.trim().toLowerCase()));
+  const allSelected = values.length > 0 && draftValues.length === values.length;
+
+  const toggleValue = (value) => {
+    setDraftValues((current) => current.includes(value)
+      ? current.filter((item) => item !== value)
+      : [...current, value]);
+  };
+
+  const applyFilter = () => {
+    onApply(draftValues.length === values.length ? null : draftValues);
+    setIsOpen(false);
+  };
+
+  const applySort = (direction) => {
+    onSort(activeSortDirection === direction ? null : direction);
+    setIsOpen(false);
+  };
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={'column-filter-button' + (isActive ? ' active' : '')}
+        onClick={openFilter}
+        aria-label={`Lọc cột ${label}`}
+        aria-expanded={isOpen}
+        title={`Lọc cột ${label}`}
+      >
+        <IconFilter size={14} />
+      </button>
+      {isOpen && menuPosition && createPortal(
+        <div ref={menuRef} className="column-filter-menu" style={menuPosition} onClick={(event) => event.stopPropagation()}>
+          <div className="column-filter-menu-title">Lọc {label}</div>
+          {sortKind && (
+            <div className="column-filter-sort">
+              <div className="column-filter-section-label">Sắp xếp</div>
+              <button type="button" className={'column-filter-sort-button' + (activeSortDirection === 'asc' ? ' active' : '')} onClick={() => applySort('asc')}>A → Z</button>
+              <button type="button" className={'column-filter-sort-button' + (activeSortDirection === 'desc' ? ' active' : '')} onClick={() => applySort('desc')}>Z → A</button>
+            </div>
+          )}
+          <input
+            className="form-input column-filter-search"
+            value={searchValue}
+            onChange={(event) => setSearchValue(event.target.value)}
+            placeholder="Tìm giá trị..."
+            autoFocus
+          />
+          <label className="column-filter-option column-filter-select-all">
+            <input type="checkbox" checked={allSelected} onChange={() => setDraftValues(allSelected ? [] : [...values])} />
+            <span>Chọn tất cả</span>
+          </label>
+          <div className="column-filter-options">
+            {visibleValues.length > 0 ? visibleValues.map((value) => (
+              <label className="column-filter-option" key={value || '__empty__'}>
+                <input type="checkbox" checked={draftValues.includes(value)} onChange={() => toggleValue(value)} />
+                <span title={formatAccountFilterValue(value, filterKind)}>{formatAccountFilterValue(value, filterKind)}</span>
+              </label>
+            )) : <span className="column-filter-empty">Không có giá trị phù hợp.</span>}
+          </div>
+          <div className="column-filter-actions">
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => { onApply(null); setIsOpen(false); }}>Xóa lọc</button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={applyFilter}>Áp dụng</button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 }
 

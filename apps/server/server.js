@@ -188,27 +188,34 @@ app.patch('/api/freelancers/:id', requireManager, async (req, res) => {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
   }
 });
+
+async function getMergedQCs() {
+  const [qcs, accounts] = await Promise.all([
+    getCollection('qcs'),
+    getCollection('accounts')
+  ]);
+  const accountQcs = accounts
+    .filter((account) => account.role === 'QC')
+    .map((account) => ({
+      qcId: account.id,
+      name: account.displayName || account.username,
+      email: account.email || null,
+      imageQR: null,
+      field: account.field || null,
+      fields: account.fields || (account.field ? [account.field] : [])
+    }));
+  return [...qcs, ...accountQcs].reduce((rows, row) => {
+    const id = row.qcId ?? row.id;
+    const existingIndex = rows.findIndex((item) => String(item.qcId ?? item.id) === String(id));
+    if (existingIndex === -1) rows.push({ ...row, qcId: id });
+    else rows[existingIndex] = { ...rows[existingIndex], ...row, qcId: id };
+    return rows;
+  }, []);
+}
+
 app.get('/api/qcs', requireAuth, async (req, res) => {
   try {
-    const [qcs, accounts] = await Promise.all([
-      getCollection('qcs'),
-      getCollection('accounts')
-    ]);
-    const accountQcs = accounts
-      .filter((account) => account.role === 'QC')
-      .map((account) => ({
-        qcId: account.id,
-        name: account.displayName || account.username,
-        email: account.email || null,
-        imageQR: null
-      }));
-    const merged = [...qcs, ...accountQcs].reduce((rows, row) => {
-      const id = row.qcId ?? row.id;
-      const existingIndex = rows.findIndex((item) => String(item.qcId ?? item.id) === String(id));
-      if (existingIndex === -1) rows.push({ ...row, qcId: id });
-      else rows[existingIndex] = { ...rows[existingIndex], ...row, qcId: id };
-      return rows;
-    }, []);
+    const merged = await getMergedQCs();
     res.json({ success: true, data: merged });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
@@ -495,19 +502,25 @@ app.post('/api/google-sheet/sync', requireAdmin, async (req, res) => {
 app.get('/api/salaries', requireAuth, async (req, res) => {
   try {
     await syncGoogleSheetIfDue();
-    const [freelancers, deadlines, prices, bonusSettings] = await Promise.all([
+    const [freelancers, qcs, deadlines, prices, bonusSettings] = await Promise.all([
       getCollection('freelancers'),
+      getMergedQCs(),
       getCollection('deadlines'),
       getCollection('difficultyPricing'),
       getBonusSettings()
     ]);
-    const scopedFreelancers = filterSalaryRowsForUser(freelancers, req.authUser);
-    const scopedDeadlines = filterSalaryRowsForUser(deadlines, req.authUser);
+    const scopedFreelancers = req.authUser.role === 'QC' ? [] : filterSalaryRowsForUser(freelancers, req.authUser);
+    const scopedQcs = req.authUser.role === 'Freelancer' ? [] : filterQCSalaryRowsForUser(qcs, req.authUser);
+    const scopedDeadlines = filterSalaryDeadlinesForUser(deadlines, req.authUser);
+    const pricedDeadlines = applyConfiguredPrices(scopedDeadlines, prices);
     res.json({
       success: true,
       data: scopedDeadlines.length === 0
         ? []
-        : buildSalaryRows(scopedFreelancers, applyConfiguredPrices(scopedDeadlines, prices), bonusSettings)
+        : [
+            ...buildSalaryRows(scopedFreelancers, pricedDeadlines, bonusSettings),
+            ...buildQCSalaryRows(scopedQcs, pricedDeadlines, bonusSettings)
+          ]
     });
   } catch (error) {
     res.status(502).json({ success: false, message: error.message });
@@ -674,7 +687,7 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber', requireManager, async (req,
 const DEFAULT_FIELDS = ['Japan', 'Latin', 'QC'];
 const difficultyLevelFields = ['field', 'difficulty', 'color', 'textColor'];
 const pricingFields = ['field', 'difficulty', 'price'];
-const bonusSettingsFields = ['taskThreshold', 'bonusPerTask'];
+const bonusSettingsFields = ['field', 'taskThreshold', 'bonusPerTask', 'qcDefaultPrice'];
 
 app.post('/api/difficulty-levels', requireManager, async (req, res) => {
   try {
@@ -782,10 +795,14 @@ app.delete('/api/difficulty-prices/:id', requireManager, async (req, res) => {
 app.patch('/api/bonus-settings', requireManager, async (req, res) => {
   try {
     const payload = validateBonusSettingsPayload(req.body);
+    if (payload.field) await assertConfiguredFields([payload.field]);
     const currentRows = await selectRows('bonusSettings');
-    const data = currentRows[0]
-      ? await updateRow('bonusSettings', { id: currentRows[0].id }, payload, bonusSettingsFields)
-      : await insertRow('bonusSettings', { id: 1, ...payload }, ['id', ...bonusSettingsFields]);
+    const current = payload.field
+      ? currentRows.find((row) => String(row.field || '') === String(payload.field))
+      : currentRows.find((row) => !row.field) || currentRows[0];
+    const data = current
+      ? await updateRow('bonusSettings', { id: current.id }, payload, bonusSettingsFields)
+      : await insertRow('bonusSettings', { ...(!payload.field ? { id: 1 } : {}), ...payload }, ['id', ...bonusSettingsFields]);
     res.json({ success: true, data });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
@@ -1718,7 +1735,7 @@ async function syncGoogleSheet() {
       getConfiguredFields(),
       getCollection('difficultyPricing'),
       getCollection('freelancers'),
-      getCollection('qcs'),
+      getMergedQCs(),
       getCollection('deadlines')
     ]);
     const mappedRows = [];
@@ -2012,15 +2029,45 @@ async function assertDifficultyLevelExists(field, difficulty) {
 
 async function getBonusSettings() {
   const rows = await getCollection('bonusSettings');
-  return rows[0] || { id: 1, taskThreshold: 20, bonusPerTask: 10000 };
+  const defaultRow = rows.find((row) => !row.field) || rows[0] || {};
+  const byField = Object.fromEntries(rows
+    .filter((row) => row.field)
+    .map((row) => [String(row.field), normalizeBonusSettingsRow(row)]));
+  return {
+    default: normalizeBonusSettingsRow(defaultRow),
+    byField
+  };
+}
+
+function normalizeBonusSettingsRow(row = {}) {
+  return {
+    id: row.id ?? null,
+    field: row.field || null,
+    taskThreshold: Number(row.taskThreshold ?? 20),
+    bonusPerTask: Number(row.bonusPerTask ?? 10000),
+    qcDefaultPrice: Number(row.qcDefaultPrice ?? 0)
+  };
+}
+
+function getBonusSettingsForField(settings, field) {
+  const fieldName = String(field ?? '').trim();
+  const fieldSettings = settings?.byField?.[fieldName]
+    || (settings?.field ? settings : null)
+    || settings?.default
+    || settings
+    || {};
+  const taskThreshold = Number(fieldSettings.taskThreshold);
+  const bonusPerTask = Number(fieldSettings.bonusPerTask);
+  const qcDefaultPrice = Number(fieldSettings.qcDefaultPrice);
+  return {
+    field: fieldName || fieldSettings.field || null,
+    taskThreshold: Number.isInteger(taskThreshold) && taskThreshold >= 0 ? taskThreshold : 20,
+    bonusPerTask: Number.isFinite(bonusPerTask) && bonusPerTask >= 0 ? bonusPerTask : 10000,
+    qcDefaultPrice: Number.isFinite(qcDefaultPrice) && qcDefaultPrice >= 0 ? qcDefaultPrice : 0
+  };
 }
 
 function buildSalaryRows(freelancers, deadlines, bonusSettings) {
-  const taskThreshold = Number(bonusSettings.taskThreshold);
-  const bonusPerTask = Number(bonusSettings.bonusPerTask);
-  const safeThreshold = Number.isInteger(taskThreshold) && taskThreshold >= 0 ? taskThreshold : 20;
-  const safeBonusPerTask = Number.isFinite(bonusPerTask) && bonusPerTask >= 0 ? bonusPerTask : 10000;
-
   return freelancers.map((freelancer) => {
     const freelancerId = freelancer.fIld ?? freelancer.fId ?? freelancer.id;
     const freelancerDeadlines = deadlines.filter((deadline) => (
@@ -2028,18 +2075,63 @@ function buildSalaryRows(freelancers, deadlines, bonusSettings) {
     ));
     const completedTaskCount = freelancerDeadlines.filter((deadline) => Number(deadline.completionPercent ?? 100) === 100).length;
     const earnedAmount = freelancerDeadlines.reduce((total, deadline) => total + getDeadlineEarning(deadline), 0);
-    const bonusTaskCount = Math.max(0, completedTaskCount - safeThreshold);
-    const bonus = bonusTaskCount * safeBonusPerTask;
+    const bonusByField = new Map();
+    freelancerDeadlines.forEach((deadline) => {
+      const fieldSettings = getBonusSettingsForField(bonusSettings, deadline.type);
+      const key = fieldSettings.field || '__default__';
+      const current = bonusByField.get(key) || { completedTaskCount: 0, bonusTaskCount: 0, bonusPerTask: fieldSettings.bonusPerTask };
+      if (Number(deadline.completionPercent ?? 100) === 100) current.completedTaskCount += 1;
+      bonusByField.set(key, current);
+    });
+    let bonus = 0;
+    let bonusTaskCount = 0;
+    let bonusThreshold = null;
+    bonusByField.forEach((summary, fieldName) => {
+      const fieldSettings = getBonusSettingsForField(bonusSettings, fieldName === '__default__' ? '' : fieldName);
+      summary.bonusTaskCount = Math.max(0, summary.completedTaskCount - fieldSettings.taskThreshold);
+      summary.bonusPerTask = fieldSettings.bonusPerTask;
+      bonusTaskCount += summary.bonusTaskCount;
+      bonus += summary.bonusTaskCount * summary.bonusPerTask;
+      if (bonusThreshold === null) bonusThreshold = fieldSettings.taskThreshold;
+    });
 
     return {
       ...freelancer,
+      isQc: false,
       earnedAmount: earnedAmount.toFixed(2),
       completedTaskCount,
       bonusTaskCount,
       bonus: bonus.toFixed(2),
       totalSalary: (earnedAmount + bonus).toFixed(2),
-      bonusThreshold: safeThreshold,
-      bonusPerTask: safeBonusPerTask
+      bonusThreshold,
+      bonusPerTask: null,
+      bonusByField: [...bonusByField.entries()].map(([field, summary]) => ({ field: field === '__default__' ? null : field, ...summary }))
+    };
+  });
+}
+
+function buildQCSalaryRows(qcs, deadlines, bonusSettings) {
+  return qcs.map((qc) => {
+    const qcId = qc.qcId ?? qc.id;
+    const qcDeadlines = deadlines.filter((deadline) => (
+      String(deadline.qcId ?? '') === String(qcId)
+    ));
+    const baseAmount = qcDeadlines.reduce((total, deadline) => total + getBonusSettingsForField(bonusSettings, deadline.type).qcDefaultPrice, 0);
+    const transferredAmount = qcDeadlines.reduce((total, deadline) => total + getIncompleteCompletionTransfer(deadline), 0);
+
+    return {
+      ...qc,
+      qcId,
+      id: qc.id ?? qcId,
+      name: qc.name || qc.displayName || qc.username || `QC ${qcId}`,
+      fields: Array.isArray(qc.fields) && qc.fields.length > 0 ? qc.fields : (qc.field ? [qc.field] : ['QC']),
+      isQc: true,
+      taskCount: qcDeadlines.length,
+      earnedAmount: baseAmount.toFixed(2),
+      transferredAmount: transferredAmount.toFixed(2),
+      bonus: '0.00',
+      totalSalary: (baseAmount + transferredAmount).toFixed(2),
+      qcDefaultPrice: null
     };
   });
 }
@@ -2053,6 +2145,13 @@ function getDeadlineEarning(deadline) {
   return Number.isFinite(price) && Number.isFinite(completionPercent)
     ? price * completionPercent / 100
     : 0;
+}
+
+function getIncompleteCompletionTransfer(deadline) {
+  const price = Number(deadline.price);
+  const completionPercent = Number(deadline.completionPercent ?? 100);
+  if (!Number.isFinite(price) || !Number.isFinite(completionPercent) || completionPercent >= 100) return 0;
+  return price * Math.max(0, 100 - completionPercent) / 100;
 }
 
 function validateDeadlineCreatePayload(payload) {
@@ -2146,9 +2245,6 @@ function normalizeAccountFields(value, fallback, role) {
   if (['Freelancer', 'QC'].includes(role) && fields.length === 0) {
     throw validationError('Account phải chọn ít nhất một mảng đã cấu hình.');
   }
-  if (role === 'Freelancer' && fields.length > 1) {
-    throw validationError('Freelancer chỉ được chọn một mảng.');
-  }
   return fields;
 }
 
@@ -2162,16 +2258,28 @@ function normalizeDeadlineDate(value, label) {
 function validateBonusSettingsPayload(payload) {
   if (!payload || typeof payload !== 'object') throw validationError('Dữ liệu bonus không hợp lệ.');
 
+  const hasField = Object.prototype.hasOwnProperty.call(payload, 'field');
+  const field = hasField ? normalizeConfiguredFieldName(payload.field) : null;
   const taskThreshold = Number(payload.taskThreshold);
   const bonusPerTask = Number(payload.bonusPerTask);
+  const hasQcDefaultPrice = Object.prototype.hasOwnProperty.call(payload, 'qcDefaultPrice');
+  const qcDefaultPrice = hasQcDefaultPrice ? Number(payload.qcDefaultPrice) : null;
   if (!Number.isInteger(taskThreshold) || taskThreshold < 0) {
     throw validationError('Số task đạt 100% phải là số nguyên không âm.');
   }
   if (!Number.isFinite(bonusPerTask) || bonusPerTask < 0) {
     throw validationError('Bonus mỗi task phải là số không âm.');
   }
+  if (hasQcDefaultPrice && (!Number.isFinite(qcDefaultPrice) || qcDefaultPrice < 0)) {
+    throw validationError('Giá mặc định cho QC phải là số không âm.');
+  }
 
-  return { taskThreshold, bonusPerTask };
+  return {
+    ...(field ? { field } : {}),
+    taskThreshold,
+    bonusPerTask,
+    ...(hasQcDefaultPrice ? { qcDefaultPrice } : {})
+  };
 }
 
 function validationError(message) {
@@ -2232,6 +2340,30 @@ function filterSalaryRowsForUser(rows, user) {
   if (['Freelancer', 'QC'].includes(user?.role)) {
     if (user.freelancerId === null || user.freelancerId === undefined || user.freelancerId === '') return [];
     return rows.filter((row) => String(row.fIld ?? row.fId ?? row.freelancerId ?? '') === String(user.freelancerId));
+  }
+  return [];
+}
+
+function filterQCSalaryRowsForUser(rows, user) {
+  if (user?.role === 'Admin') return rows;
+  if (user?.role !== 'QC') return [];
+  return rows.filter((row) => (
+    String(row.qcId ?? row.id ?? '') === String(user.id ?? '')
+    || String(row.qcId ?? row.id ?? '') === String(user.freelancerId ?? '')
+  ));
+}
+
+function filterSalaryDeadlinesForUser(rows, user) {
+  if (user?.role === 'Admin') return rows;
+  if (user?.role === 'Freelancer') {
+    if (user.freelancerId === null || user.freelancerId === undefined || user.freelancerId === '') return [];
+    return rows.filter((row) => String(row.fIld ?? row.fId ?? row.freelancerId ?? '') === String(user.freelancerId));
+  }
+  if (user?.role === 'QC') {
+    return rows.filter((row) => (
+      String(row.qcId ?? '') === String(user.id ?? '')
+      || String(row.qcId ?? '') === String(user.freelancerId ?? '')
+    ));
   }
   return [];
 }

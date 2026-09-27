@@ -22,7 +22,7 @@ const EMPTY_DATA = {
   deadlines: [],
   difficultyLevels: [],
   difficultyPrices: [],
-  bonusSettings: { id: 1, taskThreshold: 20, bonusPerTask: 10000 },
+  bonusSettings: { default: { id: 1, taskThreshold: 20, bonusPerTask: 10000, qcDefaultPrice: 0 }, byField: {} },
   salaries: [],
   accounts: [],
   fields: [],
@@ -265,9 +265,9 @@ export function App() {
       case 'freelancers':
         return <FreelancerManagementView {...commonProps} freelancers={data.freelancers} accounts={data.accounts} fields={data.fields} canManageAccounts={profile.role === 'Admin'} canEdit={profile.role !== 'Freelancer'} />;
       case 'salary':
-        return <SalaryManagementView {...commonProps} freelancers={data.freelancers} salaries={data.salaries} fields={data.fields} bonusConfig={data.bonusSettings} restrictToSalaryRows={profile.role === 'QC'} />;
+        return <SalaryManagementView {...commonProps} freelancers={data.freelancers} salaries={data.salaries} fields={data.fields} bonusSettings={data.bonusSettings} restrictToSalaryRows={profile.role === 'QC'} />;
       case 'pricing':
-        return <PriceManagementView {...commonProps} difficultyLevels={data.difficultyLevels} difficultyPrices={data.difficultyPrices} fields={data.fields} bonusConfig={data.bonusSettings} />;
+        return <PriceManagementView {...commonProps} difficultyLevels={data.difficultyLevels} difficultyPrices={data.difficultyPrices} fields={data.fields} bonusSettings={data.bonusSettings} />;
       case 'settings':
         return <GeneralSettingsView {...commonProps} fields={data.fields} generalSettings={data.generalSettings} />;
       case 'deadlines':
