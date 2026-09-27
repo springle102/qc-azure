@@ -108,7 +108,9 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
       ? { guideUrl: fieldResources[0]?.guideUrl || '', resourceUrl: fieldResources[0]?.resourceUrl || '' }
       : { guideUrl: process.env.GUIDE_URL || '', resourceUrl: process.env.RESOURCE_URL || '' };
     const trackedTaskSource = scopedDeadlines.length > 0 ? scopedDeadlines : scopedTasks;
-    const completed = trackedTaskSource.filter((item) => isTaskComplete(item)).length;
+    const completed = trackedTaskSource
+      .filter((item) => isDashboardTaskComplete(item, req.authUser.role))
+      .length;
     const assigned = scopedTasks.filter((item) => item.fId || item.fIld || item.freelancerId || item.assignedToId || item.assignedTo).length;
     const review = trackedTaskSource.filter((item) => getTaskStatus(item) === 'submitted').length;
 
@@ -2955,8 +2957,8 @@ function getTaskStatus(task) {
   return value;
 }
 
-function isTaskComplete(task) {
-  return getTaskStatus(task) === 'submitted';
+function isDashboardTaskComplete(task, role) {
+  return getTaskStatus(task) === (role === 'Freelancer' ? 'submitted' : 'done');
 }
 
 function getTaskDueTime(task) {

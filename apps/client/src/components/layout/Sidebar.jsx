@@ -4,6 +4,7 @@ import {
   IconAlertTriangle,
   IconUsers,
   IconTasks,
+  IconSettings,
   IconUser,
   IconLogOut
 } from '../common/Icons';
@@ -14,7 +15,7 @@ const NAV_ITEMS = [
   { id: 'deadlines', label: 'Quản lý Deadline', icon: IconTasks },
   { id: 'errors', label: 'Quản lý lỗi', icon: IconAlertTriangle },
   { id: 'pricing', label: 'Giá tiền', icon: IconTasks },
-  { id: 'settings', label: 'Cấu hình chung', icon: IconTasks },
+  { id: 'settings', label: 'Cấu hình chung', icon: IconSettings },
   { id: 'salary', label: 'Lương', icon: IconUsers },
   { id: 'profile', label: 'Hồ sơ cá nhân', icon: IconUser }
 ];

@@ -25,6 +25,13 @@ export const IconUsers = ({ size = 20, className = '' }) => (
   </svg>
 );
 
+export const IconSettings = ({ size = 20, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M12 2.5 14 4l2.5-.5.9 2.4 2.4.9-.5 2.5 1.5 2-1.5 2 .5 2.5-2.4.9-.9 2.4L14 20l-2 1.5L10 20l-2.5.5-.9-2.4-2.4-.9.5-2.5-1.5-2 1.5-2-.5-2.5 2.4-.9.9-2.4L10 4 12 2.5Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
 export const IconBook = ({ size = 20, className = '' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z" />

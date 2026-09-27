@@ -13,6 +13,8 @@ import {
 import { showToast } from '../common/ToastContainer';
 
 const isComplete = (item) => normalizeStatus(item) === 'submitted';
+const isKpiComplete = (item, role) => normalizeStatus(item) === (role === 'Freelancer' ? 'submitted' : 'done');
+const isFinishedForDashboard = (item) => ['submitted', 'checking', 'fixing', 'done'].includes(normalizeStatus(item));
 const isAssigned = (item) => Boolean(item?.fId || item?.fIld || item?.freelancerId || item?.assignedToId || item?.assignedTo);
 const isAssignedToQC = (item) => Boolean(item?.qcId || item?.qcld || item?.qcID || item?.qcName);
 const needsQC = (item) => {
@@ -22,8 +24,7 @@ const needsQC = (item) => {
 const isDoing = (item) => normalizeStatus(item) === 'doing';
 const isUpcoming = (item) => {
   const dueAt = getDueDate(item);
-  const status = normalizeStatus(item);
-  if (!dueAt || status === 'submitted') return false;
+  if (!dueAt || isFinishedForDashboard(item)) return false;
   return getCalendarDateKey(dueAt) === getCalendarDateKey(Date.now());
 };
 
@@ -62,12 +63,16 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
     waiting: Number.isFinite(Number(dashboard.waitingTasks)) ? Number(dashboard.waitingTasks) : tasks.filter((item) => !isAssigned(item)).length,
     assigned: Number.isFinite(Number(dashboard.assignedTasks)) ? Number(dashboard.assignedTasks) : tasks.filter(isAssigned).length,
     review: Number.isFinite(Number(dashboard.reviewTasks)) ? Number(dashboard.reviewTasks) : tasks.filter(needsQC).length,
-    completed: Number.isFinite(Number(dashboard.completedTasks)) ? Number(dashboard.completedTasks) : tasks.filter(isComplete).length
-  }), [dashboard, tasks]);
+    completed: Number.isFinite(Number(dashboard.completedTasks))
+      ? Number(dashboard.completedTasks)
+      : tasks.filter((item) => isKpiComplete(item, currentUser.role)).length
+  }), [currentUser.role, dashboard, tasks]);
   const freelancerMetrics = useMemo(() => ({
     doing: Number.isFinite(Number(dashboard.inProgressTasks)) ? Number(dashboard.inProgressTasks) : freelancerTasks.filter(isDoing).length,
     upcoming: Array.isArray(dashboard.upcomingTasks) ? dashboard.upcomingTasks.length : freelancerTasks.filter(isUpcoming).length,
-    completed: Number.isFinite(Number(dashboard.completedTasks)) ? Number(dashboard.completedTasks) : freelancerTasks.filter(isComplete).length
+    completed: Number.isFinite(Number(dashboard.completedTasks))
+      ? Number(dashboard.completedTasks)
+      : freelancerTasks.filter((item) => isKpiComplete(item, 'Freelancer')).length
   }), [dashboard, freelancerTasks]);
   const upcomingTasks = useMemo(() => {
     if (Array.isArray(dashboard.upcomingTasks)) return dashboard.upcomingTasks;
@@ -253,12 +258,18 @@ function RecentChaptersPanel({ title, chapters, onNavigate, showDeadlineStatus =
 }
 
 function DeadlineStatusBadge({ item, upcoming = false }) {
+  if (!hasTaskStatus(item)) return null;
   const status = upcoming ? getUpcomingTaskStatus(item) : getDashboardDeadlineStatus(item);
+  if (!status) return null;
   return <span className={`data-status ${status.className}`}>{status.label}</span>;
 }
 
+function hasTaskStatus(item) {
+  return String(item?.status ?? '').trim() !== '';
+}
+
 function normalizeStatus(item) {
-  const value = String(item?.status || item?.statusRaw || '').trim().toLowerCase();
+  const value = String(item?.status ?? '').trim().toLowerCase();
   if (value === 'doing' || /đang thực hiện|đang làm/.test(value)) return 'doing';
   if (value === 'submitted' || /đã gửi|chờ qc/.test(value)) return 'submitted';
   if (value === 'done' || /hoàn thành|completed|complete/.test(value)) return 'done';
@@ -274,16 +285,19 @@ function getDueDate(item) {
 
 function isDeadlineOverdue(item) {
   const dueAt = getDueDate(item);
-  return Boolean(dueAt && dueAt.getTime() < Date.now() && !isComplete(item));
+  return Boolean(dueAt && dueAt.getTime() < Date.now() && !isFinishedForDashboard(item));
 }
 
 function getDashboardDeadlineStatus(item) {
-  if (isComplete(item)) return { label: 'Đã hoàn thành', className: 'success' };
+  if (!hasTaskStatus(item)) return null;
+  if (isFinishedForDashboard(item)) return { label: 'Đã hoàn thành', className: 'success' };
   if (isDeadlineOverdue(item)) return { label: 'Đã quá hạn', className: 'overdue' };
   return { label: 'Sắp đến hạn', className: 'pending' };
 }
 
 function getUpcomingTaskStatus(item) {
+  if (!hasTaskStatus(item)) return null;
+  if (isFinishedForDashboard(item)) return { label: 'Đã hoàn thành', className: 'success' };
   if (isDeadlineOverdue(item)) return { label: 'Đã quá hạn', className: 'overdue' };
   const dueAt = getDueDate(item);
   if (!dueAt) return { label: 'Sắp đến hạn', className: 'pending' };

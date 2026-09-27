@@ -1133,6 +1133,28 @@
   font-weight: 700;
 }
 
+.qc-notification-meta {
+  display: flex;
+  min-height: 32px;
+  align-items: flex-end;
+  flex: 0 0 auto;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.qc-notification-time {
+  color: var(--text-sub);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.qc-notification-meta .qc-notification-unread-dot {
+  margin-top: auto;
+}
+
 .qc-notification-unread-dot {
   width: 7px;
   height: 7px;
@@ -3481,6 +3503,20 @@
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(120px, 0.6fr) minmax(160px, 0.8fr) minmax(180px, 1fr);
   gap: 14px 16px;
+}
+
+.error-entry-launcher {
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 20px;
+}
+
+.error-entry-modal {
+  max-width: 1080px;
+}
+
+.error-entry-modal .error-entry-form {
+  padding: 22px 26px 26px;
 }
 
 .error-entry-form .form-group-full {

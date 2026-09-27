@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { IconCheck, IconExternalLink, IconPlus, IconRefresh, IconTrash } from '../common/Icons';
+import { IconCheck, IconExternalLink, IconPlus, IconRefresh, IconTrash, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
 
@@ -127,6 +127,7 @@ export function ErrorManagementView({
   const [draftNotes, setDraftNotes] = useState({});
   const [errorSheetUrls, setErrorSheetUrls] = useState(generalSettings?.errorSheetUrls || {});
   const [newError, setNewError] = useState({ title: '', chapter: '', errorType: '', error: '', note: '', editorFreelancerId: '' });
+  const [isCreatingError, setIsCreatingError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savingRowId, setSavingRowId] = useState(null);
 
@@ -204,6 +205,7 @@ export function ErrorManagementView({
       setLocalErrors((current) => [created, ...current]);
       onCreate?.(created);
       setNewError({ title: '', chapter: '', errorType: '', error: '', note: '', editorFreelancerId: '' });
+      setIsCreatingError(false);
       showToast('Đã nhập lỗi. Bấm Đồng bộ lỗi để đẩy lên Google Sheet.', 'success');
     } catch (error) {
       showToast(error.message || 'Không thể nhập lỗi.', 'error');
@@ -304,18 +306,37 @@ export function ErrorManagementView({
           </section>
 
           {canManage && (
-            <section className="glass-panel error-entry-panel">
-              <div className="section-heading"><div><span className="qc-kicker">NHẬP LỖI</span><h3>Thêm lỗi cho mảng {activeField}</h3></div></div>
-              <form className="error-entry-form" onSubmit={handleCreate}>
-                <div className="form-group"><label className="form-label" htmlFor="error-title">Title</label><input id="error-title" className="form-input" value={newError.title} onChange={(event) => setNewError((current) => ({ ...current, title: event.target.value }))} disabled={isSaving} required /></div>
-                <div className="form-group"><label className="form-label" htmlFor="error-chapter">Chapter</label><input id="error-chapter" className="form-input" value={newError.chapter} onChange={(event) => setNewError((current) => ({ ...current, chapter: event.target.value }))} disabled={isSaving} required /></div>
-                <div className="form-group"><label className="form-label" htmlFor="error-type">Error Type</label><ErrorTypeControl id="error-type" value={newError.errorType} onChange={(value) => setNewError((current) => ({ ...current, errorType: value }))} disabled={isSaving} /></div>
-                <div className="form-group error-entry-editor"><label className="form-label" htmlFor="error-editor">Editor</label><select id="error-editor" className="form-select" value={newError.editorFreelancerId} onChange={(event) => setNewError((current) => ({ ...current, editorFreelancerId: event.target.value }))} disabled={isSaving} required><option value="">Chọn freelancer</option>{editorOptions.map((freelancer) => <option value={getFreelancerId(freelancer)} key={getFreelancerId(freelancer)}>{freelancer.name || freelancer.email}</option>)}</select></div>
-                <div className="form-group form-group-full"><label className="form-label" htmlFor="error-description">Error</label><textarea id="error-description" className="form-textarea" value={newError.error} onChange={(event) => setNewError((current) => ({ ...current, error: event.target.value }))} disabled={isSaving} required /></div>
-                <div className="form-group form-group-full"><label className="form-label" htmlFor="error-note">Note của FL hoặc QC</label><textarea id="error-note" className="form-textarea" value={newError.note} onChange={(event) => setNewError((current) => ({ ...current, note: event.target.value }))} disabled={isSaving} /></div>
-                <div className="error-entry-actions"><button type="submit" className="btn btn-primary" disabled={isSaving}><IconPlus size={16} /> Thêm lỗi</button></div>
-              </form>
+            <section className="glass-panel error-entry-panel error-entry-launcher">
+              <button type="button" className="btn btn-primary" onClick={() => setIsCreatingError(true)} disabled={isSaving}>
+                <IconPlus size={16} /> Thêm lỗi
+              </button>
             </section>
+          )}
+
+          {canManage && isCreatingError && createPortal(
+            <div className="modal-overlay" onClick={() => !isSaving && setIsCreatingError(false)} role="presentation">
+              <form className="modal-content modal-xl error-entry-modal" onSubmit={handleCreate} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="error-entry-modal-title">
+                <div className="modal-header">
+                  <div>
+                    <span className="qc-kicker">NHẬP LỖI</span>
+                    <div className="modal-title" id="error-entry-modal-title">Thêm lỗi cho mảng {activeField}</div>
+                  </div>
+                  <button type="button" className="icon-button" onClick={() => setIsCreatingError(false)} disabled={isSaving} title="Đóng">
+                    <IconX size={18} />
+                  </button>
+                </div>
+                <div className="error-entry-form">
+                  <div className="form-group"><label className="form-label" htmlFor="error-title">Title</label><input id="error-title" className="form-input" value={newError.title} onChange={(event) => setNewError((current) => ({ ...current, title: event.target.value }))} disabled={isSaving} required /></div>
+                  <div className="form-group"><label className="form-label" htmlFor="error-chapter">Chapter</label><input id="error-chapter" className="form-input" value={newError.chapter} onChange={(event) => setNewError((current) => ({ ...current, chapter: event.target.value }))} disabled={isSaving} required /></div>
+                  <div className="form-group"><label className="form-label" htmlFor="error-type">Error Type</label><ErrorTypeControl id="error-type" value={newError.errorType} onChange={(value) => setNewError((current) => ({ ...current, errorType: value }))} disabled={isSaving} /></div>
+                  <div className="form-group error-entry-editor"><label className="form-label" htmlFor="error-editor">Editor</label><select id="error-editor" className="form-select" value={newError.editorFreelancerId} onChange={(event) => setNewError((current) => ({ ...current, editorFreelancerId: event.target.value }))} disabled={isSaving} required><option value="">Chọn freelancer</option>{editorOptions.map((freelancer) => <option value={getFreelancerId(freelancer)} key={getFreelancerId(freelancer)}>{freelancer.name || freelancer.email}</option>)}</select></div>
+                  <div className="form-group form-group-full"><label className="form-label" htmlFor="error-description">Error</label><textarea id="error-description" className="form-textarea" value={newError.error} onChange={(event) => setNewError((current) => ({ ...current, error: event.target.value }))} disabled={isSaving} required /></div>
+                  <div className="form-group form-group-full"><label className="form-label" htmlFor="error-note">Note của FL hoặc QC</label><textarea id="error-note" className="form-textarea" value={newError.note} onChange={(event) => setNewError((current) => ({ ...current, note: event.target.value }))} disabled={isSaving} /></div>
+                  <div className="error-entry-actions"><button type="submit" className="btn btn-primary" disabled={isSaving}><IconPlus size={16} /> Thêm lỗi</button></div>
+                </div>
+              </form>
+            </div>,
+            document.body
           )}
 
           <section className="glass-panel qc-table-panel error-table-panel">

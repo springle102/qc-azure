@@ -90,7 +90,10 @@ export function Header({ currentUser, deadlines = [], errors = [], onNavigate, o
                       <span>{notification.message}</span>
                       <small>{notification.action} <IconChevronRight size={12} /></small>
                     </span>
-                    {!readNotificationIds.includes(notification.id) && <span className="qc-notification-unread-dot" />}
+                    <span className="qc-notification-meta">
+                      <time className="qc-notification-time" dateTime={notification.timestamp}>{formatNotificationTime(notification.timestamp)}</time>
+                      {!readNotificationIds.includes(notification.id) && <span className="qc-notification-unread-dot" />}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -149,12 +152,13 @@ function buildNotifications(deadlines, errors, currentUser) {
           action: 'Bấm để xem feedback',
           tone: 'danger',
           icon: IconAlertTriangle,
+          timestamp: getNotificationTimestamp(deadline, ['updatedAt', 'submittedAt', 'doingStartedAt']),
           view: 'deadlines'
         });
       });
 
     errors
-      .filter((error) => !error.fixCheck)
+      .filter((error) => !error.fixCheck && isErrorAssignedToUser(error, userId, currentUser))
       .forEach((error) => {
         notifications.push({
           id: `error-${error.id}`,
@@ -163,6 +167,7 @@ function buildNotifications(deadlines, errors, currentUser) {
           action: 'Bấm để mở Quản lý lỗi',
           tone: 'danger',
           icon: IconAlertTriangle,
+          timestamp: getNotificationTimestamp(error, ['updatedAt', 'createdAt']),
           view: 'errors'
         });
       });
@@ -177,6 +182,7 @@ function buildNotifications(deadlines, errors, currentUser) {
           action: 'Bấm vào đây để xem',
           tone: 'success',
           icon: IconCheckCircle,
+          timestamp: getNotificationTimestamp(deadline, ['updatedAt', 'statusRawUpdatedAt', 'rawUpdatedAt']),
           view: 'deadlines'
         });
       });
@@ -191,6 +197,7 @@ function buildNotifications(deadlines, errors, currentUser) {
           action: 'Bấm để xem deadline',
           tone: 'warning',
           icon: IconClock,
+          timestamp: getNotificationTimestamp(deadline, ['updatedAt', 'createdAt']),
           view: 'deadlines'
         });
       });
@@ -208,20 +215,7 @@ function buildNotifications(deadlines, errors, currentUser) {
           action: 'Bấm để xem deadline',
           tone: 'info',
           icon: IconClock,
-          view: 'deadlines'
-        });
-      });
-  } else {
-    visibleDeadlines
-      .filter((deadline) => String(deadline.status || '').toLowerCase() === 'submitted')
-      .forEach((deadline) => {
-        notifications.push({
-          id: `submitted-${deadline.seriesId}-${deadline.chapterNumber}`,
-          title: 'Có deadline cần check',
-          message: `${getDeadlineLabel(deadline)} đã được gửi lên, bấm để check lỗi do QC ghi nhận.`,
-          action: 'Bấm để mở danh sách check',
-          tone: 'warning',
-          icon: IconAlertTriangle,
+          timestamp: getNotificationTimestamp(deadline, ['updatedAt', 'createdAt']),
           view: 'deadlines'
         });
       });
@@ -267,4 +261,38 @@ function getCalendarDateKey(value) {
 function getDeadlineLabel(deadline) {
   const name = deadline.seriesName || `Bộ truyện #${deadline.seriesId ?? '—'}`;
   return `${name} · Chapter ${deadline.chapterNumber ?? '—'}`;
+}
+
+function isErrorAssignedToUser(error, userId, currentUser) {
+  const assignedId = error?.editorFreelancerId ?? error?.editorId;
+  if (assignedId !== null && assignedId !== undefined && assignedId !== '' && userId !== null && userId !== undefined && userId !== '') {
+    return String(assignedId) === String(userId);
+  }
+  const assignedName = String(error?.editor || '').trim().toLowerCase();
+  const currentName = String(currentUser?.name || '').trim().toLowerCase();
+  return Boolean(assignedName && currentName && assignedName === currentName);
+}
+
+function getNotificationTimestamp(item, keys = []) {
+  for (const key of keys) {
+    const timestamp = new Date(item?.[key] ?? '').getTime();
+    if (Number.isFinite(timestamp)) return new Date(timestamp).toISOString();
+  }
+  return new Date().toISOString();
+}
+
+function formatNotificationTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  return `${values.hour}:${values.minute} ${values.day}/${values.month}/${values.year}`;
 }
