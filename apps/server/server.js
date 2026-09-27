@@ -1110,6 +1110,7 @@ async function getGeneralSettings() {
 let googleAccessTokenCache = null;
 let googleSheetSyncPromise = null;
 const googleDriveFolderCache = new Map();
+const pendingStatusSheetSyncs = new Map();
 
 function normalizeGoogleSheetUrl(value) {
   const urlText = nullableText(value);
@@ -2217,29 +2218,44 @@ async function deleteDeadlinesFromGoogleSheet(rows) {
   });
 }
 
+function queueStatusSheetSync(row) {
+  const key = `${row.seriesId}:${row.chapterNumber}`;
+  const previous = pendingStatusSheetSyncs.get(key) || Promise.resolve();
+  let current;
+  current = previous
+    .catch(() => undefined)
+    .then(async () => {
+      let lastError;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          return await syncDeadlineWithGoogleSheet(row, { action: 'update', columns: ['status'] });
+        } catch (error) {
+          lastError = error;
+          if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+        }
+      }
+      throw lastError;
+    })
+    .catch((error) => {
+      console.error(`Google Sheet Status sync failed for ${key}:`, error.message);
+      return { skipped: true, error: error.message };
+    })
+    .finally(() => {
+      if (pendingStatusSheetSyncs.get(key) === current) pendingStatusSheetSyncs.delete(key);
+    });
+  pendingStatusSheetSyncs.set(key, current);
+}
+
 async function updateDeadlineAndGoogleSheet(keys, updates, allowedColumns) {
   const currentRows = await selectRows('deadlines');
   const current = currentRows.find((item) => Object.entries(keys).every(([key, value]) => String(item[key]) === String(value)));
   if (!current) throw new Error('Không tìm thấy deadline cần cập nhật.');
   const data = await updateRow('deadlines', keys, updates, allowedColumns);
-  try {
-    // Web edits are database-only except for Status. When Status changes,
-    // update that exact existing Sheet cell and never append or rewrite a row.
-    if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
-      await syncDeadlineWithGoogleSheet(data, { action: 'update', columns: ['status'] });
-    }
-    return data;
-  } catch (error) {
-    const rollback = Object.fromEntries(allowedColumns
-      .filter((column) => Object.prototype.hasOwnProperty.call(current, column))
-      .map((column) => [column, current[column]]));
-    try {
-      await updateRow('deadlines', keys, rollback, allowedColumns);
-    } catch (rollbackError) {
-      throw new Error(`${error.message} Không thể khôi phục dữ liệu web sau lỗi đồng bộ: ${rollbackError.message}`);
-    }
-    throw new Error(`${error.message} Dữ liệu web đã được khôi phục để giữ hai bên nhất quán.`);
-  }
+  // Return the web/database result immediately. Only Status is sent to the
+  // existing matching Sheet row, and that Google API call runs in the
+  // background so it cannot delay the user's status change.
+  if (Object.prototype.hasOwnProperty.call(updates, 'status')) queueStatusSheetSync(data);
+  return data;
 }
 
 async function insertDeadlineAndGoogleSheet(payload, allowedColumns) {

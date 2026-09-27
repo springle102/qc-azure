@@ -73,6 +73,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
   const [isSaving, setIsSaving] = useState(false);
   const [rawStatusUpdatingKey, setRawStatusUpdatingKey] = useState('');
   const [taskStatusUpdatingKey, setTaskStatusUpdatingKey] = useState('');
+  const [statusOverrides, setStatusOverrides] = useState({});
   const [paymentUpdatingKey, setPaymentUpdatingKey] = useState('');
   const [paymentOverrides, setPaymentOverrides] = useState({});
   const [lateUpdatingKey, setLateUpdatingKey] = useState('');
@@ -218,12 +219,28 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
 
   const updateTaskStatus = async (deadline, status) => {
     const rowKey = String(deadline.seriesId) + '-' + String(deadline.chapterNumber);
+    const previousStatus = getStatusDisplayValue(deadline, statusOverrides);
+    setStatusOverrides((current) => ({ ...current, [rowKey]: status }));
+    // Update the shared table immediately; the server response will fill in
+    // timestamps/duration, while a failed request rolls this status back.
+    onUpdate?.({ ...deadline, status });
     setTaskStatusUpdatingKey(rowKey);
     try {
       const updatedDeadline = await api.updateDeadlineStatus(deadline.seriesId, deadline.chapterNumber, status);
       onUpdate?.(updatedDeadline);
+      setStatusOverrides((current) => {
+        const next = { ...current };
+        delete next[rowKey];
+        return next;
+      });
       showToast('Đã cập nhật status và thời gian làm task.', 'success');
     } catch (error) {
+      onUpdate?.({ ...deadline, status: previousStatus });
+      setStatusOverrides((current) => {
+        const next = { ...current };
+        delete next[rowKey];
+        return next;
+      });
       showToast(error.message || 'Không thể cập nhật status.', 'error');
     } finally {
       setTaskStatusUpdatingKey('');
@@ -400,8 +417,8 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
                       ) : key === 'status' ? (
                         <div className="task-status-cell">
                           <TaskStatusControl
-                            value={item.status}
-                            options={getVisibleStatusOptions(item.status, readOnly)}
+                            value={getStatusDisplayValue(item, statusOverrides)}
+                            options={getVisibleStatusOptions(getStatusDisplayValue(item, statusOverrides), readOnly)}
                             disabled={(readOnly && !['doing', 'submitted'].includes(String(item.status || '').toLowerCase())) || taskStatusUpdatingKey === String(item.seriesId) + '-' + String(item.chapterNumber)}
                             onChange={(status) => updateTaskStatus(item, status)}
                           />
@@ -735,6 +752,13 @@ function formatMoney(value) {
 
 function getStatusOption(value) {
   return STATUS_OPTIONS.find((option) => option.value === String(value || '').toLowerCase());
+}
+
+function getStatusDisplayValue(item, overrides = {}) {
+  const rowKey = String(item?.seriesId) + '-' + String(item?.chapterNumber);
+  return Object.prototype.hasOwnProperty.call(overrides, rowKey)
+    ? overrides[rowKey]
+    : item?.status;
 }
 
 function getVisibleStatusOptions(value, readOnly) {
