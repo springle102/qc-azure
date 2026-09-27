@@ -43,9 +43,9 @@ export function LoginView({ onLogin }) {
     <div className="auth-screen">
       <div className="auth-card glass-panel">
         <div className="auth-brand">
-          <div className="qc-sidebar-mark">Q</div>
+          <div className="qc-sidebar-mark"><img src="/favicon.svg" alt="" aria-hidden="true" /></div>
           <div>
-            <strong>QC WEBTOON</strong>
+            <strong>Azure System</strong>
             <span>DEADLINE MANAGEMENT</span>
           </div>
         </div>

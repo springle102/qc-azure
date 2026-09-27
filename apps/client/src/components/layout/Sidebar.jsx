@@ -31,9 +31,9 @@ export function Sidebar({ currentView, onNavigate, currentUser, role = 'QC', onO
   return (
     <aside className={`app-sidebar ${isOpen ? 'open' : ''}`}>
       <div className="qc-sidebar-brand">
-        <div className="qc-sidebar-mark">Q</div>
+        <div className="qc-sidebar-mark"><img src="/favicon.svg" alt="" aria-hidden="true" /></div>
         <div>
-          <strong>QC WEBTOON</strong>
+          <strong>Azure System</strong>
           <span>DEADLINE MANAGEMENT</span>
         </div>
       </div>

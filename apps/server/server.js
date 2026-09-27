@@ -373,7 +373,33 @@ app.delete('/api/accounts/:id', requireAdmin, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Phải giữ lại ít nhất một account Admin.' });
     }
 
+    const linkedFreelancerId = ['Freelancer', 'QC'].includes(current.role)
+      ? current.freelancerId
+      : null;
+    const hasAnotherAccountForFreelancer = linkedFreelancerId !== null
+      && linkedFreelancerId !== undefined
+      && linkedFreelancerId !== ''
+      && accounts.some((account) => (
+        Number(account.id) !== id
+        && String(account.freelancerId ?? '') === String(linkedFreelancerId)
+      ));
+    const linkedFreelancers = linkedFreelancerId === null || linkedFreelancerId === undefined || linkedFreelancerId === ''
+      ? []
+      : await getCollection('freelancers');
+    const linkedFreelancer = linkedFreelancers.find((freelancer) => (
+      String(freelancer.fIld ?? freelancer.fId ?? freelancer.id ?? '') === String(linkedFreelancerId)
+    ));
+    const freelancerDeleteKey = linkedFreelancer?.fIld !== undefined
+      ? { fIld: linkedFreelancer.fIld }
+      : linkedFreelancer?.fId !== undefined
+        ? { fId: linkedFreelancer.fId }
+        : linkedFreelancer?.id !== undefined
+          ? { id: linkedFreelancer.id }
+          : null;
     const data = await deleteRowById('accounts', id);
+    if (!hasAnotherAccountForFreelancer && freelancerDeleteKey) {
+      await deleteRowsByKeys('freelancers', freelancerDeleteKey);
+    }
     invalidateAccountSessions(id);
     res.json({ success: true, data: toPublicAccount(data, await getCollection('freelancers')) });
   } catch (error) {

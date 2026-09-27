@@ -46,6 +46,9 @@ const EDITABLE_FIELDS = EDIT_FIELDS.filter(([, , , readOnly]) => !readOnly).map(
 const CREATE_FIELDS = EDIT_FIELDS.filter(([key]) => !['price', 'receivePrice'].includes(key)).map(([key]) => key);
 const NUMERIC_FIELDS = new Set(['fIld', 'qcId', 'price', 'receivePrice', 'completionPercent']);
 const DATE_FIELDS = new Set(['endTask']);
+const MONTH_FILTER_COLUMNS = new Set(['endTask', 'submittedAt']);
+const STRING_SORT_COLUMNS = new Set(['seriesName', 'type', 'urlSeries', 'difficulty', 'feedback']);
+const NUMBER_SORT_COLUMNS = new Set(['seriesId', 'chapterNumber', 'fIld', 'qcId', 'completionPercent', 'price', 'receivePrice']);
 const FIELD_OPTIONS = ['Latin', 'Japan', 'QC'];
 const STATUS_OPTIONS = [
   { value: 'doing', label: 'Doing', className: 'task-status-doing' },
@@ -67,6 +70,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
   const [rawStatusUpdatingKey, setRawStatusUpdatingKey] = useState('');
   const [taskStatusUpdatingKey, setTaskStatusUpdatingKey] = useState('');
   const [columnFilters, setColumnFilters] = useState({});
+  const [columnSort, setColumnSort] = useState(null);
   const fieldOptions = useMemo(() => fields.length > 0 ? fields.map((field) => field.name || field).filter(Boolean) : FIELD_OPTIONS, [fields]);
   const visibleColumns = useMemo(() => readOnly ? columns.filter(([key]) => key !== 'edit') : columns, [readOnly]);
 
@@ -81,13 +85,14 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
   const columnFilterOptions = useMemo(() => Object.fromEntries(
     visibleColumns
       .filter(([key]) => key !== 'edit')
-      .map(([key]) => [key, uniqueFilterValues(deadlines.map((item) => getFilterValue(item, key))).sort((left, right) => left.localeCompare(right, 'vi', { numeric: true }))])
+      .map(([key]) => [key, uniqueFilterValues(deadlines.map((item) => getColumnFilterValue(item, key))).sort((left, right) => left.localeCompare(right, 'vi', { numeric: true }))])
   ), [deadlines, visibleColumns]);
 
-  const filteredDeadlines = useMemo(() => deadlines.filter((item) => {
+  const filteredDeadlines = useMemo(() => {
+    const filtered = deadlines.filter((item) => {
     const text = Object.values(item).join(' ').toLowerCase();
     const matchesColumnFilters = Object.entries(columnFilters).every(([key, selectedValues]) => (
-      selectedValues.includes(getFilterValue(item, key))
+      selectedValues.includes(getColumnFilterValue(item, key))
     ));
     return (!field || String(item.type || '') === field)
       && (!seriesId || String(item.seriesId || '') === seriesId)
@@ -95,7 +100,12 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
       && (!qc || String(item.qcId ?? '') === qc)
       && (!search.trim() || text.includes(search.trim().toLowerCase()))
       && matchesColumnFilters;
-  }), [columnFilters, deadlines, field, freelancer, qc, search, seriesId]);
+    });
+    if (!columnSort) return filtered;
+    const sortKind = getColumnSortKind(columnSort.key);
+    if (!sortKind) return filtered;
+    return [...filtered].sort((left, right) => compareColumnValues(left, right, columnSort.key, sortKind, columnSort.direction));
+  }, [columnFilters, columnSort, deadlines, field, freelancer, qc, search, seriesId]);
 
   const updateColumnFilter = (key, selectedValues) => {
     setColumnFilters((current) => {
@@ -104,6 +114,10 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
       else next[key] = selectedValues;
       return next;
     });
+  };
+
+  const updateColumnSort = (key, direction) => {
+    setColumnSort(direction ? { key, direction } : null);
   };
 
   const openCreate = () => {
@@ -251,7 +265,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
             <thead>
               <tr>
                 {visibleColumns.map(([key, label]) => (
-                  <th key={label}>
+                  <th key={label} className={`deadline-column deadline-column-${key}`}>
                     <div className="deadline-column-header">
                       <span>{label}</span>
                       {key !== 'edit' && <ColumnFilterButton
@@ -259,7 +273,10 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
                         label={label}
                         values={columnFilterOptions[key] || []}
                         activeValues={columnFilters[key]}
+                        sortKind={getColumnSortKind(key)}
+                        activeSortDirection={columnSort?.key === key ? columnSort.direction : null}
                         onApply={(selectedValues) => updateColumnFilter(key, selectedValues)}
+                        onSort={(direction) => updateColumnSort(key, direction)}
                       />}
                     </div>
                   </th>
@@ -272,7 +289,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
               ) : filteredDeadlines.map((item, index) => (
                 <tr key={`${item.seriesId || 'series'}-${item.chapterNumber || index}`}>
                   {visibleColumns.map(([key]) => (
-                    <td key={key}>
+                    <td key={key} className={`deadline-column deadline-column-${key}`}>
                       {key === 'edit' ? (
                         <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(item)}>
                           <IconEdit size={14} /> Chỉnh sửa
@@ -343,19 +360,56 @@ function uniqueFilterValues(values) {
   return [...new Set(values.map((value) => String(value ?? '')))];
 }
 
-function getFilterValue(item, key) {
+function getColumnFilterValue(item, key) {
   const value = key === 'fIld' ? (item.fIld ?? item.fId) : item[key];
+  if (MONTH_FILTER_COLUMNS.has(key)) return getMonthFilterValue(value);
   return value === null || value === undefined ? '' : String(value);
+}
+
+function getMonthFilterValue(value) {
+  const text = String(value ?? '').trim();
+  const isoMonth = text.match(/^(\d{4})-(\d{2})/);
+  if (isoMonth) return `${isoMonth[1]}-${isoMonth[2]}`;
+  if (!text) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function formatFilterValue(value, key) {
   if (value === '') return '(Trống)';
-  if (key === 'endTask') return formatDateOnly(value);
-  if (key === 'submittedAt') return formatDateTime(value);
+  if (MONTH_FILTER_COLUMNS.has(key)) {
+    const [year, month] = value.split('-');
+    return year && month ? `Tháng ${Number(month)}/${year}` : value;
+  }
   return value;
 }
 
-function ColumnFilterButton({ columnKey, label, values, activeValues, onApply }) {
+function getColumnSortKind(key) {
+  if (STRING_SORT_COLUMNS.has(key)) return 'string';
+  if (NUMBER_SORT_COLUMNS.has(key)) return 'number';
+  return null;
+}
+
+function compareColumnValues(left, right, key, sortKind, direction) {
+  const leftValue = key === 'fIld' ? (left.fIld ?? left.fId) : left[key];
+  const rightValue = key === 'fIld' ? (right.fIld ?? right.fId) : right[key];
+  let comparison = 0;
+  if (sortKind === 'number') {
+    const leftNumber = Number(leftValue);
+    const rightNumber = Number(rightValue);
+    const leftMissing = leftValue === null || leftValue === undefined || String(leftValue).trim() === '' || !Number.isFinite(leftNumber);
+    const rightMissing = rightValue === null || rightValue === undefined || String(rightValue).trim() === '' || !Number.isFinite(rightNumber);
+    if (leftMissing && !rightMissing) comparison = 1;
+    else if (!leftMissing && rightMissing) comparison = -1;
+    else comparison = (leftNumber || 0) - (rightNumber || 0);
+  } else {
+    comparison = String(leftValue ?? '').localeCompare(String(rightValue ?? ''), 'vi', { numeric: true, sensitivity: 'base' });
+  }
+  return direction === 'desc' ? -comparison : comparison;
+}
+
+function ColumnFilterButton({ columnKey, label, values, activeValues, sortKind, activeSortDirection, onApply, onSort }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchValue, setSearchValue] = useState('');
   const [draftValues, setDraftValues] = useState([]);
@@ -426,6 +480,11 @@ function ColumnFilterButton({ columnKey, label, values, activeValues, onApply })
     setIsOpen(false);
   };
 
+  const applySort = (direction) => {
+    onSort(activeSortDirection === direction ? null : direction);
+    setIsOpen(false);
+  };
+
   return (
     <>
       <button
@@ -442,6 +501,17 @@ function ColumnFilterButton({ columnKey, label, values, activeValues, onApply })
       {isOpen && menuPosition && createPortal(
         <div ref={menuRef} className="column-filter-menu" style={menuPosition} onClick={(event) => event.stopPropagation()}>
           <div className="column-filter-menu-title">Lọc {label}</div>
+          {sortKind && (
+            <div className="column-filter-sort">
+              <div className="column-filter-section-label">Sắp xếp</div>
+              <button type="button" className={'column-filter-sort-button' + (activeSortDirection === 'asc' ? ' active' : '')} onClick={() => applySort('asc')}>
+                {sortKind === 'string' ? 'A → Z' : 'Nhỏ → lớn'}
+              </button>
+              <button type="button" className={'column-filter-sort-button' + (activeSortDirection === 'desc' ? ' active' : '')} onClick={() => applySort('desc')}>
+                {sortKind === 'string' ? 'Z → A' : 'Lớn → nhỏ'}
+              </button>
+            </div>
+          )}
           <input
             className="form-input column-filter-search"
             value={searchValue}

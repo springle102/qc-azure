@@ -44,7 +44,7 @@ export function Header({ currentUser, deadlines = [], onNavigate, onOpenProfile,
         </button>
         <div>
           <div className="qc-header-eyebrow">HỆ THỐNG QUẢN LÝ DEADLINE WEBTOON</div>
-          <h1 className="qc-header-title">{currentUser?.role === 'Freelancer' ? 'Không gian làm việc Freelancer' : 'Không gian làm việc QC'}</h1>
+          <h1 className="qc-header-title">Workspace</h1>
         </div>
       </div>
 

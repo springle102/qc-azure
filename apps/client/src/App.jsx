@@ -274,7 +274,7 @@ export function App() {
     return (
       <div className="auth-screen">
         <div className="auth-card glass-panel">
-          <div className="auth-brand"><div className="qc-sidebar-mark">Q</div><div><strong>QC WEBTOON</strong><span>DEADLINE MANAGEMENT</span></div></div>
+          <div className="auth-brand"><div className="qc-sidebar-mark"><img src="/favicon.svg" alt="" aria-hidden="true" /></div><div><strong>Azure System</strong><span>DEADLINE MANAGEMENT</span></div></div>
           <p className="page-subtitle">Đang kiểm tra phiên đăng nhập...</p>
         </div>
       </div>

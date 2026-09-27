@@ -96,7 +96,7 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
       <div className="page-header-row qc-page-heading">
         <div>
           <span className="qc-kicker">TỔNG QUAN</span>
-          <h2 className="page-title">{isFreelancer ? 'Dashboard Freelancer' : 'Dashboard QC'}</h2>
+          <h2 className="page-title">Dashboard</h2>
           <p className="page-subtitle">{isFreelancer ? 'Theo dõi deadline và lương của riêng bạn.' : 'Theo dõi deadline, chapter và chất lượng công việc.'}</p>
         </div>
         <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading}>
