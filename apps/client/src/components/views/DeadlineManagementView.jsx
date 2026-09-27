@@ -317,7 +317,9 @@ function renderValue(value, key, field, difficultyLevels, freelancers, qcs, item
     );
   }
   if (value === null || value === undefined || value === '') return '—';
-  if (key === 'urlSeries' && String(value).startsWith('http')) return <a className="table-link" href={value} target="_blank" rel="noreferrer">Mở link</a>;
+  if (key === 'urlSeries') return /^https?:\/\//i.test(String(value))
+    ? <a className="table-link" href={value} target="_blank" rel="noreferrer">Mở link</a>
+    : '—';
   if (key === 'endTask') return formatDateTime(value);
   if (key === 'completionPercent') return <span className="completion-badge">{value}%</span>;
   if (key === 'fIld') return findPersonName(value, freelancers);

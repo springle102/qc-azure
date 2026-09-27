@@ -1145,7 +1145,7 @@ function googleDriveLookupKey(field, seriesId) {
 
 async function enrichRowsWithGoogleDriveLinks(rows, lookupRows = rows, googleDriveFolders = {}) {
   const lookups = [...new Map(lookupRows
-    .filter(({ data }) => !String(data.urlSeries ?? '').trim())
+    .filter(({ data }) => !isHttpUrl(data.urlSeries))
     .map(({ data }) => {
       const field = String(data.type ?? '').trim();
       const seriesId = String(data.seriesId ?? '').trim();
@@ -1167,7 +1167,7 @@ async function enrichRowsWithGoogleDriveLinks(rows, lookupRows = rows, googleDri
   const urlsByLookupKey = new Map(lookupResults.map(({ key, field, seriesId, url }) => [key || googleDriveLookupKey(field, seriesId), url]));
   let linked = 0;
   const enrichedRows = rows.map((entry) => {
-    if (String(entry.data.urlSeries ?? '').trim()) return entry;
+    if (isHttpUrl(entry.data.urlSeries)) return entry;
     const driveUrl = urlsByLookupKey.get(googleDriveLookupKey(entry.data.type, entry.data.seriesId));
     if (!driveUrl) return entry;
     linked += 1;
@@ -1179,11 +1179,13 @@ async function enrichRowsWithGoogleDriveLinks(rows, lookupRows = rows, googleDri
 
 async function enrichStoredDeadlineUrls(deadlines, googleDriveFolders = {}) {
   try {
-    const entries = deadlines.map((data) => ({ data }));
+    const entries = deadlines.map((data) => ({
+      data: { ...data, urlSeries: normalizeUrlSeries(data.urlSeries) }
+    }));
     const result = await enrichRowsWithGoogleDriveLinks(entries, entries, googleDriveFolders);
     const linkedEntries = result.rows.filter(({ data }, index) => {
       const previousUrl = deadlines[index]?.urlSeries;
-      return !String(previousUrl ?? '').trim() && String(data.urlSeries ?? '').trim();
+      return !isHttpUrl(previousUrl) && isHttpUrl(data.urlSeries);
     });
 
     await runWithConcurrency(linkedEntries, async ({ data }) => {
@@ -1198,6 +1200,22 @@ async function enrichStoredDeadlineUrls(deadlines, googleDriveFolders = {}) {
         // A failed automatic URL write must not prevent the deadline table
         // from loading. The link can be retried on the next refresh.
         console.error(`Could not save Drive URL for ${data.seriesId}:`, error.message);
+      }
+    });
+
+    const invalidEntries = result.rows.filter(({ data }, index) => (
+      !isHttpUrl(deadlines[index]?.urlSeries) && !data.urlSeries
+    ));
+    await runWithConcurrency(invalidEntries, async ({ data }) => {
+      try {
+        await updateRow(
+          'deadlines',
+          { seriesId: data.seriesId, chapterNumber: data.chapterNumber },
+          { urlSeries: null },
+          ['urlSeries']
+        );
+      } catch (error) {
+        console.error(`Could not clear invalid URL for ${data.seriesId}:`, error.message);
       }
     });
 
@@ -1300,7 +1318,7 @@ const googleSheetHeaderAliases = {
   submittedAt: ['submittedat', 'submittedon', 'ngaynop', 'ngaynopbai', 'datesubmitted'],
   statusRaw: ['statusraw', 'rawstatus', 'trangthairaw', 'trangthai'],
   status: ['status', 'taskstatus', 'trangthaicodinh'],
-  urlSeries: ['urlseries', 'seriesurl', 'url', 'link', 'linktruyen', 'file'],
+  urlSeries: ['urlseries', 'seriesurl', 'url', 'link', 'linktruyen'],
   fIld: ['fild', 'freelancerid', 'freelancer', 'freelancername', 'nguoiduocgiao'],
   qcId: ['qcid', 'qc', 'qcname', 'nguoiqc', 'qcincharge'],
   difficulty: ['difficulty', 'level', 'dokho', 'mucdo'],
@@ -1460,7 +1478,7 @@ function buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qc
     type,
     statusRaw: nullableText(rawStatus) || 'Đang thực hiện',
     status,
-    urlSeries: nullableText(getSheetValue(row, headerIndex, 'urlSeries')),
+    urlSeries: normalizeUrlSeries(getSheetValue(row, headerIndex, 'urlSeries')),
     fIld,
     qcId,
     difficulty,
@@ -1546,14 +1564,14 @@ async function syncGoogleSheet() {
     // still has an empty URL column. New rows without a URL are enriched from
     // a matching Google Drive folder named after their series ID.
     const rowsWithPreservedUrls = uniqueRows.map((entry) => {
-      if (String(entry.data.urlSeries ?? '').trim()) return entry;
+      if (isHttpUrl(entry.data.urlSeries)) return entry;
       const key = `${Number(entry.data.seriesId)}:${Number(entry.data.chapterNumber)}`;
       const currentUrl = currentRowsByKey.get(key)?.urlSeries;
-      return String(currentUrl ?? '').trim()
+      return isHttpUrl(currentUrl)
         ? { ...entry, data: { ...entry.data, urlSeries: currentUrl } }
         : entry;
     });
-    const rowsMissingUrls = rowsWithPreservedUrls.filter((entry) => !String(entry.data.urlSeries ?? '').trim());
+    const rowsMissingUrls = rowsWithPreservedUrls.filter((entry) => !isHttpUrl(entry.data.urlSeries));
     const driveLinkResult = await enrichRowsWithGoogleDriveLinks(rowsWithPreservedUrls, rowsMissingUrls, settings.googleDriveFolders);
     uniqueRows = driveLinkResult.rows;
     const writeResults = await runWithConcurrency(uniqueRows, async ({ data: row }) => {
@@ -1876,6 +1894,15 @@ function validateDeadlineCreatePayload(payload) {
 function nullableText(value) {
   const text = String(value ?? '').trim();
   return text || null;
+}
+
+function isHttpUrl(value) {
+  return /^https?:\/\//i.test(String(value ?? '').trim());
+}
+
+function normalizeUrlSeries(value) {
+  const text = String(value ?? '').trim();
+  return isHttpUrl(text) ? text : null;
 }
 
 function nullableInteger(value, label) {
