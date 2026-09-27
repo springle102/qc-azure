@@ -27,7 +27,7 @@ const columns = [
 const EDIT_FIELDS = [
   ['seriesId', 'ID bộ truyện', 'number', true],
   ['chapterNumber', 'Chapter', 'number', true],
-  ['endTask', 'Hạn DL', 'datetime-local'],
+  ['endTask', 'Hạn DL', 'date'],
   ['seriesName', 'Tên bộ truyện', 'text'],
   ['type', 'Mảng', 'field-select'],
   ['statusRaw', 'Trạng thái raw', 'checkbox'],
@@ -45,7 +45,7 @@ const EDIT_FIELDS = [
 const EDITABLE_FIELDS = EDIT_FIELDS.filter(([, , , readOnly]) => !readOnly).map(([key]) => key);
 const CREATE_FIELDS = EDIT_FIELDS.filter(([key]) => !['price', 'receivePrice'].includes(key)).map(([key]) => key);
 const NUMERIC_FIELDS = new Set(['fIld', 'qcId', 'price', 'receivePrice', 'completionPercent']);
-const DATE_TIME_FIELDS = new Set(['endTask']);
+const DATE_FIELDS = new Set(['endTask']);
 const FIELD_OPTIONS = ['Latin', 'Japan', 'QC'];
 const STATUS_OPTIONS = [
   { value: 'doing', label: 'Doing', className: 'task-status-doing' },
@@ -320,7 +320,7 @@ function renderValue(value, key, field, difficultyLevels, freelancers, qcs, item
   if (key === 'urlSeries') return /^https?:\/\//i.test(String(value))
     ? <a className="table-link" href={value} target="_blank" rel="noreferrer">Mở link</a>
     : '—';
-  if (key === 'endTask') return formatDateTime(value);
+  if (key === 'endTask') return formatDateOnly(value);
   if (key === 'completionPercent') return <span className="completion-badge">{value}%</span>;
   if (key === 'fIld') return findPersonName(value, freelancers);
   if (key === 'qcId') return findPersonName(value, qcs);
@@ -528,7 +528,7 @@ function createEditState(deadline, difficultyPrices) {
   return {
     seriesId: deadline.seriesId ?? '',
     chapterNumber: deadline.chapterNumber ?? '',
-    endTask: toDateTimeInput(deadline.endTask),
+    endTask: toDateInput(deadline.endTask),
     seriesName: deadline.seriesName ?? '',
     type: deadline.type ?? '',
     statusRaw: deadline.statusRaw ?? '',
@@ -546,22 +546,28 @@ function createEditState(deadline, difficultyPrices) {
 
 function toApiValue(key, value) {
   if (value === '') return null;
-  if (DATE_TIME_FIELDS.has(key)) return new Date(value).toISOString();
+  if (DATE_FIELDS.has(key)) return value;
   if (NUMERIC_FIELDS.has(key)) return Number(value);
   return value;
 }
 
-function toDateTimeInput(value) {
+function toDateInput(value) {
   if (!value) return '';
+  const text = String(value).trim();
+  const isoDate = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoDate) return isoDate[1];
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   const pad = (number) => String(number).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-function formatDateTime(value) {
+function formatDateOnly(value) {
+  const text = String(value ?? '').trim();
+  const isoDate = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoDate) return `${isoDate[3]}/${isoDate[2]}/${isoDate[1]}`;
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('vi-VN');
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString('vi-VN');
 }
 
 function formatDuration(seconds) {

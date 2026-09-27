@@ -517,6 +517,9 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber', requireManager, async (req,
     if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy deadline cần cập nhật.' });
 
     const updates = { ...(req.body || {}) };
+    if (Object.prototype.hasOwnProperty.call(updates, 'endTask')) {
+      updates.endTask = normalizeDeadlineDate(updates.endTask, 'Hạn DL');
+    }
     if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
       updates.status = validateTaskStatus(updates.status);
       Object.assign(updates, buildStatusTransition(current, updates.status));
@@ -1097,35 +1100,45 @@ function escapeGoogleDriveQueryValue(value) {
   return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
-async function findGoogleDriveFolder(folderName, parentId = '') {
+async function findGoogleDriveFolders(folderName, parentId = '') {
   const normalizedFolderName = String(folderName ?? '').trim();
   const normalizedParentId = String(parentId ?? '').trim();
-  if (!normalizedFolderName) return null;
+  if (!normalizedFolderName) return [];
 
-  const cacheKey = `${normalizedParentId || 'root'}::${normalizedFolderName}`;
+  const cacheKey = `folders::${normalizedParentId || 'root'}::${normalizedFolderName}`;
   const now = Date.now();
   const cached = googleDriveFolderCache.get(cacheKey);
-  if (cached && now - cached.checkedAt < GOOGLE_DRIVE_FOLDER_CACHE_TTL_MS) return cached.folder;
+  if (cached && now - cached.checkedAt < GOOGLE_DRIVE_FOLDER_CACHE_TTL_MS) return cached.folders;
 
   const parentFilter = normalizedParentId
     ? ` and '${escapeGoogleDriveQueryValue(normalizedParentId)}' in parents`
     : '';
-  const query = new URLSearchParams({
+  const queryParams = {
     q: `name = '${escapeGoogleDriveQueryValue(normalizedFolderName)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false${parentFilter}`,
     spaces: 'drive',
     corpora: 'allDrives',
     includeItemsFromAllDrives: 'true',
     supportsAllDrives: 'true',
-    pageSize: '10',
-    fields: 'files(id,name,webViewLink,driveId,parents)'
-  });
-  const payload = await googleDriveRequest(`files?${query.toString()}`);
-  const folders = payload.files || [];
-  const folder = normalizedParentId
-    ? (folders[0] || null)
-    : (folders.find((candidate) => candidate.driveId && candidate.parents?.includes(candidate.driveId)) || folders[0] || null);
-  googleDriveFolderCache.set(cacheKey, { checkedAt: now, folder });
-  return folder;
+    pageSize: '100',
+    fields: 'nextPageToken,files(id,name,webViewLink,driveId,parents)'
+  };
+  const folders = [];
+  let pageToken = '';
+  do {
+    const query = new URLSearchParams({ ...queryParams, ...(pageToken ? { pageToken } : {}) });
+    const payload = await googleDriveRequest(`files?${query.toString()}`);
+    folders.push(...(payload.files || []));
+    pageToken = payload.nextPageToken || '';
+  } while (pageToken);
+  googleDriveFolderCache.set(cacheKey, { checkedAt: now, folders });
+  return folders;
+}
+
+async function findGoogleDriveFolder(folderName, parentId = '') {
+  const folders = await findGoogleDriveFolders(folderName, parentId);
+  if (!folders?.length) return null;
+  if (parentId) return folders[0];
+  return folders.find((candidate) => candidate.driveId && candidate.parents?.includes(candidate.driveId)) || folders[0];
 }
 
 async function findGoogleDriveFolderUrl(seriesId, field, googleDriveFolders = {}) {
@@ -1140,10 +1153,23 @@ async function findGoogleDriveFolderUrl(seriesId, field, googleDriveFolders = {}
   const cached = googleDriveFolderCache.get(cacheKey);
   if (cached && now - cached.checkedAt < GOOGLE_DRIVE_FOLDER_CACHE_TTL_MS) return cached.url;
 
-  const rootFolder = rootFolderName ? await findGoogleDriveFolder(rootFolderName) : null;
-  const folder = rootFolderName
-    ? (rootFolder ? await findGoogleDriveFolder(seriesFolderName, rootFolder.id) : null)
-    : await findGoogleDriveFolder(seriesFolderName);
+  let folder = null;
+  if (rootFolderName) {
+    const rootFolders = await findGoogleDriveFolders(rootFolderName);
+    const prioritizedRoots = [...(rootFolders || [])].sort((left, right) => {
+      const leftIsSharedDriveRoot = left.driveId && left.parents?.includes(left.driveId) ? 1 : 0;
+      const rightIsSharedDriveRoot = right.driveId && right.parents?.includes(right.driveId) ? 1 : 0;
+      return rightIsSharedDriveRoot - leftIsSharedDriveRoot;
+    });
+    // Folder names are not globally unique. Try every configured root with
+    // this name and keep the one that actually contains the requested ID.
+    for (const rootCandidate of prioritizedRoots) {
+      folder = await findGoogleDriveFolder(seriesFolderName, rootCandidate.id);
+      if (folder) break;
+    }
+  } else {
+    folder = await findGoogleDriveFolder(seriesFolderName);
+  }
   const url = folder?.webViewLink || (folder?.id ? `https://drive.google.com/drive/folders/${folder.id}` : '');
   googleDriveFolderCache.set(cacheKey, { checkedAt: now, url });
   return url;
