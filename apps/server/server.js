@@ -602,7 +602,7 @@ app.post('/api/deadlines', requireManager, async (req, res) => {
     payload.receivePrice = calculateReceivePrice(payload.price, payload.completionPercent);
     const data = await insertDeadlineAndGoogleSheet(
       payload,
-      ['seriesId', 'chapterNumber', 'endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'completionPercent']
+      ['seriesId', 'chapterNumber', 'endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'completionPercent']
     );
     res.status(201).json({ success: true, data: decorateDeadlineTiming(data) });
   } catch (error) {
@@ -663,6 +663,9 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber', requireManager, async (req,
     if (Object.prototype.hasOwnProperty.call(updates, 'paymentApproved') && typeof updates.paymentApproved !== 'boolean') {
       return res.status(400).json({ success: false, message: 'Trạng thái Thanh toán phải là true hoặc false.' });
     }
+    if (Object.prototype.hasOwnProperty.call(updates, 'late')) {
+      updates.late = normalizeLateValue(updates.late, { strict: true });
+    }
     const needsReprice = Object.prototype.hasOwnProperty.call(updates, 'difficulty')
       || Object.prototype.hasOwnProperty.call(updates, 'type');
     const nextField = updates.type ?? current.type;
@@ -700,7 +703,7 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber', requireManager, async (req,
     const data = await updateDeadlineAndGoogleSheet(
       { seriesId, chapterNumber },
       updates,
-      ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'paymentApproved', 'completionPercent']
+      ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'paymentApproved', 'completionPercent']
     );
     res.json({ success: true, data: decorateDeadlineTiming(data) });
   } catch (error) {
@@ -1665,6 +1668,7 @@ const googleSheetHeaderAliases = {
   difficulty: ['difficulty', 'level', 'dokho', 'mucdo'],
   price: ['price', 'priceperchapter', 'dongia', 'rate'],
   feedback: ['feedback', 'note', 'ghichu', 'phanhoi'],
+  late: ['late', 'latetime', 'delay', 'tre', 'quahan', 'muclate'],
   completionPercent: ['completionpercent', 'percent', 'progress', 'phantramhoanthanh', 'hoanthanh', '100'],
   paymentApproved: ['paymentapproved', 'payment', 'thanhtoan', 'duoc thanhtoan', 'paid']
 };
@@ -1818,6 +1822,7 @@ function buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qc
   }
   const fIld = resolveImportedReference(getSheetValue(row, headerIndex, 'fIld'), freelancers, ['fIld', 'fId', 'id'], ['name', 'email']);
   const qcId = resolveImportedReference(getSheetValue(row, headerIndex, 'qcId'), qcs, ['qcId', 'id'], ['name', 'email']);
+  const lateHeaderIndex = getGoogleSheetHeaderIndex(headerIndex, 'late', fieldOverride);
   const paymentHeaderIndex = getGoogleSheetHeaderIndex(headerIndex, 'paymentApproved', fieldOverride);
   return {
     seriesId,
@@ -1833,6 +1838,7 @@ function buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qc
     qcId,
     difficulty,
     feedback: nullableText(getSheetValue(row, headerIndex, 'feedback')),
+    ...(lateHeaderIndex === undefined ? {} : { late: normalizeLateValue(getSheetValue(row, headerIndex, 'late')) }),
     completionPercent,
     price,
     receivePrice: calculateReceivePrice(price, completionPercent),
@@ -1862,9 +1868,10 @@ function hasDeadlineSheetChanges(current, imported, columns) {
 const GOOGLE_SHEET_DEADLINE_COLUMNS = [
   'seriesId', 'chapterNumber', 'endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status',
   'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice',
-  'feedback', 'completionPercent', 'paymentApproved'
+  'feedback', 'late', 'completionPercent', 'paymentApproved'
 ];
 const GOOGLE_SHEET_HEADER_LABELS = {
+  late: 'Late',
   paymentApproved: 'Thanh toán'
 };
 
@@ -1920,6 +1927,7 @@ function getGoogleSheetCellValue(row, key, fieldOverride = null) {
   if (key === 'type' && fieldOverride) return fieldOverride;
   if (key === 'endTask' || key === 'submittedAt') return formatGoogleSheetDate(row[key]);
   if (key === 'paymentApproved') return Boolean(row[key]);
+  if (key === 'late') return normalizeLateValue(row[key]);
   if (key === 'fIld') return row.fIld ?? row.fId ?? '';
   if (key === 'statusRaw') return row.statusRaw || row.status || '';
   if (key === 'urlSeries') return row.urlSeries || '';
@@ -2194,7 +2202,7 @@ async function syncGoogleSheet() {
     }
     let uniqueRows = [...uniqueRowsByKey.values()];
 
-    const allowedColumns = ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'completionPercent', 'paymentApproved'];
+    const allowedColumns = ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'completionPercent', 'paymentApproved'];
     const currentRowsByKey = new Map(currentRows.map((item) => [
       `${Number(item.seriesId)}:${Number(item.chapterNumber)}`,
       item
@@ -2219,9 +2227,10 @@ async function syncGoogleSheet() {
     const writeResults = await runWithConcurrency(uniqueRows, async ({ data: row }) => {
       const key = `${row.seriesId}:${row.chapterNumber}`;
       const current = currentRowsByKey.get(key);
-      const rowAllowedColumns = Object.prototype.hasOwnProperty.call(row, 'paymentApproved')
-        ? allowedColumns
-        : allowedColumns.filter((column) => column !== 'paymentApproved');
+      const rowAllowedColumns = allowedColumns.filter((column) => (
+        Object.prototype.hasOwnProperty.call(row, column)
+        || !['paymentApproved', 'late'].includes(column)
+      ));
       if (current) {
         if (!hasDeadlineSheetChanges(current, row, rowAllowedColumns)) return 'unchanged';
         await updateRow('deadlines', { seriesId: row.seriesId, chapterNumber: row.chapterNumber }, row, rowAllowedColumns);
@@ -2246,7 +2255,7 @@ async function syncGoogleSheet() {
       // A missing configured tab is not evidence that its existing rows were
       // deleted from the Sheet. Preserve them until that tab is restored or
       // its mapping is removed from settings.
-      if (missingConfiguredFields.has(String(current.type ?? '').trim().toLowerCase())) return false;
+      if (missingFields.has(String(current.type ?? '').trim().toLowerCase())) return false;
       const key = `${Number(current.seriesId)}:${Number(current.chapterNumber)}`;
       return !sheetKeys.has(key);
     });
@@ -2261,6 +2270,9 @@ async function syncGoogleSheet() {
 
     const syncedAt = new Date().toISOString();
     const syncWarnings = [];
+    if (deleted) {
+      syncWarnings.push(`Đã xóa ${deleted} dòng không còn trên Google Sheet.`);
+    }
     if (skippedRows.length || duplicateRows) {
       syncWarnings.push(`Bỏ qua ${skippedRows.length} dòng thiếu dữ liệu và ${duplicateRows} dòng trùng series ID + Chap; ưu tiên bản ghi cuối.`);
     }
@@ -2621,6 +2633,7 @@ function validateDeadlineCreatePayload(payload) {
     qcId: nullableInteger(payload.qcId, 'QC'),
     difficulty,
     feedback: nullableText(payload.feedback),
+    late: normalizeLateValue(payload.late),
     paymentApproved: false,
     completionPercent
   };
@@ -2629,6 +2642,31 @@ function validateDeadlineCreatePayload(payload) {
 function nullableText(value) {
   const text = String(value ?? '').trim();
   return text || null;
+}
+
+const LATE_OPTIONS = ['≤0h', '1~3h', '3~6h', '6~10h', '>10h'];
+
+function normalizeLateValue(value, { strict = false } = {}) {
+  const text = String(value ?? '').trim();
+  if (!text) return LATE_OPTIONS[0];
+
+  const normalized = text.toLowerCase().replace(/\s+/g, '');
+  const aliases = {
+    '≤0h': '≤0h',
+    '<=0h': '≤0h',
+    '0h': '≤0h',
+    '1-3h': '1~3h',
+    '1~3h': '1~3h',
+    '3-6h': '3~6h',
+    '3~6h': '3~6h',
+    '6-10h': '6~10h',
+    '6~10h': '6~10h',
+    '>10h': '>10h'
+  };
+  const result = aliases[normalized];
+  if (result) return result;
+  if (strict) throw validationError('Late chỉ được chọn một trong: ≤0h, 1~3h, 3~6h, 6~10h hoặc >10h.');
+  return LATE_OPTIONS[0];
 }
 
 function isHttpUrl(value) {

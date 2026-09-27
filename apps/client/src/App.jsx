@@ -40,7 +40,7 @@ const VIEW_RESOURCES = {
   freelancers: ['freelancers', 'accounts', 'fields'],
   deadlines: ['deadlines', 'freelancers', 'qcs', 'fields', 'difficultyLevels', 'difficultyPrices'],
   pricing: ['difficultyLevels', 'difficultyPrices', 'fields', 'bonusSettings'],
-  settings: ['fields', 'generalSettings'],
+  settings: ['fields', 'generalSettings', 'deadlines'],
   salary: ['freelancers', 'salaries', 'fields', 'bonusSettings'],
   profile: []
 };
@@ -342,7 +342,7 @@ export function App() {
           onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
         />
 
-        <main className="content-area">
+        <main className={`content-area${currentView === 'deadlines' ? ' content-area-deadlines' : ''}`}>
           {loadWarning && (
             <div className="data-connection-banner" role="status">
               <span>{loadWarning}</span>

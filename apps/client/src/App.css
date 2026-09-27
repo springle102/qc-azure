@@ -288,6 +288,13 @@
   width: 100%;
 }
 
+/* Deadline management uses the full available viewport so the table grows
+   when the browser zoom is reduced, while retaining horizontal scrolling on
+   smaller screens. */
+.content-area-deadlines {
+  max-width: none;
+}
+
 .page-header-row {
   display: flex;
   align-items: center;
@@ -1994,6 +2001,7 @@
 }
 
 .deadline-table {
+  width: 100%;
   min-width: 1500px;
 }
 
@@ -2597,6 +2605,58 @@
   max-width: 92px;
 }
 
+.deadline-table .deadline-column-late {
+  min-width: 112px;
+  width: 112px;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.late-select {
+  width: 100%;
+  min-width: 88px;
+  padding: 7px 24px 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-align-last: center;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.late-select:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.late-select.late-within {
+  background: #b9dcbd;
+  color: #12612f;
+}
+
+.late-select.late-1-3 {
+  background: #e5bfca;
+  color: #a20d2c;
+}
+
+.late-select.late-3-6 {
+  background: #e3b5c1;
+  color: #8f1029;
+}
+
+.late-select.late-6-10 {
+  background: #d98799;
+  color: #7f0b21;
+}
+
+.late-select.late-over-10 {
+  background: #ae061b;
+  color: #ffffff;
+}
+
 .deadline-table th.deadline-column-seriesId .deadline-column-header,
 .deadline-table th.deadline-column-chapterNumber .deadline-column-header,
 .deadline-table th.deadline-column-type .deadline-column-header {
@@ -2974,6 +3034,31 @@
 :root[data-theme='light'] .task-status-trigger:hover:not(:disabled),
 :root[data-theme='light'] .task-status-dropdown.is-open .task-status-trigger {
   background: #ffffff;
+}
+
+:root[data-theme='light'] .late-select.late-within {
+  background: #b9dcbd;
+  color: #12612f;
+}
+
+:root[data-theme='light'] .late-select.late-1-3 {
+  background: #e5bfca;
+  color: #a20d2c;
+}
+
+:root[data-theme='light'] .late-select.late-3-6 {
+  background: #e3b5c1;
+  color: #8f1029;
+}
+
+:root[data-theme='light'] .late-select.late-6-10 {
+  background: #d98799;
+  color: #7f0b21;
+}
+
+:root[data-theme='light'] .late-select.late-over-10 {
+  background: #ae061b;
+  color: #ffffff;
 }
 
 :root[data-theme='light'] .toolbar-search input {

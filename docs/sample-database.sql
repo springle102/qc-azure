@@ -200,6 +200,7 @@ CREATE TABLE IF NOT EXISTS "SeriesList" (
   "task" varchar(100),
   "endTask" timestamptz,
   "submittedAt" timestamptz,
+  "late" text NOT NULL DEFAULT '≤0h',
   "paymentApproved" boolean NOT NULL DEFAULT false,
   "completionPercent" integer NOT NULL DEFAULT 100,
   CONSTRAINT "SeriesList_pkey" PRIMARY KEY ("seriesId", "chapterNumber"),
@@ -215,17 +216,26 @@ ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "status" varchar(20);
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "doingStartedAt" timestamptz;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "workDurationSeconds" integer;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "submittedAt" timestamptz;
+ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "late" text;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "paymentApproved" boolean;
 ALTER TABLE "SeriesList" DROP COLUMN IF EXISTS "startTask";
 UPDATE "SeriesList" SET "completionPercent" = 100 WHERE "completionPercent" IS NULL;
 UPDATE "SeriesList" SET "workDurationSeconds" = 0 WHERE "workDurationSeconds" IS NULL;
 UPDATE "SeriesList" SET "paymentApproved" = false WHERE "paymentApproved" IS NULL;
+UPDATE "SeriesList" SET "late" = '≤0h' WHERE "late" IS NULL OR btrim("late") = '';
 ALTER TABLE "SeriesList" ALTER COLUMN "completionPercent" SET DEFAULT 100;
 ALTER TABLE "SeriesList" ALTER COLUMN "completionPercent" SET NOT NULL;
 ALTER TABLE "SeriesList" ALTER COLUMN "workDurationSeconds" SET DEFAULT 0;
 ALTER TABLE "SeriesList" ALTER COLUMN "workDurationSeconds" SET NOT NULL;
 ALTER TABLE "SeriesList" ALTER COLUMN "paymentApproved" SET DEFAULT false;
 ALTER TABLE "SeriesList" ALTER COLUMN "paymentApproved" SET NOT NULL;
+ALTER TABLE "SeriesList" ALTER COLUMN "late" SET DEFAULT '≤0h';
+ALTER TABLE "SeriesList" ALTER COLUMN "late" SET NOT NULL;
+
+ALTER TABLE "SeriesList" DROP CONSTRAINT IF EXISTS "SeriesList_late_check";
+ALTER TABLE "SeriesList"
+  ADD CONSTRAINT "SeriesList_late_check"
+  CHECK ("late" IN ('≤0h', '1~3h', '3~6h', '6~10h', '>10h'));
 
 ALTER TABLE "SeriesList" DROP CONSTRAINT IF EXISTS "SeriesList_completionPercent_check";
 ALTER TABLE "SeriesList"

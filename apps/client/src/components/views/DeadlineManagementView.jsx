@@ -21,6 +21,7 @@ const columns = [
   ['price', 'Giá'],
   ['receivePrice', 'Tiền nhận'],
   ['feedback', 'Feedback'],
+  ['late', 'Late'],
   ['paymentApproved', 'Thanh toán'],
   ['edit', 'Thao tác']
 ];
@@ -40,7 +41,8 @@ const EDIT_FIELDS = [
   ['completionPercent', '% hoàn thành', 'number'],
   ['price', 'Giá', 'number', true],
   ['receivePrice', 'Tiền nhận', 'number', true],
-  ['feedback', 'Feedback', 'textarea']
+  ['feedback', 'Feedback', 'textarea'],
+  ['late', 'Late', 'late-select']
 ];
 
 const EDITABLE_FIELDS = EDIT_FIELDS.filter(([, , , readOnly]) => !readOnly).map(([key]) => key);
@@ -48,7 +50,7 @@ const CREATE_FIELDS = EDIT_FIELDS.filter(([key]) => !['price', 'receivePrice'].i
 const NUMERIC_FIELDS = new Set(['fIld', 'qcId', 'price', 'receivePrice', 'completionPercent']);
 const DATE_FIELDS = new Set(['endTask']);
 const MONTH_FILTER_COLUMNS = new Set(['endTask', 'submittedAt']);
-const STRING_SORT_COLUMNS = new Set(['seriesName', 'type', 'urlSeries', 'difficulty', 'feedback']);
+const STRING_SORT_COLUMNS = new Set(['seriesName', 'type', 'urlSeries', 'difficulty', 'feedback', 'late']);
 const NUMBER_SORT_COLUMNS = new Set(['seriesId', 'chapterNumber', 'fIld', 'qcId', 'completionPercent', 'price', 'receivePrice']);
 const DATE_SORT_COLUMNS = new Set(['endTask']);
 const FIELD_OPTIONS = ['Latin', 'Japan', 'QC'];
@@ -72,6 +74,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
   const [rawStatusUpdatingKey, setRawStatusUpdatingKey] = useState('');
   const [taskStatusUpdatingKey, setTaskStatusUpdatingKey] = useState('');
   const [paymentUpdatingKey, setPaymentUpdatingKey] = useState('');
+  const [lateUpdatingKey, setLateUpdatingKey] = useState('');
   const [deletingKey, setDeletingKey] = useState('');
   const [columnFilters, setColumnFilters] = useState({});
   const [columnSort, setColumnSort] = useState(null);
@@ -89,7 +92,10 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
   const columnFilterOptions = useMemo(() => Object.fromEntries(
     visibleColumns
       .filter(([key]) => key !== 'edit')
-      .map(([key]) => [key, uniqueFilterValues(deadlines.map((item) => getColumnFilterValue(item, key, freelancerOptions))).sort((left, right) => left.localeCompare(right, 'vi', { numeric: true }))])
+      .map(([key]) => {
+        const values = uniqueFilterValues(deadlines.map((item) => getColumnFilterValue(item, key, freelancerOptions)));
+        return [key, sortFilterValues(key === 'late' ? LATE_OPTIONS : values, key)];
+      })
   ), [deadlines, freelancerOptions, visibleColumns]);
 
   const filteredDeadlines = useMemo(() => {
@@ -239,6 +245,22 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
     }
   };
 
+  const updateLate = async (deadline, late) => {
+    const rowKey = String(deadline.seriesId) + '-' + String(deadline.chapterNumber);
+    setLateUpdatingKey(rowKey);
+    try {
+      const updatedDeadline = await api.updateDeadline(deadline.seriesId, deadline.chapterNumber, {
+        late: normalizeLateValue(late)
+      });
+      onUpdate?.(updatedDeadline);
+      showToast('Đã cập nhật mức Late.', 'success');
+    } catch (error) {
+      showToast(error.message || 'Không thể cập nhật mức Late.', 'error');
+    } finally {
+      setLateUpdatingKey('');
+    }
+  };
+
   const deleteDeadline = async (deadline) => {
     if (!window.confirm(`Xóa deadline ${deadline.seriesId} - Chapter ${deadline.chapterNumber}? Dòng này cũng sẽ bị xóa trên Google Sheet.`)) return;
     const rowKey = String(deadline.seriesId) + '-' + String(deadline.chapterNumber);
@@ -355,6 +377,12 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
                             onChange={(status) => updateTaskStatus(item, status)}
                           />
                         </div>
+                      ) : key === 'late' ? (
+                        <LateSelect
+                          value={item.late}
+                          disabled={readOnly || lateUpdatingKey === String(item.seriesId) + '-' + String(item.chapterNumber)}
+                          onChange={(value) => updateLate(item, value)}
+                        />
                       ) : key === 'paymentApproved' ? (
                         <input
                           className="raw-status-checkbox payment-checkbox"
@@ -412,8 +440,20 @@ function uniqueFilterValues(values) {
   return [...new Set(values.map((value) => String(value ?? '')))];
 }
 
+function sortFilterValues(values, key) {
+  if (key === 'late') {
+    return [...values].sort((left, right) => {
+      const leftIndex = LATE_OPTIONS.indexOf(left);
+      const rightIndex = LATE_OPTIONS.indexOf(right);
+      return (leftIndex === -1 ? LATE_OPTIONS.length : leftIndex) - (rightIndex === -1 ? LATE_OPTIONS.length : rightIndex);
+    });
+  }
+  return [...values].sort((left, right) => left.localeCompare(right, 'vi', { numeric: true }));
+}
+
 function getColumnFilterValue(item, key, freelancers = []) {
   if (key === 'paymentApproved') return isPaymentApproved(item.paymentApproved) ? 'true' : 'false';
+  if (key === 'late') return normalizeLateValue(item.late);
   const value = key === 'fIld' ? getPersonName(item.fIld ?? item.fId, freelancers) : item[key];
   if (MONTH_FILTER_COLUMNS.has(key)) return getMonthFilterValue(value);
   return value === null || value === undefined ? '' : String(value);
@@ -620,6 +660,7 @@ function renderValue(value, key, field, difficultyLevels, freelancers, qcs, item
   }
   if (key === 'completionPercent' && (value === null || value === undefined || value === '')) value = 100;
   if (key === 'status') return <TaskStatusBadge value={value} />;
+  if (key === 'late') return <LateSelect value={value} disabled />;
   if (key === 'submittedAt') {
     return (
       <div className="submitted-at-cell">
@@ -795,6 +836,52 @@ function isRawChecked(value) {
   return ['true', '1', 'yes', 'done', 'completed', 'hoàn thành', 'đã hoàn thành', 'đã up raw'].includes(normalized);
 }
 
+const LATE_OPTIONS = ['≤0h', '1~3h', '3~6h', '6~10h', '>10h'];
+
+function normalizeLateValue(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return LATE_OPTIONS[0];
+  const normalized = text.toLowerCase().replace(/\s+/g, '');
+  const aliases = {
+    '≤0h': '≤0h',
+    '<=0h': '≤0h',
+    '0h': '≤0h',
+    '1-3h': '1~3h',
+    '1~3h': '1~3h',
+    '3-6h': '3~6h',
+    '3~6h': '3~6h',
+    '6-10h': '6~10h',
+    '6~10h': '6~10h',
+    '>10h': '>10h'
+  };
+  return aliases[normalized] || (LATE_OPTIONS.includes(text) ? text : LATE_OPTIONS[0]);
+}
+
+function getLateClass(value) {
+  return {
+    '≤0h': 'late-within',
+    '1~3h': 'late-1-3',
+    '3~6h': 'late-3-6',
+    '6~10h': 'late-6-10',
+    '>10h': 'late-over-10'
+  }[normalizeLateValue(value)] || 'late-within';
+}
+
+function LateSelect({ value, disabled = false, onChange }) {
+  const normalizedValue = normalizeLateValue(value);
+  return (
+    <select
+      className={`late-select ${getLateClass(normalizedValue)}`}
+      value={normalizedValue}
+      disabled={disabled}
+      onChange={(event) => onChange?.(event.target.value)}
+      aria-label="Late"
+    >
+      {LATE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+    </select>
+  );
+}
+
 function rawStatusFromCheckbox(checked) {
   return checked ? 'Hoàn thành' : 'Đang thực hiện';
 }
@@ -838,7 +925,8 @@ function createNewEditState(difficultyLevels, difficultyPrices, freelancers, qcs
     completionPercent: 100,
     price,
     receivePrice: calculateReceivePrice(price, 100),
-    feedback: ''
+    feedback: '',
+    late: '≤0h'
   };
 }
 
@@ -858,7 +946,8 @@ function createEditState(deadline, difficultyPrices) {
     qcId: deadline.qcId ?? '',
     price: deadline.price ?? getConfiguredPrice(deadline.type, deadline.difficulty, difficultyPrices) ?? '',
     receivePrice: calculateReceivePrice(deadline.price ?? getConfiguredPrice(deadline.type, deadline.difficulty, difficultyPrices), deadline.completionPercent ?? 100),
-    feedback: deadline.feedback ?? ''
+    feedback: deadline.feedback ?? '',
+    late: normalizeLateValue(deadline.late)
   };
 }
 
@@ -986,6 +1075,12 @@ function DeadlineEditModal({ value, isCreate, freelancers, qcs, difficultyLevels
                   >
                     {fieldOptions.map((option) => <option key={option} value={option}>{option}</option>)}
                   </select>
+                ) : type === 'late-select' ? (
+                  <LateSelect
+                    value={value[key]}
+                    onChange={(nextValue) => onChange(key, nextValue)}
+                    disabled={isSaving}
+                  />
                 ) : type === 'select' ? (
                   <select
                     id={`deadline-${key}`}
