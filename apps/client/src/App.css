@@ -1386,6 +1386,15 @@
   min-width: 1080px;
 }
 
+.freelancer-table th:nth-child(2),
+.freelancer-table td:nth-child(2),
+.account-table th:nth-child(2),
+.account-table td:nth-child(2) {
+  width: 220px;
+  min-width: 220px;
+  white-space: nowrap;
+}
+
 .account-management-embedded {
   margin-bottom: 20px;
 }
@@ -3436,7 +3445,16 @@
 }
 
 .error-field-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
   padding: 14px 18px;
+}
+
+.error-field-content {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .error-field-tabs {
@@ -3508,8 +3526,9 @@
 .error-entry-launcher {
   display: flex;
   justify-content: flex-end;
-  margin-top: 14px;
-  padding: 14px 0 0;
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding: 0;
 }
 
 .error-entry-modal {
@@ -3560,7 +3579,11 @@
 }
 
 .error-table th {
+  padding: 16px 18px;
   text-align: center;
+  font-size: 14px;
+  line-height: 1.35;
+  vertical-align: middle;
 }
 
 .error-column-header {
@@ -3568,7 +3591,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 24px;
+  min-height: 28px;
   text-align: center;
 }
 
@@ -3702,6 +3725,16 @@
 }
 
 @media (max-width: 900px) {
+  .error-field-panel {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .error-entry-launcher {
+    justify-content: flex-end;
+  }
+
   .error-sheet-config-grid,
   .error-entry-form {
     grid-template-columns: 1fr;

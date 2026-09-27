@@ -424,15 +424,17 @@ export function ErrorManagementView({
       ) : (
         <>
           <section className="glass-panel error-field-panel">
-            <div className="error-field-tabs" role="tablist" aria-label="Mảng lỗi">
-              {fields.map((field) => {
-                const count = localErrors.filter((row) => matchesField(row, field.name)).length;
-                return <button type="button" role="tab" aria-selected={activeField === field.name} className={`error-field-tab ${activeField === field.name ? 'active' : ''}`} key={field.id || field.name} onClick={() => setActiveField(field.name)}>{field.name}<span>{count}</span></button>;
-              })}
-            </div>
-            <div className="error-sheet-link-row">
-              <span>Sheet lỗi gốc: </span>
-              {activeSheetUrl ? <a href={activeSheetUrl} target="_blank" rel="noreferrer">Mở sheet để xem screenshot <IconExternalLink size={14} /></a> : <em>Chưa cấu hình</em>}
+            <div className="error-field-content">
+              <div className="error-field-tabs" role="tablist" aria-label="Mảng lỗi">
+                {fields.map((field) => {
+                  const count = localErrors.filter((row) => matchesField(row, field.name)).length;
+                  return <button type="button" role="tab" aria-selected={activeField === field.name} className={`error-field-tab ${activeField === field.name ? 'active' : ''}`} key={field.id || field.name} onClick={() => setActiveField(field.name)}>{field.name}<span>{count}</span></button>;
+                })}
+              </div>
+              <div className="error-sheet-link-row">
+                <span>Sheet lỗi gốc: </span>
+                {activeSheetUrl ? <a href={activeSheetUrl} target="_blank" rel="noreferrer">Mở sheet để xem screenshot <IconExternalLink size={14} /></a> : <em>Chưa cấu hình</em>}
+              </div>
             </div>
             {canManage && (
               <div className="error-entry-launcher">
