@@ -7,8 +7,10 @@ import {
   IconExternalLink,
   IconFolder,
   IconRefresh,
+  IconTrash,
   IconTasks
 } from '../common/Icons';
+import { showToast } from '../common/ToastContainer';
 
 const isComplete = (item) => ['hoàn thành', 'completed', 'done', 'complete'].includes(String(item?.status || item?.statusRaw || '').trim().toLowerCase());
 const isAssigned = (item) => Boolean(item?.fId || item?.fIld || item?.freelancerId || item?.assignedToId || item?.assignedTo);
@@ -46,8 +48,9 @@ function LinkCard({ icon: Icon, label, value }) {
   );
 }
 
-export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], currentUser = {}, isLoading, onRefresh, onNavigate }) {
+export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], currentUser = {}, isLoading, onRefresh, onResetAll, onNavigate }) {
   const isFreelancer = currentUser.role === 'Freelancer';
+  const [isResetting, setIsResetting] = React.useState(false);
   const freelancerTasks = useMemo(() => deadlines.length > 0 ? deadlines : tasks, [deadlines, tasks]);
   const fieldResources = useMemo(() => {
     if (Array.isArray(dashboard.fieldResources) && dashboard.fieldResources.length > 0) return dashboard.fieldResources;
@@ -68,6 +71,19 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
     if (Array.isArray(dashboard.upcomingTasks)) return dashboard.upcomingTasks;
     return freelancerTasks.filter(isUpcoming).sort((left, right) => getDueDate(left) - getDueDate(right));
   }, [dashboard, freelancerTasks]);
+
+  const resetAll = async () => {
+    if (!window.confirm('Bạn có chắc muốn reset toàn bộ dữ liệu deadline và lương về rỗng? Các account, freelancer, giá tiền và cấu hình sẽ được giữ nguyên.')) return;
+    setIsResetting(true);
+    try {
+      await onResetAll?.();
+      showToast('Đã reset dữ liệu deadline và lương.', 'success');
+    } catch (error) {
+      showToast(error.message || 'Không thể reset dữ liệu.', 'error');
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const recentChaptersByRole = useMemo(() => {
     const records = deadlines.length ? deadlines : tasks;
@@ -99,9 +115,16 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
           <h2 className="page-title">Dashboard</h2>
           <p className="page-subtitle">{isFreelancer ? 'Theo dõi deadline và lương của riêng bạn.' : 'Theo dõi deadline, chapter và chất lượng công việc.'}</p>
         </div>
-        <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading}>
-          <IconRefresh size={16} /> {isLoading ? 'Đang tải...' : 'Làm mới dữ liệu'}
-        </button>
+        <div className="dashboard-header-actions">
+          <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading || isResetting}>
+            <IconRefresh size={16} /> {isLoading ? 'Đang tải...' : 'Làm mới dữ liệu'}
+          </button>
+          {currentUser.role === 'Admin' && (
+            <button type="button" className="btn btn-danger" onClick={resetAll} disabled={isLoading || isResetting}>
+              <IconTrash size={16} /> {isResetting ? 'Đang reset...' : 'Reset all'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="dashboard-link-grid">

@@ -140,6 +140,7 @@ export const api = {
     body: JSON.stringify(settings)
   }),
   getSalaries: () => request('/salaries'),
+  resetAllData: () => request('/reset-all', { method: 'POST' }),
   updateProfile: (profile) => request('/profile', {
     method: 'PATCH',
     body: JSON.stringify(profile)

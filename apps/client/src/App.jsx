@@ -192,6 +192,25 @@ export function App() {
     }));
   }, []);
 
+  const handleResetAll = useCallback(async () => {
+    await api.resetAllData();
+    setData((current) => ({
+      ...current,
+      dashboard: {
+        ...current.dashboard,
+        waitingTasks: 0,
+        assignedTasks: 0,
+        reviewTasks: 0,
+        completedTasks: 0,
+        inProgressTasks: 0,
+        upcomingTasks: []
+      },
+      tasks: [],
+      deadlines: [],
+      salaries: []
+    }));
+  }, []);
+
   const handleNavigate = useCallback((view) => {
     if (!canAccessView(profile?.role, view)) {
       showToast('Bạn không có quyền truy cập mục này.', 'error');
@@ -265,10 +284,11 @@ export function App() {
             deadlines={data.deadlines}
             currentUser={profile}
             onNavigate={handleNavigate}
+            onResetAll={handleResetAll}
           />
         );
     }
-  }, [currentView, data, handleCreateDeadline, handleNavigate, handleSaveProfile, handleUpdateDeadline, isLoading, loadData, profile]);
+  }, [currentView, data, handleCreateDeadline, handleNavigate, handleResetAll, handleSaveProfile, handleUpdateDeadline, isLoading, loadData, profile]);
 
   if (isAuthChecking) {
     return (

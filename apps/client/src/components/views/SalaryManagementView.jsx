@@ -3,11 +3,11 @@ import { IconEye, IconRefresh, IconSearch, IconUsers, IconX } from '../common/Ic
 
 const SALARY_FIELDS = ['Japan', 'Latin', 'QC'];
 
-export function SalaryManagementView({ freelancers = [], salaries = [], fields = [], bonusConfig, isLoading, onRefresh, restrictToSalaryRows = false }) {
+export function SalaryManagementView({ salaries = [], fields = [], bonusConfig, isLoading, onRefresh }) {
   const [search, setSearch] = useState('');
   const [field, setField] = useState('');
   const [selectedQR, setSelectedQR] = useState(null);
-  const members = restrictToSalaryRows ? salaries : (salaries.length > 0 ? salaries : freelancers);
+  const members = useMemo(() => Array.isArray(salaries) ? salaries : [], [salaries]);
   const fieldOptions = useMemo(() => fields.length > 0 ? fields.map((item) => item.name || item).filter(Boolean) : SALARY_FIELDS, [fields]);
 
   const filteredFreelancers = useMemo(() => members.filter((freelancer) => {

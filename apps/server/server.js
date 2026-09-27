@@ -396,10 +396,25 @@ app.delete('/api/accounts/:id', requireAdmin, async (req, res) => {
         : linkedFreelancer?.id !== undefined
           ? { id: linkedFreelancer.id }
           : null;
+    const linkedQcs = current.role === 'QC' ? await getCollection('qcs') : [];
+    const accountName = String(current.displayName || current.username || '').trim().toLowerCase();
+    const accountEmail = String(current.email || '').trim().toLowerCase();
+    const qcDeleteKeys = linkedQcs
+      .filter((qc) => {
+        const qcId = qc.qcId ?? qc.id;
+        const qcName = String(qc.name || qc.displayName || qc.username || '').trim().toLowerCase();
+        const qcEmail = String(qc.email || '').trim().toLowerCase();
+        return String(qcId ?? '') === String(id)
+          || (accountEmail && qcEmail === accountEmail)
+          || (accountName && qcName === accountName);
+      })
+      .map((qc) => qc.qcId !== undefined ? { qcId: qc.qcId } : qc.id !== undefined ? { id: qc.id } : null)
+      .filter(Boolean);
     const data = await deleteRowById('accounts', id);
     if (!hasAnotherAccountForFreelancer && freelancerDeleteKey) {
       await deleteRowsByKeys('freelancers', freelancerDeleteKey);
     }
+    await runWithConcurrency(qcDeleteKeys, async (keys) => deleteRowsByKeys('qcs', keys));
     invalidateAccountSessions(id);
     res.json({ success: true, data: toPublicAccount(data, await getCollection('freelancers')) });
   } catch (error) {
@@ -490,10 +505,48 @@ app.get('/api/salaries', requireAuth, async (req, res) => {
     const scopedDeadlines = filterSalaryRowsForUser(deadlines, req.authUser);
     res.json({
       success: true,
-      data: buildSalaryRows(scopedFreelancers, applyConfiguredPrices(scopedDeadlines, prices), bonusSettings)
+      data: scopedDeadlines.length === 0
+        ? []
+        : buildSalaryRows(scopedFreelancers, applyConfiguredPrices(scopedDeadlines, prices), bonusSettings)
     });
   } catch (error) {
     res.status(502).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/reset-all', requireAdmin, async (req, res) => {
+  try {
+    const currentRows = await getCollection('deadlines');
+    const deadlineKeys = new Map();
+    currentRows.forEach((row) => {
+      if (row.seriesId === null || row.seriesId === undefined || row.chapterNumber === null || row.chapterNumber === undefined) return;
+      deadlineKeys.set(`${row.seriesId}:${row.chapterNumber}`, {
+        seriesId: row.seriesId,
+        chapterNumber: row.chapterNumber
+      });
+    });
+
+    const deletedCounts = await runWithConcurrency([...deadlineKeys.values()], async (keys) => {
+      const deletedRows = await deleteRowsByKeys('deadlines', keys);
+      return deletedRows.length;
+    });
+    const deletedDeadlines = deletedCounts.reduce((total, count) => total + count, 0);
+
+    // Keep the configured Sheet connection unchanged, but prevent an immediate
+    // automatic sync from restoring the deleted rows on the next dashboard load.
+    const settings = (await getCollection('generalSettings'))[0];
+    if (settings) {
+      await updateRow(
+        'generalSettings',
+        { id: settings.id },
+        { googleSheetLastSyncedAt: new Date().toISOString(), googleSheetLastSyncCount: 0 },
+        ['googleSheetLastSyncedAt', 'googleSheetLastSyncCount']
+      );
+    }
+
+    res.json({ success: true, data: { deletedDeadlines, salaryReset: true } });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: error.message });
   }
 });
 
