@@ -11,7 +11,7 @@ const columns = [
   ['seriesName', 'Tên bộ truyện'],
   ['chapterNumber', 'Chapter'],
   ['type', 'Mảng'],
-  ['statusRaw', 'Trạng thái raw'],
+  ['statusRaw', 'File'],
   ['urlSeries', 'URL bộ truyện'],
   ['fIld', 'Freelancer'],
   ['status', 'Status', 'status-select'],
@@ -30,7 +30,7 @@ const EDIT_FIELDS = [
   ['endTask', 'Hạn DL', 'date'],
   ['seriesName', 'Tên bộ truyện', 'text'],
   ['type', 'Mảng', 'field-select'],
-  ['statusRaw', 'Trạng thái raw', 'checkbox'],
+  ['statusRaw', 'File', 'checkbox'],
   ['urlSeries', 'URL bộ truyện', 'url'],
   ['fIld', 'Freelancer', 'freelancer-select'],
   ['status', 'Status', 'status-select'],
@@ -195,9 +195,9 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
         statusRaw: rawStatusFromCheckbox(checked)
       });
       onUpdate?.(updatedDeadline);
-      showToast('Đã cập nhật trạng thái raw.', 'success');
+      showToast('Đã cập nhật File.', 'success');
     } catch (error) {
-      showToast(error.message || 'Không thể cập nhật trạng thái raw.', 'error');
+      showToast(error.message || 'Không thể cập nhật File.', 'error');
     } finally {
       setRawStatusUpdatingKey('');
     }
@@ -302,7 +302,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
                           checked={isRawChecked(item.statusRaw)}
                           onChange={(event) => toggleRawStatus(item, event.target.checked)}
                           disabled={readOnly || rawStatusUpdatingKey === String(item.seriesId) + '-' + String(item.chapterNumber)}
-                          aria-label={'Trạng thái raw: ' + (item.statusRaw || 'chưa hoàn thành')}
+                          aria-label={'File: ' + (item.statusRaw || 'chưa hoàn thành')}
                         />
                       ) : key === 'status' ? (
                         <div className="task-status-cell">
@@ -554,7 +554,7 @@ function ColumnFilterButton({ columnKey, label, values, activeValues, sortKind, 
 
 function renderValue(value, key, field, difficultyLevels, freelancers, qcs, item = {}) {
   if (key === 'statusRaw') {
-    return <input className="raw-status-checkbox" type="checkbox" checked={isRawChecked(value)} readOnly disabled aria-label={`Trạng thái raw: ${value || 'chưa hoàn thành'}`} />;
+    return <input className="raw-status-checkbox" type="checkbox" checked={isRawChecked(value)} readOnly disabled aria-label={`File: ${value || 'chưa hoàn thành'}`} />;
   }
   if (key === 'completionPercent' && (value === null || value === undefined || value === '')) value = 100;
   if (key === 'status') return <TaskStatusBadge value={value} />;
