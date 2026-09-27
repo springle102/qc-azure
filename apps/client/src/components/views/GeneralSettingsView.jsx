@@ -6,6 +6,7 @@ import { api } from '../../services/api';
 export function GeneralSettingsView({ fields = [], generalSettings, isLoading, onRefresh }) {
   const [googleSheetUrl, setGoogleSheetUrl] = useState(generalSettings?.googleSheetUrl || '');
   const [googleSheetTabs, setGoogleSheetTabs] = useState(generalSettings?.googleSheetTabs || {});
+  const [googleDriveFolders, setGoogleDriveFolders] = useState(generalSettings?.googleDriveFolders || {});
   const [googleSheetAutoSync, setGoogleSheetAutoSync] = useState(generalSettings?.googleSheetAutoSync === true);
   const [newField, setNewField] = useState('');
   const [editingField, setEditingField] = useState(null);
@@ -19,6 +20,9 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
     const configuredTabs = generalSettings?.googleSheetTabs || {};
     const defaultTabs = Object.fromEntries(fields.map((field) => [field.name, field.name]));
     setGoogleSheetTabs({ ...defaultTabs, ...configuredTabs });
+    const configuredDriveFolders = generalSettings?.googleDriveFolders || {};
+    const defaultDriveFolders = Object.fromEntries(fields.map((field) => [field.name, '']));
+    setGoogleDriveFolders({ ...defaultDriveFolders, ...configuredDriveFolders });
     setGoogleSheetAutoSync(generalSettings?.googleSheetAutoSync === true);
   }, [generalSettings, fields]);
 
@@ -49,6 +53,7 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
       await api.updateGeneralSettings({
         googleSheetUrl: googleSheetUrl.trim(),
         googleSheetTabs,
+        googleDriveFolders,
         googleSheetAutoSync
       });
       showToast('Đã lưu kết nối Google Sheet.', 'success');
@@ -64,6 +69,10 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
     setGoogleSheetTabs((current) => ({ ...current, [fieldName]: value }));
   };
 
+  const updateGoogleDriveFolder = (fieldName, value) => {
+    setGoogleDriveFolders((current) => ({ ...current, [fieldName]: value }));
+  };
+
   const syncGoogleSheet = async () => {
     if (!googleSheetUrl.trim()) {
       showToast('Vui lòng nhập link Google Sheet.', 'error');
@@ -74,6 +83,7 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
       await api.updateGeneralSettings({
         googleSheetUrl: googleSheetUrl.trim(),
         googleSheetTabs,
+        googleDriveFolders,
         googleSheetAutoSync
       });
       const result = await api.syncGoogleSheet();
@@ -164,6 +174,22 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
                 <span className="form-help">Nhập tên tab hoặc phạm vi, ví dụ {field.name}!A:Q</span>
               </div>
             ))}
+          </div>
+          <div className="general-settings-drive-grid">
+            <div className="general-settings-subheading">
+              <span className="qc-kicker">GOOGLE DRIVE</span>
+              <h3>Folder gốc theo mảng</h3>
+              <p className="form-help">Hệ thống tìm folder con có tên đúng bằng seriesId bên trong folder gốc của từng mảng.</p>
+            </div>
+            <div className="general-settings-tab-grid">
+              {fields.map((field) => (
+                <div className="form-group" key={`drive-${field.id || field.name}`}>
+                  <label className="form-label" htmlFor={`google-drive-folder-${field.id || field.name}`}>Folder Drive của mảng {field.name}</label>
+                  <input id={`google-drive-folder-${field.id || field.name}`} className="form-input" value={googleDriveFolders[field.name] ?? ''} onChange={(event) => updateGoogleDriveFolder(field.name, event.target.value)} placeholder={field.name === 'Japan' ? 'JP' : field.name} disabled={isSaving} />
+                  <span className="form-help">Ví dụ: {field.name === 'Japan' ? 'JP' : field.name}/&lt;seriesId&gt;</span>
+                </div>
+              ))}
+            </div>
           </div>
           <label className="general-settings-checkbox">
             <input type="checkbox" checked={googleSheetAutoSync} onChange={(event) => setGoogleSheetAutoSync(event.target.checked)} disabled={isSaving} />

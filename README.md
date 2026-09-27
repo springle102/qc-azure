@@ -32,7 +32,7 @@ Các bảng giao diện bám theo schema trong `docs/database diagram.png` và s
 
 Deadline công ty và bảng `Companies` đã được loại bỏ khỏi giao diện, API và database.
 
-File PostgreSQL mẫu để tạo schema và dữ liệu test: `docs/sample-database.sql`.
+File PostgreSQL mẫu để tạo schema và dữ liệu test: `docs/sample-database.sql`. Nếu database đã tồn tại từ trước, chạy các migration trong `docs/migrations/` trong SQL Editor để thêm cột màu chữ và mapping folder Drive.
 
 ## Cấu hình dữ liệu
 

@@ -362,7 +362,8 @@ app.get('/api/deadlines', requireAuth, async (req, res) => {
   try {
     await syncGoogleSheetIfDue({ waitForCompletion: true });
     const allDeadlines = await getCollection('deadlines');
-    const linkedDeadlines = await enrichStoredDeadlineUrls(allDeadlines);
+    const settings = await getGeneralSettings();
+    const linkedDeadlines = await enrichStoredDeadlineUrls(allDeadlines, settings.googleDriveFolders);
     const deadlines = filterRowsForUser(linkedDeadlines, req.authUser);
     const prices = await getCollection('difficultyPricing');
     res.json({ success: true, data: applyConfiguredPrices(deadlines, prices) });
@@ -399,12 +400,15 @@ app.patch('/api/general-settings', requireAdmin, async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'googleSheetTabs')) {
       updates.googleSheetTabs = JSON.stringify(normalizeGoogleSheetTabs(req.body.googleSheetTabs));
     }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'googleDriveFolders')) {
+      updates.googleDriveFolders = JSON.stringify(normalizeGoogleDriveFolders(req.body.googleDriveFolders));
+    }
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'googleSheetAutoSync')) {
       updates.googleSheetAutoSync = req.body.googleSheetAutoSync === true;
     }
     const data = current
-      ? await updateRow('generalSettings', { id: current.id }, updates, ['googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleSheetAutoSync'])
-      : await insertRow('generalSettings', { id: 1, ...updates }, ['id', 'googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleSheetAutoSync']);
+      ? await updateRow('generalSettings', { id: current.id }, updates, ['googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'googleSheetAutoSync'])
+      : await insertRow('generalSettings', { id: 1, ...updates }, ['id', 'googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'googleSheetAutoSync']);
     res.json({ success: true, data });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
@@ -871,13 +875,18 @@ async function getGeneralSettings() {
   const rows = await getCollection('generalSettings');
   if (rows[0]) {
     const { deadlineHours: _legacyDeadlineHours, ...settings } = rows[0];
-    return { ...settings, googleSheetTabs: parseGoogleSheetTabs(settings.googleSheetTabs) };
+    return {
+      ...settings,
+      googleSheetTabs: parseGoogleSheetTabs(settings.googleSheetTabs),
+      googleDriveFolders: normalizeGoogleDriveFolders(settings.googleDriveFolders)
+    };
   }
   return {
     id: 1,
     googleSheetUrl: '',
     googleSheetRange: '',
     googleSheetTabs: {},
+    googleDriveFolders: {},
     googleSheetAutoSync: false,
     googleSheetLastSyncedAt: null,
     googleSheetLastSyncCount: 0,
@@ -922,6 +931,21 @@ function normalizeGoogleSheetTabs(value) {
   return Object.fromEntries(Object.entries(parseGoogleSheetTabs(value))
     .map(([field, tab]) => [String(field).trim(), String(tab ?? '').trim()])
     .filter(([field, tab]) => field && tab));
+}
+
+function normalizeGoogleDriveFolders(value) {
+  let parsed = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      parsed = {};
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  return Object.fromEntries(Object.entries(parsed)
+    .map(([field, folder]) => [String(field).trim(), String(folder ?? '').trim()])
+    .filter(([field, folder]) => field && folder));
 }
 
 function readGoogleServiceAccount() {
@@ -1066,16 +1090,21 @@ function escapeGoogleDriveQueryValue(value) {
   return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
-async function findGoogleDriveFolderUrl(seriesId) {
-  const folderName = String(seriesId ?? '').trim();
-  if (!folderName) return '';
+async function findGoogleDriveFolder(folderName, parentId = '') {
+  const normalizedFolderName = String(folderName ?? '').trim();
+  const normalizedParentId = String(parentId ?? '').trim();
+  if (!normalizedFolderName) return null;
 
+  const cacheKey = `${normalizedParentId || 'root'}::${normalizedFolderName}`;
   const now = Date.now();
-  const cached = googleDriveFolderCache.get(folderName);
-  if (cached && now - cached.checkedAt < GOOGLE_DRIVE_FOLDER_CACHE_TTL_MS) return cached.url;
+  const cached = googleDriveFolderCache.get(cacheKey);
+  if (cached && now - cached.checkedAt < GOOGLE_DRIVE_FOLDER_CACHE_TTL_MS) return cached.folder;
 
+  const parentFilter = normalizedParentId
+    ? ` and '${escapeGoogleDriveQueryValue(normalizedParentId)}' in parents`
+    : '';
   const query = new URLSearchParams({
-    q: `name = '${escapeGoogleDriveQueryValue(folderName)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    q: `name = '${escapeGoogleDriveQueryValue(normalizedFolderName)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false${parentFilter}`,
     spaces: 'drive',
     corpora: 'allDrives',
     includeItemsFromAllDrives: 'true',
@@ -1084,34 +1113,62 @@ async function findGoogleDriveFolderUrl(seriesId) {
     fields: 'files(id,name,webViewLink,driveId)'
   });
   const payload = await googleDriveRequest(`files?${query.toString()}`);
-  const folder = payload.files?.[0];
+  const folder = payload.files?.[0] || null;
+  googleDriveFolderCache.set(cacheKey, { checkedAt: now, folder });
+  return folder;
+}
+
+async function findGoogleDriveFolderUrl(seriesId, field, googleDriveFolders = {}) {
+  const seriesFolderName = String(seriesId ?? '').trim();
+  const fieldName = String(field ?? '').trim();
+  const rootFolderName = String(googleDriveFolders[fieldName] ?? '').trim();
+  if (!seriesFolderName) return '';
+
+  const cacheKey = `url::${fieldName}::${rootFolderName}::${seriesFolderName}`;
+
+  const now = Date.now();
+  const cached = googleDriveFolderCache.get(cacheKey);
+  if (cached && now - cached.checkedAt < GOOGLE_DRIVE_FOLDER_CACHE_TTL_MS) return cached.url;
+
+  const rootFolder = rootFolderName ? await findGoogleDriveFolder(rootFolderName) : null;
+  const folder = rootFolderName
+    ? (rootFolder ? await findGoogleDriveFolder(seriesFolderName, rootFolder.id) : null)
+    : await findGoogleDriveFolder(seriesFolderName);
   const url = folder?.webViewLink || (folder?.id ? `https://drive.google.com/drive/folders/${folder.id}` : '');
-  googleDriveFolderCache.set(folderName, { checkedAt: now, url });
+  googleDriveFolderCache.set(cacheKey, { checkedAt: now, url });
   return url;
 }
 
-async function enrichRowsWithGoogleDriveLinks(rows, lookupRows = rows) {
-  const seriesIds = [...new Set(lookupRows
+function googleDriveLookupKey(field, seriesId) {
+  return `${String(field ?? '').trim()}::${String(seriesId ?? '').trim()}`;
+}
+
+async function enrichRowsWithGoogleDriveLinks(rows, lookupRows = rows, googleDriveFolders = {}) {
+  const lookups = [...new Map(lookupRows
     .filter(({ data }) => !String(data.urlSeries ?? '').trim())
-    .map(({ data }) => String(data.seriesId ?? '').trim())
-    .filter(Boolean))];
-  if (seriesIds.length === 0) return { rows, linked: 0, missing: 0, error: '' };
+    .map(({ data }) => {
+      const field = String(data.type ?? '').trim();
+      const seriesId = String(data.seriesId ?? '').trim();
+      return [googleDriveLookupKey(field, seriesId), { field, seriesId }];
+    })
+    .filter(([, lookup]) => lookup.seriesId)).values()];
+  if (lookups.length === 0) return { rows, linked: 0, missing: 0, error: '' };
 
   let firstError = '';
-  const lookupResults = await runWithConcurrency(seriesIds, async (seriesId) => {
+  const lookupResults = await runWithConcurrency(lookups, async ({ field, seriesId }) => {
     if (firstError) return { seriesId, url: '', error: firstError };
     try {
-      return { seriesId, url: await findGoogleDriveFolderUrl(seriesId), error: '' };
+      return { field, seriesId, key: googleDriveLookupKey(field, seriesId), url: await findGoogleDriveFolderUrl(seriesId, field, googleDriveFolders), error: '' };
     } catch (error) {
       firstError = error.message || 'Không thể tìm folder trên Google Drive.';
-      return { seriesId, url: '', error: firstError };
+      return { field, seriesId, key: googleDriveLookupKey(field, seriesId), url: '', error: firstError };
     }
   });
-  const urlsBySeriesId = new Map(lookupResults.map(({ seriesId, url }) => [seriesId, url]));
+  const urlsByLookupKey = new Map(lookupResults.map(({ key, field, seriesId, url }) => [key || googleDriveLookupKey(field, seriesId), url]));
   let linked = 0;
   const enrichedRows = rows.map((entry) => {
     if (String(entry.data.urlSeries ?? '').trim()) return entry;
-    const driveUrl = urlsBySeriesId.get(String(entry.data.seriesId ?? '').trim());
+    const driveUrl = urlsByLookupKey.get(googleDriveLookupKey(entry.data.type, entry.data.seriesId));
     if (!driveUrl) return entry;
     linked += 1;
     return { ...entry, data: { ...entry.data, urlSeries: driveUrl } };
@@ -1120,26 +1177,37 @@ async function enrichRowsWithGoogleDriveLinks(rows, lookupRows = rows) {
   return { rows: enrichedRows, linked, missing, error: firstError };
 }
 
-async function enrichStoredDeadlineUrls(deadlines) {
-  const entries = deadlines.map((data) => ({ data }));
-  const result = await enrichRowsWithGoogleDriveLinks(entries);
-  const linkedEntries = result.rows.filter(({ data }, index) => {
-    const previousUrl = deadlines[index]?.urlSeries;
-    return !String(previousUrl ?? '').trim() && String(data.urlSeries ?? '').trim();
-  });
-
-  if (linkedEntries.length > 0) {
-    await runWithConcurrency(linkedEntries, async ({ data }) => {
-      await updateRow(
-        'deadlines',
-        { seriesId: data.seriesId, chapterNumber: data.chapterNumber },
-        { urlSeries: data.urlSeries },
-        ['urlSeries']
-      );
+async function enrichStoredDeadlineUrls(deadlines, googleDriveFolders = {}) {
+  try {
+    const entries = deadlines.map((data) => ({ data }));
+    const result = await enrichRowsWithGoogleDriveLinks(entries, entries, googleDriveFolders);
+    const linkedEntries = result.rows.filter(({ data }, index) => {
+      const previousUrl = deadlines[index]?.urlSeries;
+      return !String(previousUrl ?? '').trim() && String(data.urlSeries ?? '').trim();
     });
-  }
 
-  return result.rows.map(({ data }) => data);
+    await runWithConcurrency(linkedEntries, async ({ data }) => {
+      try {
+        await updateRow(
+          'deadlines',
+          { seriesId: data.seriesId, chapterNumber: data.chapterNumber },
+          { urlSeries: data.urlSeries },
+          ['urlSeries']
+        );
+      } catch (error) {
+        // A failed automatic URL write must not prevent the deadline table
+        // from loading. The link can be retried on the next refresh.
+        console.error(`Could not save Drive URL for ${data.seriesId}:`, error.message);
+      }
+    });
+
+    return result.rows.map(({ data }) => data);
+  } catch (error) {
+    // Drive access is an optional enrichment. Keep the main deadline request
+    // usable when credentials, permissions, or the Drive API are unavailable.
+    console.error('Automatic Google Drive URL lookup failed:', error.message);
+    return deadlines;
+  }
 }
 
 function parseGoogleSheetReference(sheetUrl) {
@@ -1486,7 +1554,7 @@ async function syncGoogleSheet() {
         : entry;
     });
     const rowsMissingUrls = rowsWithPreservedUrls.filter((entry) => !String(entry.data.urlSeries ?? '').trim());
-    const driveLinkResult = await enrichRowsWithGoogleDriveLinks(rowsWithPreservedUrls, rowsMissingUrls);
+    const driveLinkResult = await enrichRowsWithGoogleDriveLinks(rowsWithPreservedUrls, rowsMissingUrls, settings.googleDriveFolders);
     uniqueRows = driveLinkResult.rows;
     const writeResults = await runWithConcurrency(uniqueRows, async ({ data: row }) => {
       const key = `${row.seriesId}:${row.chapterNumber}`;

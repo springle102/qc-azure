@@ -309,6 +309,7 @@ CREATE TABLE IF NOT EXISTS "GeneralSettings" (
   "googleSheetUrl" text,
   "googleSheetRange" text,
   "googleSheetTabs" text,
+  "googleDriveFolders" text,
   "googleSheetAutoSync" boolean NOT NULL DEFAULT false,
   "googleSheetLastSyncedAt" timestamptz,
   "googleSheetLastSyncCount" integer NOT NULL DEFAULT 0,
@@ -318,6 +319,7 @@ CREATE TABLE IF NOT EXISTS "GeneralSettings" (
 ALTER TABLE "GeneralSettings" ADD COLUMN IF NOT EXISTS "googleSheetUrl" text;
 ALTER TABLE "GeneralSettings" ADD COLUMN IF NOT EXISTS "googleSheetRange" text;
 ALTER TABLE "GeneralSettings" ADD COLUMN IF NOT EXISTS "googleSheetTabs" text;
+ALTER TABLE "GeneralSettings" ADD COLUMN IF NOT EXISTS "googleDriveFolders" text;
 ALTER TABLE "GeneralSettings" ADD COLUMN IF NOT EXISTS "googleSheetAutoSync" boolean NOT NULL DEFAULT false;
 ALTER TABLE "GeneralSettings" ADD COLUMN IF NOT EXISTS "googleSheetLastSyncedAt" timestamptz;
 ALTER TABLE "GeneralSettings" ADD COLUMN IF NOT EXISTS "googleSheetLastSyncCount" integer NOT NULL DEFAULT 0;

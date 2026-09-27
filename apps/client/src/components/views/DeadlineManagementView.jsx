@@ -195,7 +195,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
             <IconPlus size={16} /> Thêm deadline
           </button>}
           <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading}>
-            <IconRefresh size={16} /> Làm mới
+            <IconRefresh size={16} /> {isLoading ? 'Đang tải...' : 'Làm mới'}
           </button>
         </div>
       </div>

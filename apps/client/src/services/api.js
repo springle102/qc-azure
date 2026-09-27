@@ -75,7 +75,7 @@ export const api = {
     body: JSON.stringify(freelancer)
   }),
   getQCs: () => request('/qcs'),
-  getDeadlines: () => request('/deadlines'),
+  getDeadlines: () => request('/deadlines', { timeoutMs: 120000 }),
   createDeadline: (deadline) => request('/deadlines', {
     method: 'POST',
     body: JSON.stringify(deadline)
