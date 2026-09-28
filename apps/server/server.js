@@ -31,7 +31,7 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '16mb' }));
 
 const emptyCollections = {
   tasks: [],
@@ -1299,18 +1299,61 @@ function normalizeImageDataUrl(value) {
   return rawValue;
 }
 
+const MAX_ERROR_SCREENSHOT_COUNT = 3;
+const MAX_ERROR_SCREENSHOT_ITEM_LENGTH = 5 * 1024 * 1024;
+const MAX_ERROR_SCREENSHOT_TOTAL_LENGTH = 15 * 1024 * 1024;
+
+function parseErrorScreenshotValues(value) {
+  if (Array.isArray(value)) return value;
+  const rawValue = String(value ?? '').trim();
+  if (!rawValue) return [];
+  if (rawValue.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(rawValue);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // Keep treating the value as a legacy single-image value below.
+    }
+  }
+  return [rawValue];
+}
+
 function normalizeErrorScreenshot(value, { strict = false } = {}) {
-  let rawValue = String(value ?? '').trim();
-  if (!rawValue) return null;
-  const imageFormulaMatch = rawValue.match(/^=IMAGE\(\s*["'](https?:\/\/[^"']+)["']/i);
-  if (imageFormulaMatch) rawValue = imageFormulaMatch[1].trim();
-  const isDataUrl = /^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(rawValue);
-  const isRemoteImage = isHttpUrl(rawValue);
-  if (rawValue.length > 5 * 1024 * 1024 || (!isDataUrl && !isRemoteImage)) {
+  const values = parseErrorScreenshotValues(value);
+  if (values.length === 0) return null;
+  if (values.length > MAX_ERROR_SCREENSHOT_COUNT) {
+    if (strict) throw validationError(`Screenshot chỉ được tối đa ${MAX_ERROR_SCREENSHOT_COUNT} ảnh.`);
+    return null;
+  }
+
+  const normalizedValues = values.map((valueItem) => {
+    let rawValue = String(valueItem ?? '').trim();
+    const imageFormulaMatch = rawValue.match(/^=IMAGE\(\s*["'](https?:\/\/[^"']+)["']/i);
+    if (imageFormulaMatch) rawValue = imageFormulaMatch[1].trim();
+    const isDataUrl = /^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(rawValue);
+    const isRemoteImage = isHttpUrl(rawValue);
+    if (rawValue.length > MAX_ERROR_SCREENSHOT_ITEM_LENGTH || (!isDataUrl && !isRemoteImage)) return null;
+    return rawValue;
+  });
+
+  if (normalizedValues.some((valueItem) => !valueItem)) {
     if (strict) throw validationError('Screenshot phải là ảnh PNG, JPG, WEBP hoặc GIF hợp lệ, hoặc URL ảnh http/https và không quá 3 MB.');
     return null;
   }
-  return rawValue;
+
+  const normalized = normalizedValues.length === 1
+    ? normalizedValues[0]
+    : JSON.stringify(normalizedValues);
+  if (normalized.length > MAX_ERROR_SCREENSHOT_TOTAL_LENGTH) {
+    if (strict) throw validationError('Tổng dung lượng tối đa của 3 screenshot là 15 MB.');
+    return null;
+  }
+  return normalized;
+}
+
+function getErrorScreenshotValues(value) {
+  const normalized = normalizeErrorScreenshot(value);
+  return normalized ? parseErrorScreenshotValues(normalized).map((item) => String(item)) : [];
 }
 
 function isValidConfiguredFieldName(value) {
@@ -3137,7 +3180,10 @@ function parseGoogleSheetImageCells(workbookBuffer, sheetTitle) {
   getDrawingAnchors(drawingXml).forEach(({ row, column, relationshipId }) => {
     const imagePath = resolveZipPath(drawingPath, drawingRelationships[relationshipId]);
     const dataUrl = imageBufferToDataUrl(imagePath, entries.get(imagePath));
-    if (dataUrl) imageCells.set(`${row}:${column}`, dataUrl);
+    if (dataUrl) {
+      const cellKey = `${row}:${column}`;
+      imageCells.set(cellKey, [...(imageCells.get(cellKey) || []), dataUrl]);
+    }
   });
   return imageCells;
 }
@@ -3286,9 +3332,14 @@ function getErrorRowNumberFromAppendResponse(response) {
 function getErrorSheetCellValue(row, key) {
   if (key === 'fixCheck') return Boolean(row.fixCheck);
   if (key === 'screenshot' || key === 'note') {
-    const screenshot = normalizeErrorScreenshot(row[key]);
+    const screenshots = getErrorScreenshotValues(row[key]);
+    if (key === 'screenshot' && screenshots.length > 1) {
+      const firstRemoteImage = screenshots.find((screenshot) => isHttpUrl(screenshot));
+      return firstRemoteImage ? `=IMAGE("${firstRemoteImage.replace(/"/g, '""')}")` : '';
+    }
+    const screenshot = screenshots[0] || '';
     if (isHttpUrl(screenshot)) return `=IMAGE("${screenshot.replace(/"/g, '""')}")`;
-    return key === 'screenshot' ? (screenshot || '') : (row.note ?? '');
+    return key === 'screenshot' ? screenshot : (row.note ?? '');
   }
   return row[key] ?? '';
 }
@@ -3418,8 +3469,8 @@ async function syncErrorsWithGoogleSheets(user) {
       const noteColumn = getErrorSheetHeaderIndex(sheet.headerIndex, 'note');
       const directScreenshot = screenshotColumn === undefined ? '' : sheet.imageCells?.get(`${index}:${screenshotColumn}`) || '';
       const directNote = noteColumn === undefined ? '' : sheet.imageCells?.get(`${index}:${noteColumn}`) || '';
-      if (!imported.screenshot && directScreenshot) imported.screenshot = directScreenshot;
-      if (directNote && !normalizeErrorScreenshot(imported.note)) imported.note = directNote;
+      if (!imported.screenshot && directScreenshot) imported.screenshot = normalizeErrorScreenshot(directScreenshot);
+      if (directNote && !normalizeErrorScreenshot(imported.note)) imported.note = normalizeErrorScreenshot(directNote);
       const importedErrorTypeValue = getErrorSheetValue(row, sheet.headerIndex, 'errorType');
       if (importedErrorTypeValue && !imported.errorType) {
         warnings.push(`${sheet.field}, dòng ${sourceRow}: Error Type "${importedErrorTypeValue}" không nằm trong danh sách cho phép.`);
@@ -3430,6 +3481,12 @@ async function syncErrorsWithGoogleSheets(user) {
       const fieldKey = String(sheet.field).trim().toLowerCase();
       const current = currentBySourceKey.get(`${fieldKey}:${sourceRow}`)
         || currentByFallbackKey.get(`${fieldKey}:${String(imported.title).trim()}:${String(imported.chapter).trim()}:${String(imported.error).trim()}`);
+      if (current && getErrorScreenshotValues(current.screenshot).length > 1 && getErrorScreenshotValues(imported.screenshot).length < 2) {
+        // A Google Sheet cell cannot faithfully represent several app screenshots.
+        // Keep the local multi-image value during a Sheet sync instead of dropping
+        // images down to the one image that the Sheet can expose.
+        imported.screenshot = current.screenshot;
+      }
       if (getErrorSheetHeaderIndex(sheet.headerIndex, 'errorType') === undefined && current?.errorType) {
         imported.errorType = current.errorType;
       }

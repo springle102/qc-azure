@@ -54,6 +54,7 @@ function LinkCard({ icon: Icon, label, value, linkText = 'Xem tại đây' }) {
 
 export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], currentUser = {}, isLoading, onRefresh, onResetAll, onNavigate }) {
   const isFreelancer = currentUser.role === 'Freelancer';
+  const canViewChecklists = ['Admin', 'Freelancer'].includes(currentUser.role);
   const [isResetting, setIsResetting] = React.useState(false);
   const freelancerTasks = useMemo(() => deadlines.length > 0 ? deadlines : tasks, [deadlines, tasks]);
   const fieldResources = useMemo(() => {
@@ -137,7 +138,7 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
 
       <div className="dashboard-link-grid">
         {fieldResources.flatMap((resource) => {
-          const checklistCards = isFreelancer && Array.isArray(resource.checklists)
+          const checklistCards = canViewChecklists && Array.isArray(resource.checklists)
             ? resource.checklists.map((checklist, index) => (
               <LinkCard
                 key={`${resource.field || 'default'}-checklist-${checklist.id || index}`}

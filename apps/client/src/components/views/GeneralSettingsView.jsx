@@ -345,7 +345,7 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
           <div>
             <span className="qc-kicker">CHECKLIST</span>
             <h3>Checklist theo mảng</h3>
-            <p className="form-help">Một mảng có thể có nhiều checklist. Chỉ chấp nhận link Google Sheet và checklist sẽ hiển thị trên dashboard của Freelancer thuộc mảng tương ứng.</p>
+            <p className="form-help">Một mảng có thể có nhiều checklist. Chỉ chấp nhận link Google Sheet và checklist sẽ hiển thị trên dashboard của Admin và Freelancer thuộc mảng tương ứng.</p>
           </div>
         </div>
         <div className="general-checklist-list">

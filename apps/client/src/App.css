@@ -2988,7 +2988,16 @@
   gap: 16px;
 }
 
-.error-screenshot-preview-body > img {
+.error-screenshot-preview-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  align-items: center;
+  justify-items: center;
+  width: 100%;
+  gap: 12px;
+}
+
+.error-screenshot-preview-images > img {
   display: block;
   width: auto;
   max-width: 100%;
@@ -3847,6 +3856,48 @@
   border-radius: 7px;
 }
 
+.error-screenshot-upload-previews {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  width: 100%;
+}
+
+.error-screenshot-upload-preview-item {
+  position: relative;
+  min-width: 0;
+}
+
+.error-screenshot-upload-preview-item .error-screenshot-upload-preview {
+  height: 118px;
+}
+
+.error-screenshot-remove-one {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(4, 7, 15, 0.78);
+  color: #fff;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.error-screenshot-remove-one:hover,
+.error-screenshot-remove-one:focus-visible {
+  border-color: var(--cyan-bright);
+  background: rgba(8, 145, 178, 0.9);
+  outline: none;
+}
+
 .error-screenshot-upload.compact .error-screenshot-dropzone {
   min-height: 76px;
   padding: 6px;
@@ -3858,6 +3909,22 @@
 
 .error-screenshot-upload.compact .error-screenshot-upload-preview {
   max-height: 66px;
+}
+
+.error-screenshot-upload.compact .error-screenshot-upload-previews {
+  gap: 3px;
+}
+
+.error-screenshot-upload.compact .error-screenshot-upload-preview-item .error-screenshot-upload-preview {
+  height: 66px;
+}
+
+.error-screenshot-upload.compact .error-screenshot-remove-one {
+  width: 16px;
+  height: 16px;
+  top: 1px;
+  right: 1px;
+  font-size: 12px;
 }
 
 .error-screenshot-upload.compact .error-screenshot-dropzone strong,
@@ -4056,9 +4123,24 @@
 }
 
 .error-screenshot-cell a img,
-.error-screenshot-cell .error-screenshot-preview-button img {
+.error-screenshot-cell .error-screenshot-preview-button > img {
   display: block;
   width: 108px;
+  height: 72px;
+  object-fit: contain;
+  border-radius: 5px;
+}
+
+.error-screenshot-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  width: 108px;
+}
+
+.error-screenshot-preview-grid img {
+  display: block;
+  width: 100%;
   height: 72px;
   object-fit: contain;
   border-radius: 5px;

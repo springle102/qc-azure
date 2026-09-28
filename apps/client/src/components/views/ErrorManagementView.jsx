@@ -36,35 +36,75 @@ function isImageValue(value) {
   return /^data:image\//i.test(text) || /^https?:\/\//i.test(text);
 }
 
+function getScreenshotImages(value) {
+  if (Array.isArray(value)) return value.filter(isImageValue).slice(0, 3);
+  const text = String(value ?? '').trim();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed)) return parsed.filter(isImageValue).slice(0, 3);
+  } catch {
+    // Legacy rows store a single image URL directly.
+  }
+  return isImageValue(text) ? [text] : [];
+}
+
+function serializeScreenshotImages(images) {
+  const normalized = images.filter(isImageValue).slice(0, 3);
+  if (normalized.length === 0) return '';
+  return normalized.length === 1 ? normalized[0] : JSON.stringify(normalized);
+}
+
 const MAX_SCREENSHOT_FILE_SIZE = 3 * 1024 * 1024;
 
-function ScreenshotUpload({ value, onChange, disabled = false, compact = false }) {
+function ScreenshotUpload({ value, onChange, disabled = false, compact = false, maxImages = 3 }) {
   const [error, setError] = useState('');
+  const images = getScreenshotImages(value).slice(0, maxImages);
 
-  const readImageFile = (file) => {
-    if (!file) return;
-    setError('');
-    if (!file.type.startsWith('image/')) {
-      setError('Vui lòng dán một hình ảnh.');
+  const readImageFile = (file) => new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('image/')) {
+      reject(new Error('Vui lòng dán một hình ảnh.'));
       return;
     }
     if (file.size > MAX_SCREENSHOT_FILE_SIZE) {
-      setError('Ảnh không được vượt quá 3 MB.');
+      reject(new Error('Ảnh không được vượt quá 3 MB.'));
       return;
     }
 
     const reader = new FileReader();
-    reader.onload = () => onChange?.(String(reader.result || ''));
-    reader.onerror = () => setError('Không thể đọc file ảnh.');
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Không thể đọc file ảnh.'));
     reader.readAsDataURL(file);
+  });
+
+  const handlePaste = async (event) => {
+    const imageItems = Array.from(event.clipboardData?.items || [])
+      .filter((item) => item.kind === 'file' && item.type.startsWith('image/'));
+    if (imageItems.length === 0) return;
+    event.preventDefault();
+    setError('');
+
+    const availableSlots = maxImages - images.length;
+    if (availableSlots <= 0) {
+      setError(`Tối đa ${maxImages} ảnh trong một ô.`);
+      return;
+    }
+
+    const files = imageItems.slice(0, availableSlots).map((item) => item.getAsFile()).filter(Boolean);
+    const results = await Promise.allSettled(files.map(readImageFile));
+    const pastedImages = results
+      .filter((result) => result.status === 'fulfilled' && isImageValue(result.value))
+      .map((result) => result.value);
+    if (pastedImages.length > 0) onChange?.(serializeScreenshotImages([...images, ...pastedImages]));
+
+    const rejected = results.find((result) => result.status === 'rejected');
+    if (rejected) setError(rejected.reason?.message || 'Không thể đọc file ảnh.');
+    else if (imageItems.length > availableSlots) setError(`Tối đa ${maxImages} ảnh trong một ô.`);
   };
 
-  const handlePaste = (event) => {
-    const imageItem = Array.from(event.clipboardData?.items || [])
-      .find((item) => item.kind === 'file' && item.type.startsWith('image/'));
-    if (!imageItem) return;
-    event.preventDefault();
-    readImageFile(imageItem.getAsFile());
+  const removeImage = (index) => {
+    onChange?.(serializeScreenshotImages(images.filter((_, imageIndex) => imageIndex !== index)));
+    setError('');
   };
 
   return (
@@ -72,26 +112,33 @@ function ScreenshotUpload({ value, onChange, disabled = false, compact = false }
       className={`error-screenshot-upload${compact ? ' compact' : ''}`}
       tabIndex={disabled ? -1 : 0}
       onPasteCapture={disabled ? undefined : handlePaste}
-      role="button"
-      aria-label="Dán screenshot bằng Ctrl + V"
+      role="group"
+      aria-label={`Dán screenshot bằng Ctrl + V, tối đa ${maxImages} ảnh`}
       title="Nhấn Ctrl + V để dán ảnh trực tiếp"
     >
       <div
-        className={`error-screenshot-dropzone${value ? ' has-image' : ''}`}
+        className={`error-screenshot-dropzone${images.length > 0 ? ' has-image' : ''}`}
       >
-        {value ? (
+        {images.length > 0 ? (
           <>
-            <img className="error-screenshot-upload-preview" src={value} alt="Screenshot lỗi" />
-            <span className="error-screenshot-upload-caption">Ctrl + V để dán ảnh khác</span>
+            <div className="error-screenshot-upload-previews">
+              {images.map((image, index) => (
+                <div className="error-screenshot-upload-preview-item" key={`${image.slice(0, 32)}-${index}`}>
+                  <img className="error-screenshot-upload-preview" src={image} alt={`Screenshot lỗi ${index + 1}`} />
+                  <button type="button" className="error-screenshot-remove-one" onClick={() => removeImage(index)} disabled={disabled} aria-label={`Xóa screenshot ${index + 1}`} title="Xóa ảnh">×</button>
+                </div>
+              ))}
+            </div>
+            <span className="error-screenshot-upload-caption">{images.length}/{maxImages} ảnh · Ctrl + V để thêm</span>
           </>
         ) : (
           <>
             <strong>Nhấn Ctrl + V để dán ảnh</strong>
-            <span>Dán trực tiếp vào ô này · tối đa 3 MB</span>
+            <span>Dán trực tiếp vào ô này · tối đa {maxImages} ảnh</span>
           </>
         )}
       </div>
-      {value && <button type="button" className="text-button error-screenshot-remove" onClick={() => { setError(''); onChange?.(''); }} disabled={disabled}>Xóa ảnh</button>}
+      {images.length > 0 && <button type="button" className="text-button error-screenshot-remove" onClick={() => { setError(''); onChange?.(''); }} disabled={disabled}>Xóa tất cả ảnh</button>}
       {error && <span className="error-screenshot-error" role="alert">{error}</span>}
     </div>
   );
@@ -114,7 +161,7 @@ function NoteEditor({ value, onChange, disabled = false }) {
         <button type="button" className={`error-note-format-button${mode === 'image' ? ' active' : ''}`} onClick={() => changeMode('image')} disabled={disabled}>Ảnh</button>
       </div>
       {mode === 'image' ? (
-        <ScreenshotUpload compact value={imageValue} onChange={onChange} disabled={disabled} />
+        <ScreenshotUpload compact value={imageValue} onChange={onChange} disabled={disabled} maxImages={1} />
       ) : (
         <textarea className="error-note-inline-textarea" value={isImageValue(value) ? '' : (value || '')} onChange={(event) => onChange?.(event.target.value)} disabled={disabled} placeholder="Ghi chú..." />
       )}
@@ -683,7 +730,7 @@ export function ErrorManagementView({
                           <ErrorTypeControl value={rowDraft.errorType} onChange={(value) => updateRowDraft(row, 'errorType', value)} disabled={isRowSaving} ariaLabel={`Error Type cho ${row.title}`} />
                         ) : <ErrorTypeBadge value={row.errorType} />}
                       </td>
-                      <td className="error-screenshot-cell">{canManage ? <ScreenshotUpload compact value={rowDraft.screenshot} onChange={(value) => updateRowDraft(row, 'screenshot', value)} disabled={isRowSaving} /> : row.screenshot ? <button type="button" className="error-screenshot-preview-button" onClick={() => setSelectedScreenshot(row)} title="Xem chi tiết screenshot"><img src={row.screenshot} alt={`Screenshot cho ${row.title}`} /></button> : <span className="error-screenshot-empty">—</span>}</td>
+                      <td className="error-screenshot-cell">{canManage ? <ScreenshotUpload compact value={rowDraft.screenshot} onChange={(value) => updateRowDraft(row, 'screenshot', value)} disabled={isRowSaving} /> : getScreenshotImages(row.screenshot).length > 0 ? <button type="button" className="error-screenshot-preview-button" onClick={() => setSelectedScreenshot(row)} title="Xem chi tiết screenshot"><span className="error-screenshot-preview-grid">{getScreenshotImages(row.screenshot).map((image, index) => <img src={image} alt={`Screenshot ${index + 1} cho ${row.title}`} key={`${image.slice(0, 32)}-${index}`} />)}</span></button> : <span className="error-screenshot-empty">—</span>}</td>
                       <td className="error-description-cell">{canManage ? <textarea className="error-inline-textarea" value={rowDraft.error || ''} onChange={(event) => updateRowDraft(row, 'error', event.target.value)} disabled={isRowSaving} /> : row.error}</td>
                       <td className="error-note-cell">{canManage ? <NoteEditor value={rowDraft.note || ''} onChange={(value) => updateRowDraft(row, 'note', value)} disabled={isRowSaving} /> : <div className="error-note-readonly">{isImageValue(row.note) ? <img className="error-note-readonly-image" src={row.note} alt={`Note cho ${row.title}`} /> : (row.note || '—')}</div>}</td>
                       <td>{canManage ? <select className="error-inline-select" value={rowDraft.editorFreelancerId || ''} onChange={(event) => updateRowDraft(row, 'editorFreelancerId', event.target.value)} disabled={isRowSaving}><option value="">Chọn freelancer</option>{editorOptions.map((freelancer) => <option value={getFreelancerId(freelancer)} key={getFreelancerId(freelancer)}>{freelancer.name || freelancer.email}</option>)}</select> : <span className="error-editor-badge">{row.editor || 'Chưa gán'}</span>}</td>
@@ -698,7 +745,7 @@ export function ErrorManagementView({
         </>
       )}
 
-      {selectedScreenshot && (
+      {selectedScreenshot && createPortal(
         <div className="modal-overlay" onClick={() => setSelectedScreenshot(null)} role="presentation">
           <div className="modal-content error-screenshot-preview-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="error-screenshot-preview-title">
             <div className="modal-header">
@@ -711,7 +758,11 @@ export function ErrorManagementView({
               </button>
             </div>
             <div className="modal-body error-screenshot-preview-body">
-              <img src={selectedScreenshot.screenshot} alt={`Screenshot chi tiết cho ${selectedScreenshot.title || 'lỗi'}`} />
+              <div className="error-screenshot-preview-images">
+                {getScreenshotImages(selectedScreenshot.screenshot).map((image, index) => (
+                  <img src={image} alt={`Screenshot chi tiết ${index + 1} cho ${selectedScreenshot.title || 'lỗi'}`} key={`${image.slice(0, 32)}-${index}`} />
+                ))}
+              </div>
               <div className="error-screenshot-preview-meta">
                 <strong>Chapter {selectedScreenshot.chapter || '—'}</strong>
                 <span>{selectedScreenshot.field || activeField} · {selectedScreenshot.errorType || 'Chưa chọn Error Type'}</span>
@@ -719,7 +770,8 @@ export function ErrorManagementView({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
