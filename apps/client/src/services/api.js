@@ -14,6 +14,9 @@ export function getUserFacingErrorMessage(message, fallback = 'Không thể hoà
   if (/SERVICE_DISABLED|has not been used in project|API .* disabled/i.test(text)) {
     return 'Google API cần thiết chưa được bật.';
   }
+  if (/failed to fetch|networkerror|load failed|fetch failed|network request failed/i.test(text)) {
+    return 'Không thể kết nối máy chủ. Vui lòng kiểm tra backend hoặc thử lại sau.';
+  }
   if (/^\s*[{[]/.test(text) || /"(?:error|errors|code|message)"\s*:/i.test(text) || /API trả về lỗi \d+/i.test(text)) {
     return fallback;
   }
@@ -60,7 +63,7 @@ async function request(path, options = {}) {
     if (error.name === 'AbortError') {
       throw new Error('Máy chủ phản hồi quá lâu. Vui lòng thử lại sau.');
     }
-    throw error;
+    throw new Error(getUserFacingErrorMessage(error.message, 'Không thể kết nối máy chủ. Vui lòng thử lại sau.'));
   } finally {
     window.clearTimeout(timeoutId);
   }
