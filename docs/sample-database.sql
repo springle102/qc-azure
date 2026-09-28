@@ -183,7 +183,7 @@ EXECUTE FUNCTION public.sync_account_to_qc();
 
 CREATE TABLE IF NOT EXISTS "SeriesList" (
   "seriesId" integer NOT NULL,
-  "chapterNumber" integer NOT NULL,
+  "chapterNumber" varchar(100) NOT NULL,
   "seriesName" varchar(255),
   "type" varchar(100),
   "statusRaw" varchar(100),

@@ -730,14 +730,14 @@ app.post('/api/deadlines', requireManager, async (req, res) => {
 
 app.patch('/api/deadlines/:seriesId/:chapterNumber/status', requireAuth, async (req, res) => {
   const seriesId = Number(req.params.seriesId);
-  const chapterNumber = Number(req.params.chapterNumber);
-  if (!Number.isInteger(seriesId) || !Number.isInteger(chapterNumber)) {
-    return res.status(400).json({ success: false, message: 'seriesId và chapterNumber phải là số nguyên.' });
+  const chapterNumber = String(req.params.chapterNumber ?? '').trim();
+  if (!Number.isInteger(seriesId) || !chapterNumber || chapterNumber.length > 100) {
+    return res.status(400).json({ success: false, message: 'ID bộ truyện phải là số nguyên và Chapter phải là chuỗi từ 1 đến 100 ký tự.' });
   }
 
   try {
     const currentRows = await selectRows('deadlines');
-    const current = currentRows.find((item) => Number(item.seriesId) === seriesId && Number(item.chapterNumber) === chapterNumber);
+    const current = currentRows.find((item) => Number(item.seriesId) === seriesId && String(item.chapterNumber ?? '').trim() === chapterNumber);
     if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy deadline cần cập nhật.' });
     if (req.authUser.role === 'Freelancer' && String(current.fIld ?? '') !== String(req.authUser.freelancerId ?? '')) {
       return res.status(403).json({ success: false, message: 'Freelancer chỉ được cập nhật task của mình.' });
@@ -760,14 +760,14 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber/status', requireAuth, async (
 
 app.patch('/api/deadlines/:seriesId/:chapterNumber', requireAuth, async (req, res) => {
   const seriesId = Number(req.params.seriesId);
-  const chapterNumber = Number(req.params.chapterNumber);
-  if (!Number.isInteger(seriesId) || !Number.isInteger(chapterNumber)) {
-    return res.status(400).json({ success: false, message: 'seriesId và chapterNumber phải là số nguyên.' });
+  const chapterNumber = String(req.params.chapterNumber ?? '').trim();
+  if (!Number.isInteger(seriesId) || !chapterNumber || chapterNumber.length > 100) {
+    return res.status(400).json({ success: false, message: 'ID bộ truyện phải là số nguyên và Chapter phải là chuỗi từ 1 đến 100 ký tự.' });
   }
 
   try {
     const currentRows = await selectRows('deadlines');
-    const current = currentRows.find((item) => Number(item.seriesId) === seriesId && Number(item.chapterNumber) === chapterNumber);
+    const current = currentRows.find((item) => Number(item.seriesId) === seriesId && String(item.chapterNumber ?? '').trim() === chapterNumber);
     if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy deadline cần cập nhật.' });
 
     if (req.authUser.role === 'Freelancer') {
@@ -871,16 +871,16 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber', requireAuth, async (req, re
 
 app.delete('/api/deadlines/:seriesId/:chapterNumber', requireManager, async (req, res) => {
   const seriesId = Number(req.params.seriesId);
-  const chapterNumber = Number(req.params.chapterNumber);
-  if (!Number.isInteger(seriesId) || !Number.isInteger(chapterNumber)) {
-    return res.status(400).json({ success: false, message: 'seriesId và chapterNumber phải là số nguyên.' });
+  const chapterNumber = String(req.params.chapterNumber ?? '').trim();
+  if (!Number.isInteger(seriesId) || !chapterNumber || chapterNumber.length > 100) {
+    return res.status(400).json({ success: false, message: 'ID bộ truyện phải là số nguyên và Chapter phải là chuỗi từ 1 đến 100 ký tự.' });
   }
 
   try {
     const settings = await getGeneralSettings();
     if (normalizeGoogleSheetUrl(settings.googleSheetUrl)) await syncGoogleSheet();
     const currentRows = await selectRows('deadlines');
-    const current = currentRows.find((item) => Number(item.seriesId) === seriesId && Number(item.chapterNumber) === chapterNumber);
+    const current = currentRows.find((item) => Number(item.seriesId) === seriesId && String(item.chapterNumber ?? '').trim() === chapterNumber);
     if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy deadline cần xóa.' });
 
     try {
@@ -2053,6 +2053,13 @@ function parseImportedInteger(value, label, rowNumber, { required = false } = {}
   return parsed;
 }
 
+function parseImportedChapter(value, rowNumber) {
+  const chapter = String(value ?? '').trim();
+  if (!chapter) throw validationError(`Dòng ${rowNumber}: thiếu chapter.`);
+  if (chapter.length > 100) throw validationError(`Dòng ${rowNumber}: chapter tối đa 100 ký tự.`);
+  return chapter;
+}
+
 function parseImportedMoney(value, label, rowNumber) {
   const text = String(value ?? '').trim();
   if (!text) return null;
@@ -2121,16 +2128,15 @@ function normalizeImportedField(value, fields, rowNumber) {
 
 function getSheetDeadlineKey(row, headerIndex, fieldOverride = null) {
   const seriesId = Number(String(getSheetValue(row, headerIndex, 'seriesId', fieldOverride)).replace(/,/g, '').trim());
-  const chapterNumber = Number(String(getSheetValue(row, headerIndex, 'chapterNumber')).replace(/,/g, '').trim());
-  if (!Number.isInteger(seriesId) || seriesId < 0 || !Number.isInteger(chapterNumber) || chapterNumber < 1) return null;
+  const chapterNumber = String(getSheetValue(row, headerIndex, 'chapterNumber')).trim();
+  if (!Number.isInteger(seriesId) || seriesId < 0 || !chapterNumber || chapterNumber.length > 100) return null;
   return `${seriesId}:${chapterNumber}`;
 }
 
 function buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qcs, rowNumber, fieldOverride = null) {
   const seriesIdLabel = normalizeSheetHeader(fieldOverride) === 'latin' ? 'AZ ID' : 'seriesId';
   const seriesId = parseImportedInteger(getSheetValue(row, headerIndex, 'seriesId', fieldOverride), seriesIdLabel, rowNumber, { required: true });
-  const chapterNumber = parseImportedInteger(getSheetValue(row, headerIndex, 'chapterNumber'), 'chapterNumber', rowNumber, { required: true });
-  if (chapterNumber < 1) throw validationError(`Dòng ${rowNumber}: chapter phải lớn hơn 0.`);
+  const chapterNumber = parseImportedChapter(getSheetValue(row, headerIndex, 'chapterNumber'), rowNumber);
   const type = fieldOverride || normalizeImportedField(getSheetValue(row, headerIndex, 'type'), fields, rowNumber);
   const importedPrice = parseImportedMoney(getSheetValue(row, headerIndex, 'price'), 'Price per chapter', rowNumber);
   const difficultyFromSheet = getSheetValue(row, headerIndex, 'difficulty');
@@ -2191,7 +2197,7 @@ function normalizeSyncValue(value, column) {
     const timestamp = new Date(value).getTime();
     if (Number.isFinite(timestamp)) return String(timestamp);
   }
-  if (['seriesId', 'chapterNumber', 'fIld', 'assignedAdminId', 'qcId', 'price', 'receivePrice', 'completionPercent'].includes(column)) {
+  if (['seriesId', 'fIld', 'assignedAdminId', 'qcId', 'price', 'receivePrice', 'completionPercent'].includes(column)) {
     const numeric = Number(value);
     if (Number.isFinite(numeric)) return String(numeric);
   }
@@ -2231,7 +2237,7 @@ function findGoogleSheetRow(tab, seriesId, chapterNumber) {
     if (isDecorativeGoogleSheetRow(row, tab.headerIndex, tab.fieldOverride)) continue;
     const currentSeriesId = getSheetValue(row, tab.headerIndex, 'seriesId', tab.fieldOverride);
     const currentChapterNumber = getSheetValue(row, tab.headerIndex, 'chapterNumber');
-    if (Number(currentSeriesId) === Number(seriesId) && Number(currentChapterNumber) === Number(chapterNumber)) {
+    if (Number(currentSeriesId) === Number(seriesId) && String(currentChapterNumber).trim() === String(chapterNumber).trim()) {
       return {
         row,
         rowIndex: index,
@@ -2478,13 +2484,13 @@ async function deleteDeadlinesFromGoogleSheet(rows) {
     throw new Error(`Không thể đồng bộ hai chiều vì thiếu tab Google Sheet: ${sheetReadResult.missingTabs.map(({ field, missingTab }) => `${field} → "${missingTab}"`).join(', ')}.`);
   }
   const tabs = sheetReadResult.tabs.map((tab) => getGoogleSheetTabSnapshot(tab, fields));
-  const keys = new Set(rows.map((row) => `${Number(row.seriesId)}:${Number(row.chapterNumber)}`));
+  const keys = new Set(rows.map((row) => `${Number(row.seriesId)}:${String(row.chapterNumber ?? '').trim()}`));
   const requests = [];
   tabs.forEach((tab) => {
     for (let index = tab.headerRowIndex + 1; index < tab.values.length; index += 1) {
       const row = tab.values[index] || [];
       if (isDecorativeGoogleSheetRow(row, tab.headerIndex, tab.fieldOverride)) continue;
-      const key = `${Number(getSheetValue(row, tab.headerIndex, 'seriesId', tab.fieldOverride))}:${Number(getSheetValue(row, tab.headerIndex, 'chapterNumber'))}`;
+      const key = `${Number(getSheetValue(row, tab.headerIndex, 'seriesId', tab.fieldOverride))}:${String(getSheetValue(row, tab.headerIndex, 'chapterNumber')).trim()}`;
       if (!keys.has(key)) continue;
       requests.push({
         deleteDimension: {
@@ -2636,7 +2642,7 @@ async function syncGoogleSheet() {
 
     const allowedColumns = ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'assignedAdminId', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'completionPercent', 'paymentApproved'];
     const currentRowsByKey = new Map(currentRows.map((item) => [
-      `${Number(item.seriesId)}:${Number(item.chapterNumber)}`,
+      `${Number(item.seriesId)}:${String(item.chapterNumber ?? '').trim()}`,
       item
     ]));
     // Preserve a URL that was previously filled automatically when the Sheet
@@ -2644,7 +2650,7 @@ async function syncGoogleSheet() {
     // a matching Google Drive folder named after their series ID.
     const rowsWithPreservedUrls = uniqueRows.map((entry) => {
       if (isHttpUrl(entry.data.urlSeries)) return entry;
-      const key = `${Number(entry.data.seriesId)}:${Number(entry.data.chapterNumber)}`;
+      const key = `${Number(entry.data.seriesId)}:${String(entry.data.chapterNumber ?? '').trim()}`;
       const currentUrl = currentRowsByKey.get(key)?.urlSeries;
       return isHttpUrl(currentUrl)
         ? { ...entry, data: { ...entry.data, urlSeries: currentUrl } }
@@ -2710,7 +2716,7 @@ async function syncGoogleSheet() {
       // deleted from the Sheet. Preserve them until that tab is restored or
       // its mapping is removed from settings.
       if (missingFields.has(String(current.type ?? '').trim().toLowerCase())) return false;
-      const key = `${Number(current.seriesId)}:${Number(current.chapterNumber)}`;
+      const key = `${Number(current.seriesId)}:${String(current.chapterNumber ?? '').trim()}`;
       return !sheetKeys.has(key);
     });
     const deletedCounts = await runWithConcurrency(rowsToDelete, async (current) => {
@@ -3232,10 +3238,10 @@ async function syncErrorsWithGoogleSheets(user) {
     getCollection('freelancers'),
     getCollection('errors')
   ]);
-  const sheets = [];
-  for (const [field, url] of mappings) {
-    sheets.push(await readErrorGoogleSheet(field, url));
-  }
+  // Read each configured error sheet in parallel. Image extraction can take
+  // several API calls, so reading tabs serially makes sync time grow linearly
+  // with the number of fields.
+  const sheets = await Promise.all(mappings.map(([field, url]) => readErrorGoogleSheet(field, url)));
 
   const sourceKeysByField = new Map();
   const warnings = [];
@@ -3245,22 +3251,36 @@ async function syncErrorsWithGoogleSheets(user) {
   let deleted = 0;
   let skipped = 0;
 
+  const currentBySourceKey = new Map();
+  const currentByFallbackKey = new Map();
+  currentRows.forEach((item) => {
+    const fieldKey = String(item.field ?? '').trim().toLowerCase();
+    if (item.sourceRow) currentBySourceKey.set(`${fieldKey}:${Number(item.sourceRow)}`, item);
+    if (!item.sourceRow) {
+      currentByFallbackKey.set(
+        `${fieldKey}:${String(item.title ?? '').trim()}:${String(item.chapter ?? '').trim()}:${String(item.error ?? '').trim()}`,
+        item
+      );
+    }
+  });
+
   for (const sheet of sheets) {
     const sourceKeys = new Set();
     sourceKeysByField.set(sheet.field.toLowerCase(), sourceKeys);
     if (sheet.imageReadError) {
       warnings.push(`${sheet.field}: ${sheet.imageReadError}`);
     }
+    const importedRows = [];
     for (let index = sheet.headerRowIndex + 1; index < sheet.values.length; index += 1) {
       const row = sheet.values[index] || [];
       if (sheet.hiddenRows?.has(index)) continue;
       if (isDecorativeErrorSheetRow(row, sheet.headerIndex)) continue;
       const sourceRow = sheet.rangeMeta.startRow + index + 1;
       sourceKeys.add(sourceRow);
-    if (isIncompleteErrorSheetRow(row, sheet.headerIndex)) {
-      skipped += 1;
-      continue;
-    }
+      if (isIncompleteErrorSheetRow(row, sheet.headerIndex)) {
+        skipped += 1;
+        continue;
+      }
       const imported = buildImportedError(row, sheet.headerIndex, freelancers, sourceRow, sheet.field, sheet.sourceUrl, sheet.cellData[index]);
       const screenshotColumn = getErrorSheetHeaderIndex(sheet.headerIndex, 'screenshot');
       const noteColumn = getErrorSheetHeaderIndex(sheet.headerIndex, 'note');
@@ -3275,32 +3295,29 @@ async function syncErrorsWithGoogleSheets(user) {
       if (imported.editor && !imported.editorFreelancerId) {
         warnings.push(`${sheet.field}, dòng ${sourceRow}: không tìm thấy Editor "${imported.editor}" trong danh sách freelancer.`);
       }
-      const current = currentRows.find((item) => (
-        String(item.field).toLowerCase() === String(sheet.field).toLowerCase()
-          && Number(item.sourceRow) === sourceRow
-      )) || currentRows.find((item) => (
-        String(item.field).toLowerCase() === String(sheet.field).toLowerCase()
-          && !item.sourceRow
-          && String(item.title).trim() === imported.title
-          && String(item.chapter).trim() === imported.chapter
-          && String(item.error).trim() === imported.error
-      ));
+      const fieldKey = String(sheet.field).trim().toLowerCase();
+      const current = currentBySourceKey.get(`${fieldKey}:${sourceRow}`)
+        || currentByFallbackKey.get(`${fieldKey}:${String(imported.title).trim()}:${String(imported.chapter).trim()}:${String(imported.error).trim()}`);
       if (getErrorSheetHeaderIndex(sheet.headerIndex, 'errorType') === undefined && current?.errorType) {
         imported.errorType = current.errorType;
       }
       if (getErrorSheetHeaderIndex(sheet.headerIndex, 'screenshot') === undefined && current?.screenshot) {
         imported.screenshot = current.screenshot;
       }
-      if (current) {
-        if (hasErrorSheetChanges(current, imported)) {
-          await updateRowById('errors', current.id, imported, ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'updatedAt']);
-          updated += 1;
-        }
-      } else {
-        await insertRow('errors', { ...imported, createdAt: imported.updatedAt }, ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'createdAt', 'updatedAt']);
-        inserted += 1;
-      }
+      importedRows.push({ imported, current });
     }
+
+    const writeResults = await runWithConcurrency(importedRows, async ({ imported, current }) => {
+      if (current) {
+        if (!hasErrorSheetChanges(current, imported)) return 'unchanged';
+        await updateRowById('errors', current.id, imported, ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'updatedAt']);
+        return 'updated';
+      }
+      await insertRow('errors', { ...imported, createdAt: imported.updatedAt }, ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'createdAt', 'updatedAt']);
+      return 'inserted';
+    });
+    inserted += writeResults.filter((result) => result === 'inserted').length;
+    updated += writeResults.filter((result) => result === 'updated').length;
   }
 
   const sheetByField = new Map(sheets.map((sheet) => [sheet.field.toLowerCase(), sheet]));
@@ -3653,9 +3670,9 @@ function validateDeadlineCreatePayload(payload) {
   if (!payload || typeof payload !== 'object') throw validationError('Dữ liệu deadline không hợp lệ.');
 
   const seriesId = Number(payload.seriesId);
-  const chapterNumber = Number(payload.chapterNumber);
+  const chapterNumber = String(payload.chapterNumber ?? '').trim();
   if (!Number.isInteger(seriesId) || seriesId < 0) throw validationError('ID bộ truyện phải là số nguyên không âm.');
-  if (!Number.isInteger(chapterNumber) || chapterNumber < 1) throw validationError('Chapter phải là số nguyên dương.');
+  if (!chapterNumber || chapterNumber.length > 100) throw validationError('Chapter không được để trống và tối đa 100 ký tự.');
 
   const type = String(payload.type ?? '').trim();
   const difficulty = String(payload.difficulty ?? '').trim();

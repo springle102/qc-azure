@@ -28,7 +28,7 @@ const columns = [
 
 const EDIT_FIELDS = [
   ['seriesId', 'ID bộ truyện', 'number', true],
-  ['chapterNumber', 'Chapter', 'number', true],
+  ['chapterNumber', 'Chapter', 'text', true],
   ['endTask', 'Hạn DL', 'date'],
   ['seriesName', 'Tên bộ truyện', 'text'],
   ['type', 'Mảng', 'field-select'],
@@ -51,8 +51,8 @@ const CREATE_FIELDS = [...EDIT_FIELDS.filter(([key]) => !['price', 'receivePrice
 const NUMERIC_FIELDS = new Set(['fIld', 'assignedAdminId', 'qcId', 'price', 'receivePrice', 'completionPercent']);
 const DATE_FIELDS = new Set(['endTask']);
 const MONTH_FILTER_COLUMNS = new Set(['endTask', 'submittedAt']);
-const STRING_SORT_COLUMNS = new Set(['seriesName', 'type', 'urlSeries', 'difficulty', 'feedback', 'late']);
-const NUMBER_SORT_COLUMNS = new Set(['seriesId', 'chapterNumber', 'fIld', 'qcId', 'completionPercent', 'price', 'receivePrice']);
+const STRING_SORT_COLUMNS = new Set(['seriesName', 'chapterNumber', 'type', 'urlSeries', 'difficulty', 'feedback', 'late']);
+const NUMBER_SORT_COLUMNS = new Set(['seriesId', 'fIld', 'qcId', 'completionPercent', 'price', 'receivePrice']);
 const DATE_SORT_COLUMNS = new Set(['endTask']);
 const STATUS_OPTIONS = [
   { value: 'doing', label: 'Doing', className: 'task-status-doing' },

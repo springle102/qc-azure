@@ -107,15 +107,15 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(deadline)
   }),
-  updateDeadline: (seriesId, chapterNumber, updates) => request(`/deadlines/${seriesId}/${chapterNumber}`, {
+  updateDeadline: (seriesId, chapterNumber, updates) => request(`/deadlines/${encodeURIComponent(seriesId)}/${encodeURIComponent(chapterNumber)}`, {
     method: 'PATCH',
     body: JSON.stringify(updates)
   }),
-  updateDeadlineStatus: (seriesId, chapterNumber, status) => request(`/deadlines/${seriesId}/${chapterNumber}/status`, {
+  updateDeadlineStatus: (seriesId, chapterNumber, status) => request(`/deadlines/${encodeURIComponent(seriesId)}/${encodeURIComponent(chapterNumber)}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ status })
   }),
-  deleteDeadline: (seriesId, chapterNumber) => request(`/deadlines/${seriesId}/${chapterNumber}`, {
+  deleteDeadline: (seriesId, chapterNumber) => request(`/deadlines/${encodeURIComponent(seriesId)}/${encodeURIComponent(chapterNumber)}`, {
     method: 'DELETE'
   }),
   getFields: () => request('/fields'),

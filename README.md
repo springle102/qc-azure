@@ -23,7 +23,7 @@ Sidebar hiện gồm:
 Các bảng giao diện bám theo schema trong `docs/database diagram.png` và schema mẫu:
 
 - `Freelancer`: `fIld`, `name`, `email`, `field`, `note`, `salary`, `imageQR`
-- `SeriesList`: thông tin deadline, chapter, status tiến độ, thời gian làm và `% hoàn thành`
+- `SeriesList`: thông tin deadline, chapter dạng văn bản, status tiến độ, thời gian làm và `% hoàn thành`
 - `DifficultyLevels`: danh sách độ khó, màu nền và màu chữ tùy chỉnh theo từng mảng
 - `DifficultyPricing`: giá theo mảng và độ khó do người dùng tự định nghĩa cho từng mảng
 - `Fields`: danh sách mảng dùng chung cho account, freelancer, deadline, giá tiền và link Guide/Tài nguyên theo từng mảng
