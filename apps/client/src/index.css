@@ -5,12 +5,12 @@
 
 :root {
   /* Obsidian & Deep Blue Space */
-  --bg-darkest: #050811;
-  --bg-darker: #070c18;
-  --bg-surface: #0c1427;
-  --bg-card: rgba(13, 22, 42, 0.75);
-  --bg-card-hover: rgba(18, 30, 58, 0.85);
-  --bg-glass: rgba(15, 23, 42, 0.65);
+  --bg-darkest: #070b14;
+  --bg-darker: #0a0f1d;
+  --bg-surface: #0d1527;
+  --bg-card: rgba(13, 22, 42, 0.8);
+  --bg-card-hover: rgba(20, 32, 60, 0.9);
+  --bg-glass: rgba(13, 21, 38, 0.85);
 
   /* Primary Blue Gradients */
   --grad-primary: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 50%, #06b6d4 100%);
@@ -24,11 +24,12 @@
   --blue-glow: #3b82f6;
   --cyan-accent: #06b6d4;
   --cyan-bright: #38bdf8;
+  --text-strong: #ffffff;
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --text-sub: #64748b;
-  --border-subtle: rgba(59, 130, 246, 0.16);
-  --border-bright: rgba(59, 130, 246, 0.38);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-bright: rgba(139, 92, 246, 0.38);
 
   /* Status Colors */
   --status-critical: #f43f5e;
@@ -43,20 +44,21 @@
 }
 
 :root[data-theme='light'] {
-  --bg-darkest: #f3f6fb;
-  --bg-darker: #e8eef7;
+  --bg-darkest: #f1f5f9;
+  --bg-darker: #e2e8f0;
   --bg-surface: #ffffff;
-  --bg-card: rgba(255, 255, 255, 0.9);
-  --bg-card-hover: rgba(248, 250, 252, 0.98);
-  --bg-glass: rgba(255, 255, 255, 0.82);
+  --bg-card: #ffffff;
+  --bg-card-hover: #f8fafc;
+  --bg-glass: rgba(255, 255, 255, 0.92);
   --grad-blue-dark: linear-gradient(180deg, rgba(219, 234, 254, 0.75) 0%, rgba(241, 245, 249, 0.88) 100%);
-  --grad-card-border: linear-gradient(135deg, rgba(59, 130, 246, 0.32) 0%, rgba(6, 182, 212, 0.18) 50%, rgba(15, 23, 42, 0.06) 100%);
-  --grad-text: linear-gradient(135deg, #0f172a 30%, #2563eb 100%);
+  --grad-card-border: linear-gradient(135deg, rgba(99, 102, 241, 0.3) 0%, rgba(14, 165, 233, 0.2) 50%, rgba(0, 0, 0, 0.05) 100%);
+  --grad-text: linear-gradient(135deg, #0f172a 30%, #4338ca 100%);
+  --text-strong: #020617;
   --text-main: #0f172a;
-  --text-muted: #475569;
+  --text-muted: #334155;
   --text-sub: #64748b;
-  --border-subtle: rgba(37, 99, 235, 0.18);
-  --border-bright: rgba(37, 99, 235, 0.38);
+  --border-subtle: #e2e8f0;
+  --border-bright: #cbd5e1;
 }
 
 * {
@@ -289,3 +291,49 @@ body::after {
   color: #7dd3fc;
   border: 1px solid rgba(56, 189, 248, 0.45);
 }
+
+/* Light Theme Badges (High Contrast) */
+:root[data-theme='light'] .badge-role-admin {
+  background: #f3e8ff;
+  color: #7e22ce;
+  border-color: #d8b4fe;
+}
+:root[data-theme='light'] .badge-role-qc {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #bae6fd;
+}
+:root[data-theme='light'] .badge-role-freelancer {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+:root[data-theme='light'] .badge-status-cho-nhan {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+:root[data-theme='light'] .badge-status-dang-thuc-hien {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-color: #7dd3fc;
+  box-shadow: none;
+}
+:root[data-theme='light'] .badge-status-cho-qc-duyet {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+}
+:root[data-theme='light'] .badge-status-can-sua-loi {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+  box-shadow: none;
+}
+:root[data-theme='light'] .badge-status-hoan-thanh {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #86efac;
+  box-shadow: none;
+}
+
