@@ -3,16 +3,21 @@ import { IconBook, IconEdit, IconFolder, IconPlus, IconRefresh, IconTrash, IconX
 import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
 
+const createChecklistId = () => `checklist-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
 export function GeneralSettingsView({ fields = [], generalSettings, isLoading, onRefresh }) {
   const [googleSheetUrl, setGoogleSheetUrl] = useState(generalSettings?.googleSheetUrl || '');
   const [googleSheetTabs, setGoogleSheetTabs] = useState(generalSettings?.googleSheetTabs || {});
   const [googleDriveFolders, setGoogleDriveFolders] = useState(generalSettings?.googleDriveFolders || {});
+  const [checklists, setChecklists] = useState(generalSettings?.checklists || {});
   const [googleSheetAutoSync, setGoogleSheetAutoSync] = useState(generalSettings?.googleSheetAutoSync === true);
   const [newField, setNewField] = useState('');
   const [editingField, setEditingField] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [editingGuideUrl, setEditingGuideUrl] = useState('');
   const [editingResourceUrl, setEditingResourceUrl] = useState('');
+  const [checklistDrafts, setChecklistDrafts] = useState({});
+  const [editingChecklist, setEditingChecklist] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -23,6 +28,9 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
     const configuredDriveFolders = generalSettings?.googleDriveFolders || {};
     const defaultDriveFolders = Object.fromEntries(fields.map((field) => [field.name, '']));
     setGoogleDriveFolders({ ...defaultDriveFolders, ...configuredDriveFolders });
+    const configuredChecklists = generalSettings?.checklists && typeof generalSettings.checklists === 'object' ? generalSettings.checklists : {};
+    const defaultChecklists = Object.fromEntries(fields.map((field) => [field.name, Array.isArray(configuredChecklists[field.name]) ? configuredChecklists[field.name] : []]));
+    setChecklists({ ...configuredChecklists, ...defaultChecklists });
     setGoogleSheetAutoSync(generalSettings?.googleSheetAutoSync === true);
   }, [generalSettings, fields]);
 
@@ -54,6 +62,7 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
         googleSheetUrl: googleSheetUrl.trim(),
         googleSheetTabs,
         googleDriveFolders,
+        checklists,
         googleSheetAutoSync
       });
       showToast('Đã lưu kết nối Google Sheet.', 'success');
@@ -73,6 +82,80 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
     setGoogleDriveFolders((current) => ({ ...current, [fieldName]: value }));
   };
 
+  const updateChecklistDraft = (fieldName, key, value) => {
+    setChecklistDrafts((current) => ({
+      ...current,
+      [fieldName]: {
+        ...(current[fieldName] || { name: '', url: '' }),
+        [key]: value
+      }
+    }));
+  };
+
+  const persistChecklists = async (nextChecklists, successMessage) => {
+    setIsSaving(true);
+    try {
+      await api.updateGeneralSettings({ checklists: nextChecklists });
+      showToast(successMessage, 'success');
+      await onRefresh?.();
+    } catch (error) {
+      showToast(error.message || 'Không thể lưu checklist.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const addChecklist = async (event, fieldName) => {
+    event.preventDefault();
+    const draft = checklistDrafts[fieldName] || { name: '', url: '' };
+    const url = draft.url.trim();
+    if (!url) {
+      showToast('Vui lòng nhập link Google Sheet checklist.', 'error');
+      return;
+    }
+    const currentItems = Array.isArray(checklists[fieldName]) ? checklists[fieldName] : [];
+    const item = {
+      id: createChecklistId(),
+      name: draft.name.trim() || `Checklist ${currentItems.length + 1}`,
+      url
+    };
+    await persistChecklists({ ...checklists, [fieldName]: [...currentItems, item] }, 'Đã thêm checklist.');
+    setChecklistDrafts((current) => ({ ...current, [fieldName]: { name: '', url: '' } }));
+  };
+
+  const startEditChecklist = (fieldName, item) => {
+    setEditingChecklist({
+      fieldName,
+      id: item.id,
+      name: item.name || '',
+      url: item.url || ''
+    });
+  };
+
+  const saveChecklist = async (event) => {
+    event.preventDefault();
+    if (!editingChecklist) return;
+    const url = editingChecklist.url.trim();
+    if (!url) {
+      showToast('Vui lòng nhập link Google Sheet checklist.', 'error');
+      return;
+    }
+    const { fieldName, id, name } = editingChecklist;
+    const nextItems = (checklists[fieldName] || []).map((item) => (
+      item.id === id
+        ? { ...item, name: name.trim() || 'Checklist', url }
+        : item
+    ));
+    await persistChecklists({ ...checklists, [fieldName]: nextItems }, 'Đã cập nhật checklist.');
+    setEditingChecklist(null);
+  };
+
+  const removeChecklist = async (fieldName, item) => {
+    if (!window.confirm(`Xóa checklist "${item.name || 'Checklist'}" của mảng ${fieldName}?`)) return;
+    const nextItems = (checklists[fieldName] || []).filter((candidate) => candidate.id !== item.id);
+    await persistChecklists({ ...checklists, [fieldName]: nextItems }, 'Đã xóa checklist.');
+  };
+
   const syncGoogleSheet = async () => {
     if (!googleSheetUrl.trim()) {
       showToast('Vui lòng nhập link Google Sheet.', 'error');
@@ -84,6 +167,7 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
         googleSheetUrl: googleSheetUrl.trim(),
         googleSheetTabs,
         googleDriveFolders,
+        checklists,
         googleSheetAutoSync
       });
       const result = await api.syncGoogleSheet();
@@ -253,6 +337,60 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
               )}
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="glass-panel qc-table-panel general-checklists-panel">
+        <div className="section-heading">
+          <div>
+            <span className="qc-kicker">CHECKLIST</span>
+            <h3>Checklist theo mảng</h3>
+            <p className="form-help">Một mảng có thể có nhiều checklist. Chỉ chấp nhận link Google Sheet và checklist sẽ hiển thị trên dashboard của Freelancer thuộc mảng tương ứng.</p>
+          </div>
+        </div>
+        <div className="general-checklist-list">
+          {fields.map((field) => {
+            const items = Array.isArray(checklists[field.name]) ? checklists[field.name] : [];
+            const draft = checklistDrafts[field.name] || { name: '', url: '' };
+            return (
+              <div className="general-checklist-field" key={field.id || field.name}>
+                <div className="general-checklist-heading">
+                  <span className="field-badge">{field.name}</span>
+                  <span className="form-help">{items.length} checklist</span>
+                </div>
+                <div className="general-checklist-items">
+                  {items.map((item, index) => (
+                    editingChecklist?.fieldName === field.name && editingChecklist.id === item.id ? (
+                      <form className="general-checklist-edit-form" onSubmit={saveChecklist} key={item.id || index}>
+                        <input className="form-input" value={editingChecklist.name} onChange={(event) => setEditingChecklist((current) => ({ ...current, name: event.target.value }))} placeholder="Tên checklist" maxLength="150" disabled={isSaving} />
+                        <input className="form-input" type="url" value={editingChecklist.url} onChange={(event) => setEditingChecklist((current) => ({ ...current, url: event.target.value }))} placeholder="https://docs.google.com/spreadsheets/d/..." disabled={isSaving} required />
+                        <div className="table-actions">
+                          <button type="submit" className="btn btn-primary btn-sm" disabled={isSaving}>Lưu</button>
+                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingChecklist(null)} disabled={isSaving}><IconX size={14} /> Hủy</button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="general-checklist-row" key={item.id || `${field.name}-${index}`}>
+                        <div>
+                          <strong>{item.name || `Checklist ${index + 1}`}</strong>
+                          <a href={item.url} target="_blank" rel="noreferrer">Mở Google Sheet</a>
+                        </div>
+                        <div className="table-actions">
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => startEditChecklist(field.name, item)} disabled={isSaving}><IconEdit size={14} /> Sửa</button>
+                          <button type="button" className="btn btn-danger btn-sm" onClick={() => removeChecklist(field.name, item)} disabled={isSaving}><IconTrash size={14} /> Xóa</button>
+                        </div>
+                      </div>
+                    )
+                  ))}
+                </div>
+                <form className="general-checklist-add-form" onSubmit={(event) => addChecklist(event, field.name)}>
+                  <input className="form-input" value={draft.name} onChange={(event) => updateChecklistDraft(field.name, 'name', event.target.value)} placeholder="Tên checklist (không bắt buộc)" maxLength="150" disabled={isSaving} />
+                  <input className="form-input" type="url" value={draft.url} onChange={(event) => updateChecklistDraft(field.name, 'url', event.target.value)} placeholder="https://docs.google.com/spreadsheets/d/..." disabled={isSaving} required />
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={isSaving}><IconPlus size={14} /> Thêm checklist</button>
+                </form>
+              </div>
+            );
+          })}
         </div>
       </section>
     </div>

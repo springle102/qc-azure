@@ -15,7 +15,8 @@ import { showToast } from '../common/ToastContainer';
 const isComplete = (item) => normalizeStatus(item) === 'submitted';
 const isKpiComplete = (item, role) => normalizeStatus(item) === (role === 'Freelancer' ? 'submitted' : 'done');
 const isFinishedForDashboard = (item) => ['submitted', 'checking', 'fixing', 'done'].includes(normalizeStatus(item));
-const isAssigned = (item) => Boolean(item?.fId || item?.fIld || item?.freelancerId || item?.assignedAdminId || item?.assignedToId || item?.assignedTo);
+const hasFreelancerAssignment = (item) => [item?.fId, item?.fIld, item?.freelancerId]
+  .some((value) => value !== null && value !== undefined && String(value).trim() !== '');
 const isAssignedToQC = (item) => Boolean(item?.qcId || item?.qcld || item?.qcID || item?.qcName);
 const needsQC = (item) => {
   const status = String(item?.status || item?.statusRaw || '').trim().toLowerCase();
@@ -33,7 +34,7 @@ function formatDate(value) {
   return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value));
 }
 
-function LinkCard({ icon: Icon, label, value }) {
+function LinkCard({ icon: Icon, label, value, linkText = 'Xem tại đây' }) {
   const hasLink = Boolean(value);
   return (
     <div className="dashboard-link-card">
@@ -41,7 +42,7 @@ function LinkCard({ icon: Icon, label, value }) {
       <div className="dashboard-link-content">
         <span>{label}</span>
         {hasLink ? (
-          <a href={value} target="_blank" rel="noreferrer" title={value}>{value}</a>
+          <a href={value} target="_blank" rel="noreferrer" title={linkText}>{linkText}</a>
         ) : (
           <strong className="empty-inline">Chưa có đường dẫn</strong>
         )}
@@ -57,11 +58,11 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
   const freelancerTasks = useMemo(() => deadlines.length > 0 ? deadlines : tasks, [deadlines, tasks]);
   const fieldResources = useMemo(() => {
     if (Array.isArray(dashboard.fieldResources) && dashboard.fieldResources.length > 0) return dashboard.fieldResources;
-    return [{ field: '', guideUrl: dashboard.guideUrl || '', resourceUrl: dashboard.resourceUrl || '' }];
+    return [{ field: '', guideUrl: dashboard.guideUrl || '', resourceUrl: dashboard.resourceUrl || '', checklists: [] }];
   }, [dashboard]);
   const metrics = useMemo(() => ({
-    waiting: Number.isFinite(Number(dashboard.waitingTasks)) ? Number(dashboard.waitingTasks) : tasks.filter((item) => !isAssigned(item)).length,
-    assigned: Number.isFinite(Number(dashboard.assignedTasks)) ? Number(dashboard.assignedTasks) : tasks.filter(isAssigned).length,
+    waiting: Number.isFinite(Number(dashboard.waitingTasks)) ? Number(dashboard.waitingTasks) : tasks.filter((item) => !hasFreelancerAssignment(item)).length,
+    assigned: Number.isFinite(Number(dashboard.assignedTasks)) ? Number(dashboard.assignedTasks) : tasks.filter(hasFreelancerAssignment).length,
     review: Number.isFinite(Number(dashboard.reviewTasks)) ? Number(dashboard.reviewTasks) : tasks.filter(needsQC).length,
     completed: Number.isFinite(Number(dashboard.completedTasks))
       ? Number(dashboard.completedTasks)
@@ -99,7 +100,7 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
 
     return {
       qc: recent.filter(isAssignedToQC).slice(0, 5),
-      freelancer: recent.filter(isAssigned).slice(0, 5)
+      freelancer: recent.filter(hasFreelancerAssignment).slice(0, 5)
     };
   }, [deadlines, tasks]);
 
@@ -135,10 +136,24 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
       </div>
 
       <div className="dashboard-link-grid">
-        {fieldResources.flatMap((resource) => [
-          <LinkCard key={`${resource.field || 'default'}-guide`} icon={IconBook} label={resource.field ? `Guide · ${resource.field}` : 'Guide'} value={resource.guideUrl} />,
-          <LinkCard key={`${resource.field || 'default'}-resource`} icon={IconFolder} label={resource.field ? `Tài nguyên · ${resource.field}` : 'Tài nguyên'} value={resource.resourceUrl} />
-        ])}
+        {fieldResources.flatMap((resource) => {
+          const checklistCards = isFreelancer && Array.isArray(resource.checklists)
+            ? resource.checklists.map((checklist, index) => (
+              <LinkCard
+                key={`${resource.field || 'default'}-checklist-${checklist.id || index}`}
+                icon={IconCheckCircle}
+                label={`${checklist.name || 'Checklist'}${resource.field ? ` · ${resource.field}` : ''}`}
+                value={checklist.url}
+                linkText="Xem checklist tại đây"
+              />
+            ))
+            : [];
+          return [
+            <LinkCard key={`${resource.field || 'default'}-guide`} icon={IconBook} label={resource.field ? `Guide · ${resource.field}` : 'Guide'} value={resource.guideUrl} linkText="Xem guide tại đây" />,
+            <LinkCard key={`${resource.field || 'default'}-resource`} icon={IconFolder} label={resource.field ? `Tài nguyên · ${resource.field}` : 'Tài nguyên'} value={resource.resourceUrl} linkText="Xem tài nguyên tại đây" />,
+            ...checklistCards
+          ];
+        })}
       </div>
 
       <div className="kpi-grid qc-kpi-grid">

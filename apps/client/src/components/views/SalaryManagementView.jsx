@@ -1,21 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { IconEye, IconRefresh, IconSearch, IconUsers, IconX } from '../common/Icons';
 
-const SALARY_ROLES = ['Freelancer', 'QC'];
-
-export function SalaryManagementView({ salaries = [], fields = [], isLoading, onRefresh }) {
+export function SalaryManagementView({ salaries = [], isLoading, onRefresh }) {
   const [search, setSearch] = useState('');
-  const [field, setField] = useState('');
-  const [role, setRole] = useState('');
   const [selectedQR, setSelectedQR] = useState(null);
   const members = useMemo(() => Array.isArray(salaries) ? salaries : [], [salaries]);
-  const fieldOptions = useMemo(() => fields.map((item) => item.name || item).filter(Boolean), [fields]);
 
   const filteredFreelancers = useMemo(() => members.filter((freelancer) => {
     const query = search.trim().toLowerCase();
     const memberFields = getMemberFields(freelancer);
-    const matchesField = !field || memberFields.includes(field);
-    const matchesRole = !role || (role === 'QC' ? freelancer.isQc === true : freelancer.isQc !== true);
     const matchesSearch = !query || [
       freelancer.fId || freelancer.fIld,
       freelancer.name,
@@ -25,8 +18,8 @@ export function SalaryManagementView({ salaries = [], fields = [], isLoading, on
       freelancer.bonus
     ].some((value) => String(value ?? '').toLowerCase().includes(query));
 
-    return matchesField && matchesRole && matchesSearch;
-  }), [field, members, role, search]);
+    return matchesSearch;
+  }), [members, search]);
 
   return (
     <div className="fade-in">
@@ -46,14 +39,6 @@ export function SalaryManagementView({ salaries = [], fields = [], isLoading, on
             <IconSearch size={17} />
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo ID, họ tên hoặc mảng" />
           </div>
-          <select className="form-select toolbar-filter" value={field} onChange={(event) => setField(event.target.value)}>
-            <option value="">Tất cả mảng</option>
-            {fieldOptions.map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-          <select className="form-select toolbar-filter" value={role} onChange={(event) => setRole(event.target.value)}>
-            <option value="">Tất cả role</option>
-            {SALARY_ROLES.map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
         </div>
 
         <div className="table-wrapper table-wrapper-flat">

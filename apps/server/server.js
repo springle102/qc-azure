@@ -89,9 +89,10 @@ app.get('/api/health', (req, res) => {
 app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
   try {
     await syncGoogleSheetIfDue({ waitForCompletion: true });
-    const [tasks, deadlines] = await Promise.all([
+    const [tasks, deadlines, settings] = await Promise.all([
       getCollection('tasks'),
-      getCollection('deadlines')
+      getCollection('deadlines'),
+      getGeneralSettings()
     ]);
     const scopedTasks = filterRowsForUser(tasks, req.authUser);
     const scopedDeadlines = filterRowsForUser(deadlines, req.authUser);
@@ -102,7 +103,8 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
     const fieldResources = (await getVisibleFields(req.authUser)).map((field) => ({
       field: field.name,
       guideUrl: field.guideUrl || '',
-      resourceUrl: field.resourceUrl || ''
+      resourceUrl: field.resourceUrl || '',
+      checklists: settings.checklists?.[field.name] || []
     }));
     const legacyLinks = req.authUser.role === 'Freelancer'
       ? { guideUrl: fieldResources[0]?.guideUrl || '', resourceUrl: fieldResources[0]?.resourceUrl || '' }
@@ -111,7 +113,7 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
     const completed = trackedTaskSource
       .filter((item) => isDashboardTaskComplete(item, req.authUser.role))
       .length;
-    const assigned = scopedTasks.filter((item) => item.fId || item.fIld || item.freelancerId || item.assignedAdminId || item.assignedToId || item.assignedTo).length;
+    const assigned = scopedTasks.filter(hasFreelancerAssignment).length;
     const review = trackedTaskSource.filter((item) => getTaskStatus(item) === 'submitted').length;
 
     res.json({
@@ -458,7 +460,11 @@ app.get('/api/bonus-settings', requireAuth, async (req, res) => {
 });
 app.get('/api/general-settings', requireAuth, async (req, res) => {
   try {
-    res.json({ success: true, data: await getGeneralSettings() });
+    const settings = await getGeneralSettings();
+    res.json({
+      success: true,
+      data: req.authUser.role === 'Freelancer' ? { ...settings, errorSheetUrls: {} } : settings
+    });
   } catch (error) {
     res.status(502).json({ success: false, message: error.message });
   }
@@ -483,12 +489,15 @@ app.patch('/api/general-settings', requireAdmin, async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'errorSheetUrls')) {
       updates.errorSheetUrls = JSON.stringify(normalizeErrorSheetUrls(req.body.errorSheetUrls));
     }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'checklists')) {
+      updates.checklists = JSON.stringify(normalizeChecklists(req.body.checklists));
+    }
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'googleSheetAutoSync')) {
       updates.googleSheetAutoSync = req.body.googleSheetAutoSync === true;
     }
     const data = current
-      ? await updateRow('generalSettings', { id: current.id }, updates, ['googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'errorSheetUrls', 'googleSheetAutoSync'])
-      : await insertRow('generalSettings', { id: 1, ...updates }, ['id', 'googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'errorSheetUrls', 'googleSheetAutoSync']);
+      ? await updateRow('generalSettings', { id: current.id }, updates, ['googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'errorSheetUrls', 'checklists', 'googleSheetAutoSync'])
+      : await insertRow('generalSettings', { id: 1, ...updates }, ['id', 'googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'errorSheetUrls', 'checklists', 'googleSheetAutoSync']);
     if (updatesDriveFolders) googleDriveFolderCache.clear();
     res.json({ success: true, data });
   } catch (error) {
@@ -511,10 +520,16 @@ app.get('/api/errors', requireAuth, async (req, res) => {
   try {
     const settings = await getGeneralSettings();
     const rows = filterErrorRowsForUser(await getCollection('errors'), req.authUser);
-    const data = rows.map((row) => ({
-      ...row,
-      sourceSheetUrl: getConfiguredErrorSheetUrl(settings.errorSheetUrls, row.field) || row.sourceUrl || ''
-    }));
+    const data = rows.map((row) => {
+      if (req.authUser.role === 'Freelancer') {
+        const { sourceSheetUrl, sourceUrl, sourceRow, ...visibleRow } = row;
+        return visibleRow;
+      }
+      return {
+        ...row,
+        sourceSheetUrl: getConfiguredErrorSheetUrl(settings.errorSheetUrls, row.field) || row.sourceUrl || ''
+      };
+    });
     res.json({ success: true, data });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
@@ -531,7 +546,7 @@ app.post('/api/errors', requireManager, async (req, res) => {
       sourceUrl: getConfiguredErrorSheetUrl((await getGeneralSettings()).errorSheetUrls, payload.field),
       createdAt: now,
       updatedAt: now
-    }, ['field', 'title', 'chapter', 'errorType', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'createdAt', 'updatedAt']);
+    }, ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'createdAt', 'updatedAt']);
     res.status(201).json({ success: true, data });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
@@ -561,7 +576,7 @@ app.patch('/api/errors/:id', requireAuth, async (req, res) => {
       'errors',
       id,
       updates,
-      ['field', 'title', 'chapter', 'errorType', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'updatedAt']
+      ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'updatedAt']
     );
     let sheetSyncError = '';
     try {
@@ -1144,6 +1159,20 @@ function normalizeImageDataUrl(value) {
   return rawValue;
 }
 
+function normalizeErrorScreenshot(value, { strict = false } = {}) {
+  let rawValue = String(value ?? '').trim();
+  if (!rawValue) return null;
+  const imageFormulaMatch = rawValue.match(/^=IMAGE\(\s*["'](https?:\/\/[^"']+)["']/i);
+  if (imageFormulaMatch) rawValue = imageFormulaMatch[1].trim();
+  const isDataUrl = /^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(rawValue);
+  const isRemoteImage = isHttpUrl(rawValue);
+  if (rawValue.length > 5 * 1024 * 1024 || (!isDataUrl && !isRemoteImage)) {
+    if (strict) throw validationError('Screenshot phải là ảnh PNG, JPG, WEBP hoặc GIF hợp lệ, hoặc URL ảnh http/https và không quá 3 MB.');
+    return null;
+  }
+  return rawValue;
+}
+
 function isValidConfiguredFieldName(value) {
   return /^[\p{L}][\p{L}\p{N} _-]{0,49}$/u.test(String(value ?? '').trim());
 }
@@ -1189,10 +1218,20 @@ async function renameConfiguredField(previousName, nextName) {
   const settings = (await getCollection('generalSettings'))[0];
   if (settings) {
     const errorSheetUrls = normalizeErrorSheetUrls(settings.errorSheetUrls);
+    const checklists = normalizeChecklists(settings.checklists);
+    const updates = {};
     if (Object.prototype.hasOwnProperty.call(errorSheetUrls, previousName)) {
       errorSheetUrls[nextName] = errorSheetUrls[previousName];
       delete errorSheetUrls[previousName];
-      await updateRow('generalSettings', { id: settings.id }, { errorSheetUrls: JSON.stringify(errorSheetUrls) }, ['errorSheetUrls']);
+      updates.errorSheetUrls = JSON.stringify(errorSheetUrls);
+    }
+    if (Object.prototype.hasOwnProperty.call(checklists, previousName)) {
+      checklists[nextName] = checklists[previousName];
+      delete checklists[previousName];
+      updates.checklists = JSON.stringify(checklists);
+    }
+    if (Object.keys(updates).length > 0) {
+      await updateRow('generalSettings', { id: settings.id }, updates, ['errorSheetUrls', 'checklists']);
     }
   }
 }
@@ -1205,7 +1244,8 @@ async function getGeneralSettings() {
       ...settings,
       googleSheetTabs: parseGoogleSheetTabs(settings.googleSheetTabs),
       googleDriveFolders: normalizeGoogleDriveFolders(settings.googleDriveFolders),
-      errorSheetUrls: normalizeErrorSheetUrls(settings.errorSheetUrls)
+      errorSheetUrls: normalizeErrorSheetUrls(settings.errorSheetUrls),
+      checklists: normalizeChecklists(settings.checklists)
     };
   }
   return {
@@ -1215,6 +1255,7 @@ async function getGeneralSettings() {
     googleSheetTabs: {},
     googleDriveFolders: {},
     errorSheetUrls: {},
+    checklists: {},
     googleSheetAutoSync: false,
     googleSheetLastSyncedAt: null,
     googleSheetLastSyncCount: 0,
@@ -1290,6 +1331,34 @@ function normalizeErrorSheetUrls(value) {
   return Object.fromEntries(Object.entries(parsed)
     .map(([field, url]) => [String(field).trim(), normalizeGoogleSheetUrl(url)])
     .filter(([field, url]) => field && url));
+}
+
+function normalizeChecklists(value) {
+  let parsed = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      parsed = {};
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+
+  return Object.fromEntries(Object.entries(parsed)
+    .map(([field, items]) => {
+      const normalizedField = String(field).trim();
+      if (!normalizedField || !Array.isArray(items)) return [normalizedField, []];
+      const normalizedItems = items.map((item, index) => {
+        const rawUrl = typeof item === 'string' ? item : item?.url ?? item?.link ?? '';
+        const url = normalizeGoogleSheetUrl(rawUrl);
+        if (!url) return null;
+        const name = String(typeof item === 'object' ? item?.name ?? item?.title ?? '' : '').trim() || `Checklist ${index + 1}`;
+        const id = String(typeof item === 'object' ? item?.id ?? '' : '').trim() || `${normalizedField}-${index + 1}`;
+        return { id: id.slice(0, 100), name: name.slice(0, 150), url };
+      }).filter(Boolean);
+      return [normalizedField, normalizedItems];
+    })
+    .filter(([field]) => field));
 }
 
 function getConfiguredErrorSheetUrl(errorSheetUrls, field) {
@@ -2644,11 +2713,12 @@ async function syncGoogleSheetIfDue({ waitForCompletion = false } = {}) {
 }
 
 const ERROR_TYPE_OPTIONS = ['TR', 'File', 'Censor', 'Exposure', 'Logo/Credit', 'Text', 'SFX', 'Image', 'Bubble', 'Aesthetics', 'RD'];
-const ERROR_SHEET_COLUMNS = ['title', 'chapter', 'errorType', 'error', 'note', 'editor', 'fixCheck'];
+const ERROR_SHEET_COLUMNS = ['title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'fixCheck'];
 const errorSheetHeaderAliases = {
   title: ['title', 'series', 'seriesname', 'tensries', 'tentruyen', 'name'],
   chapter: ['chapter', 'chap', 'chapternumber', 'chapterno', 'sochapter', 'chuong'],
   errorType: ['errortype', 'errorkind', 'category', 'loailoi', 'loailo'],
+  screenshot: ['screenshot', 'screenshots', 'sreenshot', 'image', 'img', 'anh', 'hinhanh', 'anhchup', 'hinhanhloi'],
   error: ['error', 'issue', 'bug', 'description', 'loi', 'noidungloi'],
   note: ['note', 'feedback', 'comment', 'comments', 'ghichu', 'noteofflorqc', 'notecuaflorqc', 'notecuaflhoacqc'],
   editor: ['editor', 'freelancer', 'freelancername', 'fl', 'nguoiduocgiao', 'nguoi sua'],
@@ -2747,13 +2817,15 @@ function resolveErrorEditor(value, freelancers) {
 
 function buildImportedError(row, headerIndex, freelancers, sourceRow, field, sourceUrl) {
   const editor = resolveErrorEditor(getErrorSheetValue(row, headerIndex, 'editor'), freelancers);
+  const noteValue = getErrorSheetValue(row, headerIndex, 'note');
   return {
     field,
     title: getErrorSheetValue(row, headerIndex, 'title').slice(0, 255),
     chapter: getErrorSheetValue(row, headerIndex, 'chapter').slice(0, 100),
     errorType: normalizeErrorType(getErrorSheetValue(row, headerIndex, 'errorType')),
+    screenshot: normalizeErrorScreenshot(getErrorSheetValue(row, headerIndex, 'screenshot')),
     error: getErrorSheetValue(row, headerIndex, 'error'),
-    note: nullableText(getErrorSheetValue(row, headerIndex, 'note')),
+    note: normalizeErrorScreenshot(noteValue) || nullableText(noteValue),
     editor: editor.name || null,
     editorFreelancerId: editor.id,
     fixCheck: parseImportedBoolean(getErrorSheetValue(row, headerIndex, 'fixCheck')),
@@ -2770,7 +2842,7 @@ function normalizeErrorSyncValue(value, column) {
 }
 
 function hasErrorSheetChanges(current, imported) {
-  return ['field', 'title', 'chapter', 'errorType', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl']
+  return ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl']
     .some((column) => normalizeErrorSyncValue(current[column], column) !== normalizeErrorSyncValue(imported[column], column));
 }
 
@@ -2782,6 +2854,11 @@ function getErrorRowNumberFromAppendResponse(response) {
 
 function getErrorSheetCellValue(row, key) {
   if (key === 'fixCheck') return Boolean(row.fixCheck);
+  if (key === 'screenshot' || key === 'note') {
+    const screenshot = normalizeErrorScreenshot(row[key]);
+    if (isHttpUrl(screenshot)) return `=IMAGE("${screenshot.replace(/"/g, '""')}")`;
+    return key === 'screenshot' ? (screenshot || '') : (row.note ?? '');
+  }
   return row[key] ?? '';
 }
 
@@ -2910,13 +2987,16 @@ async function syncErrorsWithGoogleSheets(user) {
       if (getErrorSheetHeaderIndex(sheet.headerIndex, 'errorType') === undefined && current?.errorType) {
         imported.errorType = current.errorType;
       }
+      if (getErrorSheetHeaderIndex(sheet.headerIndex, 'screenshot') === undefined && current?.screenshot) {
+        imported.screenshot = current.screenshot;
+      }
       if (current) {
         if (hasErrorSheetChanges(current, imported)) {
-          await updateRowById('errors', current.id, imported, ['field', 'title', 'chapter', 'errorType', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'updatedAt']);
+          await updateRowById('errors', current.id, imported, ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'updatedAt']);
           updated += 1;
         }
       } else {
-        await insertRow('errors', { ...imported, createdAt: imported.updatedAt }, ['field', 'title', 'chapter', 'errorType', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'createdAt', 'updatedAt']);
+        await insertRow('errors', { ...imported, createdAt: imported.updatedAt }, ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'createdAt', 'updatedAt']);
         inserted += 1;
       }
     }
@@ -3348,6 +3428,7 @@ async function validateErrorPayload(payload, user) {
     title,
     chapter,
     errorType,
+    screenshot: normalizeErrorScreenshot(payload.screenshot, { strict: true }),
     error: errorText,
     note: nullableText(payload.note),
     editor: editor.name,
@@ -3379,6 +3460,9 @@ async function validateErrorUpdatePayload(payload, user, current) {
   if (Object.prototype.hasOwnProperty.call(payload, 'errorType')) {
     updates.errorType = normalizeErrorType(payload.errorType, { required: true });
   }
+  if (Object.prototype.hasOwnProperty.call(payload, 'screenshot')) {
+    updates.screenshot = normalizeErrorScreenshot(payload.screenshot, { strict: true });
+  }
   if (Object.prototype.hasOwnProperty.call(payload, 'error')) {
     const errorText = String(payload.error ?? '').trim();
     if (!errorText) throw validationError('Error không được để trống.');
@@ -3403,11 +3487,10 @@ function validateFreelancerErrorUpdatePayload(payload, current, user) {
   }
   if (!payload || typeof payload !== 'object') throw validationError('Dữ liệu cập nhật lỗi không hợp lệ.');
   const updates = {};
-  if (Object.prototype.hasOwnProperty.call(payload, 'note')) updates.note = nullableText(payload.note);
   if (Object.prototype.hasOwnProperty.call(payload, 'fixCheck')) updates.fixCheck = parseBooleanInput(payload.fixCheck, 'Fix/Check');
-  const unsupported = Object.keys(payload).filter((key) => !['note', 'fixCheck'].includes(key));
-  if (unsupported.length > 0) throw authorizationError('Freelancer chỉ được cập nhật Note và Fix/Check.');
-  if (Object.keys(updates).length === 0) throw validationError('Cần có Note hoặc Fix/Check để cập nhật.');
+  const unsupported = Object.keys(payload).filter((key) => key !== 'fixCheck');
+  if (unsupported.length > 0) throw authorizationError('Freelancer chỉ được cập nhật Fix/Check.');
+  if (Object.keys(updates).length === 0) throw validationError('Cần có Fix/Check để cập nhật.');
   return updates;
 }
 
@@ -3584,6 +3667,11 @@ function getAuthUser(req) {
   }
   session.expiresAt = Date.now() + SESSION_TTL_MS;
   return session.user;
+}
+
+function hasFreelancerAssignment(row) {
+  return [row?.fId, row?.fIld, row?.freelancerId]
+    .some((value) => value !== null && value !== undefined && String(value).trim() !== '');
 }
 
 function filterRowsForUser(rows, user) {

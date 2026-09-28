@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { IconCheck, IconExternalLink, IconFilter, IconPlus, IconRefresh, IconTrash, IconX } from '../common/Icons';
+import { IconCheck, IconExternalLink, IconFilter, IconPlus, IconRefresh, IconTrash, IconUpload, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
 
 const ERROR_TYPE_OPTIONS = ['TR', 'File', 'Censor', 'Exposure', 'Logo/Credit', 'Text', 'SFX', 'Image', 'Bubble', 'Aesthetics', 'RD'];
+const EMPTY_ERROR_ROW = { title: '', chapter: '', errorType: '', screenshot: '', error: '', note: '', editorFreelancerId: '' };
 
 function getFreelancerId(freelancer) {
   return freelancer?.fIld ?? freelancer?.fId ?? freelancer?.id ?? null;
@@ -28,6 +29,128 @@ function getErrorTypeClass(value) {
 
 function ErrorTypeBadge({ value }) {
   return <span className={`error-type-badge ${getErrorTypeClass(value)}`}>{value || 'Chưa chọn'}</span>;
+}
+
+function isImageValue(value) {
+  const text = String(value ?? '').trim();
+  return /^data:image\//i.test(text) || /^https?:\/\//i.test(text);
+}
+
+const MAX_SCREENSHOT_FILE_SIZE = 3 * 1024 * 1024;
+
+function ScreenshotUpload({ value, onChange, disabled = false, compact = false }) {
+  const inputRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [error, setError] = useState('');
+
+  const readImageFile = (file) => {
+    if (!file) return;
+    setError('');
+    if (!file.type.startsWith('image/')) {
+      setError('Vui lòng chọn hoặc dán một file hình ảnh.');
+      return;
+    }
+    if (file.size > MAX_SCREENSHOT_FILE_SIZE) {
+      setError('Ảnh không được vượt quá 3 MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => onChange?.(String(reader.result || ''));
+    reader.onerror = () => setError('Không thể đọc file ảnh.');
+    reader.readAsDataURL(file);
+  };
+
+  const handlePaste = (event) => {
+    const imageItem = Array.from(event.clipboardData?.items || [])
+      .find((item) => item.kind === 'file' && item.type.startsWith('image/'));
+    if (!imageItem) return;
+    event.preventDefault();
+    readImageFile(imageItem.getAsFile());
+  };
+
+  const handleDrop = (event) => {
+    event.preventDefault();
+    setIsDragging(false);
+    readImageFile(event.dataTransfer?.files?.[0]);
+  };
+
+  return (
+    <div className={`error-screenshot-upload${compact ? ' compact' : ''}`}>
+      <div
+        className={`error-screenshot-dropzone${isDragging ? ' is-dragging' : ''}${value ? ' has-image' : ''}`}
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        onClick={() => !disabled && inputRef.current?.click()}
+        onKeyDown={(event) => {
+          if (!disabled && (event.key === 'Enter' || event.key === ' ')) {
+            event.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        onPaste={handlePaste}
+        onDragOver={(event) => {
+          event.preventDefault();
+          if (!disabled) setIsDragging(true);
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={disabled ? undefined : handleDrop}
+        aria-label="Tải hoặc dán screenshot"
+      >
+        {value ? (
+          <>
+            <img className="error-screenshot-upload-preview" src={value} alt="Screenshot lỗi" />
+            <span className="error-screenshot-upload-caption">Bấm để thay ảnh · Ctrl + V để dán ảnh khác</span>
+          </>
+        ) : (
+          <>
+            <IconUpload size={22} />
+            <strong>Chọn ảnh hoặc Ctrl + V</strong>
+            <span>Kéo thả ảnh vào đây · tối đa 3 MB</span>
+          </>
+        )}
+      </div>
+      <input
+        ref={inputRef}
+        className="visually-hidden"
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        onChange={(event) => {
+          readImageFile(event.target.files?.[0]);
+          event.target.value = '';
+        }}
+        disabled={disabled}
+        tabIndex={-1}
+      />
+      {value && <button type="button" className="text-button error-screenshot-remove" onClick={() => { setError(''); onChange?.(''); }} disabled={disabled}>Xóa ảnh</button>}
+      {error && <span className="error-screenshot-error" role="alert">{error}</span>}
+    </div>
+  );
+}
+
+function NoteEditor({ value, onChange, disabled = false }) {
+  const [mode, setMode] = useState(isImageValue(value) ? 'image' : 'text');
+  const imageValue = isImageValue(value) ? value : '';
+
+  const changeMode = (nextMode) => {
+    setMode(nextMode);
+    if (nextMode === 'text' && imageValue) onChange?.('');
+    if (nextMode === 'image' && !imageValue) onChange?.('');
+  };
+
+  return (
+    <div className="error-note-editor">
+      <div className="error-note-format-toggle" role="group" aria-label="Định dạng Note">
+        <button type="button" className={`error-note-format-button${mode === 'text' ? ' active' : ''}`} onClick={() => changeMode('text')} disabled={disabled}>Text</button>
+        <button type="button" className={`error-note-format-button${mode === 'image' ? ' active' : ''}`} onClick={() => changeMode('image')} disabled={disabled}>Ảnh</button>
+      </div>
+      {mode === 'image' ? (
+        <ScreenshotUpload compact value={imageValue} onChange={onChange} disabled={disabled} />
+      ) : (
+        <textarea className="error-note-inline-textarea" value={isImageValue(value) ? '' : (value || '')} onChange={(event) => onChange?.(event.target.value)} disabled={disabled} placeholder="Ghi chú..." />
+      )}
+    </div>
+  );
 }
 
 function ErrorTypeControl({ value, disabled = false, onChange, ariaLabel = 'Chọn Error Type', id }) {
@@ -252,9 +375,10 @@ export function ErrorManagementView({
   const [titleSortDirection, setTitleSortDirection] = useState(null);
   const [errorTypeFilter, setErrorTypeFilter] = useState(null);
   const [localErrors, setLocalErrors] = useState(errors);
-  const [draftNotes, setDraftNotes] = useState({});
   const [errorSheetUrls, setErrorSheetUrls] = useState(generalSettings?.errorSheetUrls || {});
-  const [newError, setNewError] = useState({ title: '', chapter: '', errorType: '', error: '', note: '', editorFreelancerId: '' });
+  const [newError, setNewError] = useState(EMPTY_ERROR_ROW);
+  const [inlineErrorRow, setInlineErrorRow] = useState(null);
+  const [draftRows, setDraftRows] = useState({});
   const [isCreatingError, setIsCreatingError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savingRowId, setSavingRowId] = useState(null);
@@ -291,6 +415,78 @@ export function ErrorManagementView({
   const updateLocalRow = (updatedRow) => {
     setLocalErrors((current) => current.map((row) => row.id === updatedRow.id ? updatedRow : row));
     onUpdate?.(updatedRow);
+  };
+
+  const getRowDraft = (row) => draftRows[row.id] || row;
+
+  const updateRowDraft = (row, key, value) => {
+    setDraftRows((current) => ({
+      ...current,
+      [row.id]: { ...(current[row.id] || row), [key]: value }
+    }));
+  };
+
+  const hasRowDraftChanges = (row, draft) => ['title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editorFreelancerId']
+    .some((key) => String(draft[key] ?? '') !== String(row[key] ?? ''));
+
+  const handleStartInlineRow = () => {
+    if (!activeField) {
+      showToast('Chưa có mảng để nhập lỗi.', 'error');
+      return;
+    }
+    setIsCreatingError(false);
+    setInlineErrorRow({ ...EMPTY_ERROR_ROW });
+  };
+
+  const handleSelectField = (fieldName) => {
+    setActiveField(fieldName);
+    setInlineErrorRow(null);
+    setDraftRows({});
+  };
+
+  const handleSaveInlineRow = async () => {
+    if (!inlineErrorRow) return;
+    if (!inlineErrorRow.title.trim() || !inlineErrorRow.chapter.trim() || !inlineErrorRow.error.trim()) {
+      showToast('Hãy nhập Title, Chapter và Error.', 'error');
+      return;
+    }
+    if (!inlineErrorRow.errorType) {
+      showToast('Hãy chọn Error Type.', 'error');
+      return;
+    }
+    if (!inlineErrorRow.editorFreelancerId) {
+      showToast('Hãy chọn Editor.', 'error');
+      return;
+    }
+    setSavingRowId('inline-new');
+    try {
+      const created = await api.createError({ field: activeField, ...inlineErrorRow });
+      setLocalErrors((current) => [created, ...current]);
+      onCreate?.(created);
+      setInlineErrorRow(null);
+      showToast('Đã thêm hàng lỗi.', 'success');
+    } catch (error) {
+      showToast(error.message || 'Không thể thêm hàng lỗi.', 'error');
+    } finally {
+      setSavingRowId(null);
+    }
+  };
+
+  const handleSaveRowDraft = async (row) => {
+    const draft = draftRows[row.id];
+    if (!draft || !hasRowDraftChanges(row, draft)) return;
+    const updates = {};
+    ['title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editorFreelancerId'].forEach((key) => {
+      if (String(draft[key] ?? '') !== String(row[key] ?? '')) updates[key] = draft[key];
+    });
+    const updated = await handleUpdate(row, updates);
+    if (updated) {
+      setDraftRows((current) => {
+        const next = { ...current };
+        delete next[row.id];
+        return next;
+      });
+    }
   };
 
   const handleSaveSheetUrls = async (event) => {
@@ -336,7 +532,7 @@ export function ErrorManagementView({
       const created = await api.createError({ field: activeField, ...newError });
       setLocalErrors((current) => [created, ...current]);
       onCreate?.(created);
-      setNewError({ title: '', chapter: '', errorType: '', error: '', note: '', editorFreelancerId: '' });
+      setNewError(EMPTY_ERROR_ROW);
       setIsCreatingError(false);
       showToast('Đã nhập lỗi. Bấm Đồng bộ lỗi để đẩy lên Google Sheet.', 'success');
     } catch (error) {
@@ -359,13 +555,6 @@ export function ErrorManagementView({
     } finally {
       setSavingRowId(null);
     }
-  };
-
-  const handleSaveNote = async (row) => {
-    const note = draftNotes[row.id] ?? row.note ?? '';
-    if (note === (row.note || '')) return;
-    const updated = await handleUpdate(row, { note });
-    if (updated) setDraftNotes((current) => ({ ...current, [row.id]: updated.note || '' }));
   };
 
   const handleCheck = async (row, checked) => {
@@ -428,16 +617,21 @@ export function ErrorManagementView({
               <div className="error-field-tabs" role="tablist" aria-label="Mảng lỗi">
                 {fields.map((field) => {
                   const count = localErrors.filter((row) => matchesField(row, field.name)).length;
-                  return <button type="button" role="tab" aria-selected={activeField === field.name} className={`error-field-tab ${activeField === field.name ? 'active' : ''}`} key={field.id || field.name} onClick={() => setActiveField(field.name)}>{field.name}<span>{count}</span></button>;
+                  return <button type="button" role="tab" aria-selected={activeField === field.name} className={`error-field-tab ${activeField === field.name ? 'active' : ''}`} key={field.id || field.name} onClick={() => handleSelectField(field.name)}>{field.name}<span>{count}</span></button>;
                 })}
               </div>
-              <div className="error-sheet-link-row">
-                <span>Sheet lỗi gốc: </span>
-                {activeSheetUrl ? <a href={activeSheetUrl} target="_blank" rel="noreferrer">Mở sheet để xem screenshot <IconExternalLink size={14} /></a> : <em>Chưa cấu hình</em>}
-              </div>
+              {currentUser.role !== 'Freelancer' && (
+                <div className="error-sheet-link-row">
+                  <span>Sheet lỗi gốc: </span>
+                  {activeSheetUrl ? <a href={activeSheetUrl} target="_blank" rel="noreferrer">Mở sheet để xem screenshot <IconExternalLink size={14} /></a> : <em>Chưa cấu hình</em>}
+                </div>
+              )}
             </div>
             {canManage && (
               <div className="error-entry-launcher">
+                <button type="button" className="btn btn-outline" onClick={handleStartInlineRow} disabled={isSaving || Boolean(inlineErrorRow)}>
+                  <IconPlus size={16} /> Thêm hàng
+                </button>
                 <button type="button" className="btn btn-primary" onClick={() => setIsCreatingError(true)} disabled={isSaving}>
                   <IconPlus size={16} /> Thêm lỗi
                 </button>
@@ -461,9 +655,10 @@ export function ErrorManagementView({
                   <div className="form-group"><label className="form-label" htmlFor="error-title">Title</label><input id="error-title" className="form-input" value={newError.title} onChange={(event) => setNewError((current) => ({ ...current, title: event.target.value }))} disabled={isSaving} required /></div>
                   <div className="form-group"><label className="form-label" htmlFor="error-chapter">Chapter</label><input id="error-chapter" className="form-input" value={newError.chapter} onChange={(event) => setNewError((current) => ({ ...current, chapter: event.target.value }))} disabled={isSaving} required /></div>
                   <div className="form-group"><label className="form-label" htmlFor="error-type">Error Type</label><ErrorTypeControl id="error-type" value={newError.errorType} onChange={(value) => setNewError((current) => ({ ...current, errorType: value }))} disabled={isSaving} /></div>
+                  <div className="form-group error-entry-screenshot-group"><label className="form-label">Screenshot</label><ScreenshotUpload value={newError.screenshot} onChange={(value) => setNewError((current) => ({ ...current, screenshot: value }))} disabled={isSaving} /></div>
                   <div className="form-group error-entry-editor"><label className="form-label" htmlFor="error-editor">Editor</label><select id="error-editor" className="form-select" value={newError.editorFreelancerId} onChange={(event) => setNewError((current) => ({ ...current, editorFreelancerId: event.target.value }))} disabled={isSaving} required><option value="">Chọn freelancer</option>{editorOptions.map((freelancer) => <option value={getFreelancerId(freelancer)} key={getFreelancerId(freelancer)}>{freelancer.name || freelancer.email}</option>)}</select></div>
                   <div className="form-group form-group-full"><label className="form-label" htmlFor="error-description">Error</label><textarea id="error-description" className="form-textarea" value={newError.error} onChange={(event) => setNewError((current) => ({ ...current, error: event.target.value }))} disabled={isSaving} required /></div>
-                  <div className="form-group form-group-full"><label className="form-label" htmlFor="error-note">Note của FL hoặc QC</label><textarea id="error-note" className="form-textarea" value={newError.note} onChange={(event) => setNewError((current) => ({ ...current, note: event.target.value }))} disabled={isSaving} /></div>
+                  <div className="form-group form-group-full"><label className="form-label">Note của FL hoặc QC</label><NoteEditor value={newError.note} onChange={(value) => setNewError((current) => ({ ...current, note: value }))} disabled={isSaving} /></div>
                   <div className="error-entry-actions"><button type="submit" className="btn btn-primary" disabled={isSaving}><IconPlus size={16} /> Thêm lỗi</button></div>
                 </div>
               </form>
@@ -480,6 +675,7 @@ export function ErrorManagementView({
                     <th><div className="error-column-header"><span>Title</span><ErrorColumnFilterButton columnKey="title" label="Title" activeSortDirection={titleSortDirection} onSort={setTitleSortDirection} /></div></th>
                     <th><div className="error-column-header"><span>Chapter</span></div></th>
                     <th><div className="error-column-header"><span>Error Type</span><ErrorColumnFilterButton columnKey="errorType" label="Error Type" values={ERROR_TYPE_OPTIONS} activeValues={errorTypeFilter} onApply={setErrorTypeFilter} /></div></th>
+                    <th><div className="error-column-header"><span>Screenshot</span></div></th>
                     <th><div className="error-column-header"><span>Error</span></div></th>
                     <th><div className="error-column-header"><span>Note của FL hoặc QC</span></div></th>
                     <th><div className="error-column-header"><span>Editor</span></div></th>
@@ -488,22 +684,37 @@ export function ErrorManagementView({
                   </tr>
                 </thead>
                 <tbody>
-                  {activeErrors.length === 0 ? <tr><td colSpan={canManage ? 8 : 7} className="table-empty">Chưa có lỗi trong mảng này.</td></tr> : activeErrors.map((row) => {
-                    const rowNote = draftNotes[row.id] ?? row.note ?? '';
+                  {canManage && inlineErrorRow && (
+                    <tr className="error-inline-new-row">
+                      <td><input className="error-inline-input" value={inlineErrorRow.title} onChange={(event) => setInlineErrorRow((current) => ({ ...current, title: event.target.value }))} placeholder="Nhập Title" autoFocus /></td>
+                      <td><input className="error-inline-input" value={inlineErrorRow.chapter} onChange={(event) => setInlineErrorRow((current) => ({ ...current, chapter: event.target.value }))} placeholder="Chapter" /></td>
+                      <td><ErrorTypeControl value={inlineErrorRow.errorType} onChange={(value) => setInlineErrorRow((current) => ({ ...current, errorType: value }))} disabled={savingRowId === 'inline-new'} ariaLabel="Error Type cho hàng mới" /></td>
+                      <td className="error-screenshot-cell"><ScreenshotUpload compact value={inlineErrorRow.screenshot} onChange={(value) => setInlineErrorRow((current) => ({ ...current, screenshot: value }))} disabled={savingRowId === 'inline-new'} /></td>
+                      <td><textarea className="error-inline-textarea" value={inlineErrorRow.error} onChange={(event) => setInlineErrorRow((current) => ({ ...current, error: event.target.value }))} placeholder="Nhập nội dung lỗi" /></td>
+                      <td className="error-note-cell"><NoteEditor value={inlineErrorRow.note} onChange={(value) => setInlineErrorRow((current) => ({ ...current, note: value }))} disabled={savingRowId === 'inline-new'} /></td>
+                      <td><select className="error-inline-select" value={inlineErrorRow.editorFreelancerId} onChange={(event) => setInlineErrorRow((current) => ({ ...current, editorFreelancerId: event.target.value }))} disabled={savingRowId === 'inline-new'}><option value="">Chọn freelancer</option>{editorOptions.map((freelancer) => <option value={getFreelancerId(freelancer)} key={getFreelancerId(freelancer)}>{freelancer.name || freelancer.email}</option>)}</select></td>
+                      <td className="error-check-cell"><span className="error-inline-muted">Sau khi lưu</span></td>
+                      <td><div className="error-row-actions"><button type="button" className="btn btn-primary btn-sm" onClick={handleSaveInlineRow} disabled={savingRowId === 'inline-new'}><IconCheck size={14} /> Lưu</button><button type="button" className="btn btn-outline btn-sm" onClick={() => setInlineErrorRow(null)} disabled={savingRowId === 'inline-new'}>Hủy</button></div></td>
+                    </tr>
+                  )}
+                  {activeErrors.length === 0 && !inlineErrorRow ? <tr><td colSpan={canManage ? 9 : 8} className="table-empty">Chưa có lỗi trong mảng này.</td></tr> : activeErrors.map((row) => {
+                    const rowDraft = getRowDraft(row);
                     const isRowSaving = savingRowId === row.id;
+                    const isRowDirty = canManage && hasRowDraftChanges(row, rowDraft);
                     return <tr key={row.id} className={row.fixCheck ? 'error-row-checked' : ''}>
-                      <td className="error-title-cell"><strong>{row.title}</strong></td>
-                      <td>{row.chapter}</td>
+                      <td className="error-title-cell">{canManage ? <input className="error-inline-input" value={rowDraft.title || ''} onChange={(event) => updateRowDraft(row, 'title', event.target.value)} disabled={isRowSaving} /> : <strong>{row.title}</strong>}</td>
+                      <td>{canManage ? <input className="error-inline-input" value={rowDraft.chapter || ''} onChange={(event) => updateRowDraft(row, 'chapter', event.target.value)} disabled={isRowSaving} /> : row.chapter}</td>
                       <td>
                         {canManage ? (
-                          <ErrorTypeControl value={row.errorType} onChange={(value) => handleUpdate(row, { errorType: value })} disabled={isRowSaving} ariaLabel={`Error Type cho ${row.title}`} />
+                          <ErrorTypeControl value={rowDraft.errorType} onChange={(value) => updateRowDraft(row, 'errorType', value)} disabled={isRowSaving} ariaLabel={`Error Type cho ${row.title}`} />
                         ) : <ErrorTypeBadge value={row.errorType} />}
                       </td>
-                      <td className="error-description-cell">{row.error}</td>
-                      <td className="error-note-cell"><textarea className="error-note-input" value={rowNote} onChange={(event) => setDraftNotes((current) => ({ ...current, [row.id]: event.target.value }))} onBlur={() => handleSaveNote(row)} disabled={isRowSaving} placeholder="Ghi chú..." /><button type="button" className="text-button error-note-save" onClick={() => handleSaveNote(row)} disabled={isRowSaving || rowNote === (row.note || '')}>Lưu note</button></td>
-                      <td><span className="error-editor-badge">{row.editor || 'Chưa gán'}</span></td>
+                      <td className="error-screenshot-cell">{canManage ? <ScreenshotUpload compact value={rowDraft.screenshot} onChange={(value) => updateRowDraft(row, 'screenshot', value)} disabled={isRowSaving} /> : row.screenshot ? <a href={row.screenshot} target="_blank" rel="noreferrer" title="Mở screenshot"><img src={row.screenshot} alt={`Screenshot cho ${row.title}`} /></a> : <span className="error-screenshot-empty">—</span>}</td>
+                      <td className="error-description-cell">{canManage ? <textarea className="error-inline-textarea" value={rowDraft.error || ''} onChange={(event) => updateRowDraft(row, 'error', event.target.value)} disabled={isRowSaving} /> : row.error}</td>
+                      <td className="error-note-cell">{canManage ? <NoteEditor value={rowDraft.note || ''} onChange={(value) => updateRowDraft(row, 'note', value)} disabled={isRowSaving} /> : <div className="error-note-readonly">{isImageValue(row.note) ? <img className="error-note-readonly-image" src={row.note} alt={`Note cho ${row.title}`} /> : (row.note || '—')}</div>}</td>
+                      <td>{canManage ? <select className="error-inline-select" value={rowDraft.editorFreelancerId || ''} onChange={(event) => updateRowDraft(row, 'editorFreelancerId', event.target.value)} disabled={isRowSaving}><option value="">Chọn freelancer</option>{editorOptions.map((freelancer) => <option value={getFreelancerId(freelancer)} key={getFreelancerId(freelancer)}>{freelancer.name || freelancer.email}</option>)}</select> : <span className="error-editor-badge">{row.editor || 'Chưa gán'}</span>}</td>
                       <td className="error-check-cell"><label className="error-check-control"><input type="checkbox" checked={Boolean(row.fixCheck)} onChange={(event) => handleCheck(row, event.target.checked)} disabled={isRowSaving} /><span>{row.fixCheck ? 'Đã xem' : 'Chưa xem'}</span></label></td>
-                      {canManage && <td><button type="button" className="btn btn-danger btn-sm" onClick={() => handleDelete(row)} disabled={isRowSaving}><IconTrash size={14} /> Xóa</button></td>}
+                      {canManage && <td><div className="error-row-actions"><button type="button" className="btn btn-primary btn-sm" onClick={() => handleSaveRowDraft(row)} disabled={isRowSaving || !isRowDirty}><IconCheck size={14} /> Lưu</button><button type="button" className="btn btn-danger btn-sm" onClick={() => handleDelete(row)} disabled={isRowSaving}><IconTrash size={14} /> Xóa</button></div></td>}
                     </tr>;
                   })}
                 </tbody>
