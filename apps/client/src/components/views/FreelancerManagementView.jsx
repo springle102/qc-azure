@@ -199,12 +199,12 @@ export function FreelancerManagementView({ freelancers = [], accounts = [], fiel
       </section>
 
       {editingFreelancer && createPortal(
-        <div className="modal-overlay" onClick={() => !isSaving && setEditingFreelancer(null)}>
-          <form className="modal-content freelancer-edit-modal" onSubmit={saveFreelancer} onClick={(event) => event.stopPropagation()}>
+        <div className="modal-overlay" onClick={() => !isSaving && setEditingFreelancer(null)} role="presentation">
+          <form className="modal-content freelancer-edit-modal" onSubmit={saveFreelancer} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="freelancer-edit-modal-title">
             <div className="modal-header">
               <div>
                 <span className="qc-kicker">FREELANCER</span>
-                <div className="modal-title">Chỉnh sửa freelancer</div>
+                <div className="modal-title" id="freelancer-edit-modal-title">Chỉnh sửa freelancer</div>
               </div>
               <button type="button" className="icon-button" onClick={() => setEditingFreelancer(null)} disabled={isSaving} title="Đóng"><IconX size={18} /></button>
             </div>

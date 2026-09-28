@@ -271,13 +271,13 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
         </div>
       </section>
 
-      {editingAccount && (
-        <div className="modal-overlay" onClick={() => !isSaving && setEditingAccount(null)}>
-          <form className="modal-content account-edit-modal" onSubmit={saveEdit} onClick={(event) => event.stopPropagation()}>
+      {editingAccount && createPortal(
+        <div className="modal-overlay" onClick={() => !isSaving && setEditingAccount(null)} role="presentation">
+          <form className="modal-content account-edit-modal" onSubmit={saveEdit} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="edit-account-modal-title">
             <div className="modal-header">
               <div>
                 <span className="qc-kicker">ACCOUNT</span>
-                <div className="modal-title">Chỉnh sửa account</div>
+                <div className="modal-title" id="edit-account-modal-title">Chỉnh sửa account</div>
               </div>
               <button type="button" className="icon-button" onClick={() => setEditingAccount(null)} disabled={isSaving} title="Đóng"><IconX size={18} /></button>
             </div>
@@ -319,7 +319,8 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
               <button type="submit" className="btn btn-primary" disabled={isSaving}>{isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}</button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
