@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { inflateRawSync } from 'node:zlib';
 import {
   deleteRowById,
   deleteRowsByKeys,
@@ -1516,6 +1517,29 @@ async function googleDriveRequest(path) {
   return response.json();
 }
 
+async function googleDriveBinaryRequest(path) {
+  const token = await getGoogleAccessToken();
+  let response;
+  try {
+    response = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/${path}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    }, GOOGLE_REQUEST_TIMEOUT_MS);
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Google Drive API phản hồi quá lâu khi tải ảnh từ Google Sheet.');
+    }
+    throw new Error('Không thể tải ảnh trực tiếp từ Google Sheet qua Google Drive API.');
+  }
+  if (!response.ok) {
+    const message = await response.text();
+    if (response.status === 403 && /permission|not have access|does not have permission/i.test(message)) {
+      throw new Error('Service Account chưa được cấp quyền đọc file Google Sheet qua Google Drive.');
+    }
+    throw new Error(`Không thể xuất Google Sheet để đọc ảnh trực tiếp (${response.status}): ${message}`);
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
 function escapeGoogleDriveQueryValue(value) {
   return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
@@ -1780,7 +1804,7 @@ async function readGoogleSheetValues(spreadsheetId, range) {
   const query = new URLSearchParams({
     includeGridData: 'true',
     ranges: range,
-    fields: 'sheets(data(startRow,rowMetadata(hiddenByFilter,hiddenByUser),rowData/values(formattedValue,dataValidation(condition(type,values(userEnteredValue))))))'
+    fields: 'sheets(data(startRow,rowMetadata(hiddenByFilter,hiddenByUser),rowData/values(formattedValue,userEnteredValue,effectiveValue,dataValidation(condition(type,values(userEnteredValue))))))'
   });
   const payload = await googleSheetsRequest(
     `spreadsheets/${encodeURIComponent(spreadsheetId)}?${query.toString()}`
@@ -2752,9 +2776,17 @@ function findErrorSheetHeaderRow(values) {
   return bestIndex;
 }
 
-function getErrorSheetValue(row, headerIndex, key) {
+function getErrorSheetValue(row, headerIndex, key, cellDataRow = []) {
   const index = getErrorSheetHeaderIndex(headerIndex, key);
-  return index === undefined ? '' : String(row[index] ?? '').trim();
+  if (index === undefined) return '';
+  const cell = cellDataRow?.[index];
+  const formulaValue = cell?.userEnteredValue?.formulaValue;
+  if ((key === 'screenshot' || key === 'note') && formulaValue) return String(formulaValue).trim();
+  const stringValue = cell?.userEnteredValue?.stringValue;
+  if ((key === 'screenshot' || key === 'note') && stringValue) return String(stringValue).trim();
+  const effectiveStringValue = cell?.effectiveValue?.stringValue;
+  if ((key === 'screenshot' || key === 'note') && effectiveStringValue) return String(effectiveStringValue).trim();
+  return String(row[index] ?? '').trim();
 }
 
 function isDecorativeErrorSheetRow(row, headerIndex) {
@@ -2765,6 +2797,156 @@ function isIncompleteErrorSheetRow(row, headerIndex) {
   return !getErrorSheetValue(row, headerIndex, 'title')
     || !getErrorSheetValue(row, headerIndex, 'chapter')
     || !getErrorSheetValue(row, headerIndex, 'error');
+}
+
+function normalizeZipPath(value) {
+  const parts = String(value ?? '').replace(/^\/+/, '').split('/');
+  const normalized = [];
+  for (const part of parts) {
+    if (!part || part === '.') continue;
+    if (part === '..') normalized.pop();
+    else normalized.push(part);
+  }
+  return normalized.join('/');
+}
+
+function resolveZipPath(basePath, target) {
+  const rawTarget = String(target ?? '').trim();
+  if (rawTarget.startsWith('/')) return normalizeZipPath(rawTarget);
+  const baseDirectory = String(basePath ?? '').slice(0, String(basePath ?? '').lastIndexOf('/'));
+  return normalizeZipPath(`${baseDirectory}/${rawTarget}`);
+}
+
+function parseZipEntries(buffer) {
+  const endOfCentralDirectorySignature = Buffer.from([0x50, 0x4b, 0x05, 0x06]);
+  const centralDirectorySignature = 0x02014b50;
+  const localFileSignature = 0x04034b50;
+  const endOfCentralDirectoryOffset = buffer.lastIndexOf(endOfCentralDirectorySignature);
+  if (endOfCentralDirectoryOffset < 0) throw new Error('File xuất Google Sheet không phải ZIP/XLSX hợp lệ.');
+
+  const centralDirectoryOffset = buffer.readUInt32LE(endOfCentralDirectoryOffset + 16);
+  const centralDirectorySize = buffer.readUInt32LE(endOfCentralDirectoryOffset + 12);
+  const entries = new Map();
+  let cursor = centralDirectoryOffset;
+  const end = centralDirectoryOffset + centralDirectorySize;
+
+  while (cursor < end) {
+    if (buffer.readUInt32LE(cursor) !== centralDirectorySignature) break;
+    const compressionMethod = buffer.readUInt16LE(cursor + 10);
+    const compressedSize = buffer.readUInt32LE(cursor + 20);
+    const fileNameLength = buffer.readUInt16LE(cursor + 28);
+    const extraLength = buffer.readUInt16LE(cursor + 30);
+    const commentLength = buffer.readUInt16LE(cursor + 32);
+    const localFileOffset = buffer.readUInt32LE(cursor + 42);
+    const fileName = buffer.toString('utf8', cursor + 46, cursor + 46 + fileNameLength);
+    const localHeaderNameLength = buffer.readUInt16LE(localFileOffset + 26);
+    const localHeaderExtraLength = buffer.readUInt16LE(localFileOffset + 28);
+    const dataStart = localFileOffset + 30 + localHeaderNameLength + localHeaderExtraLength;
+    const compressedData = buffer.subarray(dataStart, dataStart + compressedSize);
+    let data;
+    if (compressionMethod === 0) data = compressedData;
+    else if (compressionMethod === 8) data = inflateRawSync(compressedData);
+    else {
+      cursor += 46 + fileNameLength + extraLength + commentLength;
+      continue;
+    }
+    entries.set(normalizeZipPath(fileName), data);
+    cursor += 46 + fileNameLength + extraLength + commentLength;
+  }
+  return entries;
+}
+
+function getZipText(entries, filePath) {
+  const data = entries.get(normalizeZipPath(filePath));
+  return data ? data.toString('utf8') : '';
+}
+
+function parseXmlAttributes(tag) {
+  return Object.fromEntries([...String(tag ?? '').matchAll(/([A-Za-z_][\w:.-]*)="([^"]*)"/g)]
+    .map((match) => [match[1], match[2] ?? '']));
+}
+
+function parseZipRelationships(xml) {
+  const relationships = {};
+  for (const match of String(xml ?? '').matchAll(/<Relationship\b[^>]*>/g)) {
+    const attributes = parseXmlAttributes(match[0]);
+    if (attributes.Id && attributes.Target) relationships[attributes.Id] = attributes.Target;
+  }
+  return relationships;
+}
+
+function xmlDecode(value) {
+  return String(value ?? '')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+function getSheetRelationshipPath(sheetPath) {
+  const slashIndex = sheetPath.lastIndexOf('/');
+  const directory = slashIndex >= 0 ? sheetPath.slice(0, slashIndex) : '';
+  const fileName = slashIndex >= 0 ? sheetPath.slice(slashIndex + 1) : sheetPath;
+  return normalizeZipPath(`${directory}/_rels/${fileName}.rels`);
+}
+
+function getDrawingAnchors(xml) {
+  const anchors = [];
+  for (const match of String(xml ?? '').matchAll(/<xdr:(?:oneCellAnchor|twoCellAnchor)\b[^>]*>([\s\S]*?)<\/xdr:(?:oneCellAnchor|twoCellAnchor)>/g)) {
+    const content = match[1];
+    const from = content.match(/<xdr:from>[\s\S]*?<xdr:col>(\d+)<\/xdr:col>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>[\s\S]*?<\/xdr:from>/);
+    const embed = content.match(/<a:blip\b[^>]*r:embed="([^"]+)"/);
+    if (from && embed) anchors.push({ row: Number(from[2]), column: Number(from[1]), relationshipId: embed[1] });
+  }
+  return anchors;
+}
+
+function imageMimeType(filePath) {
+  const extension = String(filePath ?? '').split('.').pop()?.toLowerCase();
+  return {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    webp: 'image/webp'
+  }[extension] || '';
+}
+
+function imageBufferToDataUrl(filePath, data) {
+  const mimeType = imageMimeType(filePath);
+  if (!mimeType || !data || data.length > 3 * 1024 * 1024) return '';
+  return `data:${mimeType};base64,${data.toString('base64')}`;
+}
+
+async function readGoogleSheetImageCells(spreadsheetId, sheetTitle) {
+  const exportPath = `files/${encodeURIComponent(spreadsheetId)}/export?mimeType=${encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}`;
+  const workbookBuffer = await googleDriveBinaryRequest(exportPath);
+  const entries = parseZipEntries(workbookBuffer);
+  const workbookXml = getZipText(entries, 'xl/workbook.xml');
+  const workbookRelationships = parseZipRelationships(getZipText(entries, 'xl/_rels/workbook.xml.rels'));
+  const sheetTag = [...workbookXml.matchAll(/<sheet\b[^>]*>/g)]
+    .map((match) => ({ tag: match[0], attributes: parseXmlAttributes(match[0]) }))
+    .find(({ attributes }) => xmlDecode(attributes.name) === String(sheetTitle));
+  if (!sheetTag?.attributes?.['r:id']) return new Map();
+
+  const worksheetPath = resolveZipPath('xl/workbook.xml', workbookRelationships[sheetTag.attributes['r:id']]);
+  const worksheetXml = getZipText(entries, worksheetPath);
+  const worksheetDrawingTag = [...worksheetXml.matchAll(/<drawing\b[^>]*>/g)][0]?.[0];
+  const drawingRelationshipId = parseXmlAttributes(worksheetDrawingTag)?.['r:id'];
+  if (!drawingRelationshipId) return new Map();
+
+  const worksheetRelationships = parseZipRelationships(getZipText(entries, getSheetRelationshipPath(worksheetPath)));
+  const drawingPath = resolveZipPath(worksheetPath, worksheetRelationships[drawingRelationshipId]);
+  const drawingXml = getZipText(entries, drawingPath);
+  const drawingRelationships = parseZipRelationships(getZipText(entries, getSheetRelationshipPath(drawingPath)));
+  const imageCells = new Map();
+  getDrawingAnchors(drawingXml).forEach(({ row, column, relationshipId }) => {
+    const imagePath = resolveZipPath(drawingPath, drawingRelationships[relationshipId]);
+    const dataUrl = imageBufferToDataUrl(imagePath, entries.get(imagePath));
+    if (dataUrl) imageCells.set(`${row}:${column}`, dataUrl);
+  });
+  return imageCells;
 }
 
 async function readErrorGoogleSheet(field, sheetUrl) {
@@ -2782,6 +2964,15 @@ async function readErrorGoogleSheet(field, sheetUrl) {
   const valuesResult = await readGoogleSheetValues(spreadsheetId, range);
   const headerRowIndex = findErrorSheetHeaderRow(valuesResult.values);
   const headers = valuesResult.values[headerRowIndex].map(normalizeSheetHeader);
+  let imageCells = new Map();
+  let imageReadError = '';
+  if (getErrorSheetHeaderIndex(new Map(headers.map((header, index) => [header, index])), 'screenshot') !== undefined) {
+    try {
+      imageCells = await readGoogleSheetImageCells(spreadsheetId, selectedSheet.properties.title);
+    } catch (error) {
+      imageReadError = error.message || 'Không thể đọc ảnh trực tiếp từ Google Sheet.';
+    }
+  }
   return {
     field,
     sourceUrl: sheetUrl,
@@ -2791,6 +2982,8 @@ async function readErrorGoogleSheet(field, sheetUrl) {
     range,
     rangeMeta,
     ...valuesResult,
+    imageCells,
+    imageReadError,
     headerRowIndex,
     headerIndex: new Map(headers.map((header, index) => [header, index]))
   };
@@ -2815,20 +3008,20 @@ function resolveErrorEditor(value, freelancers) {
     : { id: null, name: text };
 }
 
-function buildImportedError(row, headerIndex, freelancers, sourceRow, field, sourceUrl) {
-  const editor = resolveErrorEditor(getErrorSheetValue(row, headerIndex, 'editor'), freelancers);
-  const noteValue = getErrorSheetValue(row, headerIndex, 'note');
+function buildImportedError(row, headerIndex, freelancers, sourceRow, field, sourceUrl, cellDataRow = []) {
+  const editor = resolveErrorEditor(getErrorSheetValue(row, headerIndex, 'editor', cellDataRow), freelancers);
+  const noteValue = getErrorSheetValue(row, headerIndex, 'note', cellDataRow);
   return {
     field,
-    title: getErrorSheetValue(row, headerIndex, 'title').slice(0, 255),
-    chapter: getErrorSheetValue(row, headerIndex, 'chapter').slice(0, 100),
-    errorType: normalizeErrorType(getErrorSheetValue(row, headerIndex, 'errorType')),
-    screenshot: normalizeErrorScreenshot(getErrorSheetValue(row, headerIndex, 'screenshot')),
-    error: getErrorSheetValue(row, headerIndex, 'error'),
+    title: getErrorSheetValue(row, headerIndex, 'title', cellDataRow).slice(0, 255),
+    chapter: getErrorSheetValue(row, headerIndex, 'chapter', cellDataRow).slice(0, 100),
+    errorType: normalizeErrorType(getErrorSheetValue(row, headerIndex, 'errorType', cellDataRow)),
+    screenshot: normalizeErrorScreenshot(getErrorSheetValue(row, headerIndex, 'screenshot', cellDataRow)),
+    error: getErrorSheetValue(row, headerIndex, 'error', cellDataRow),
     note: normalizeErrorScreenshot(noteValue) || nullableText(noteValue),
     editor: editor.name || null,
     editorFreelancerId: editor.id,
-    fixCheck: parseImportedBoolean(getErrorSheetValue(row, headerIndex, 'fixCheck')),
+    fixCheck: parseImportedBoolean(getErrorSheetValue(row, headerIndex, 'fixCheck', cellDataRow)),
     sourceRow,
     sourceUrl,
     updatedAt: new Date().toISOString()
@@ -2955,6 +3148,9 @@ async function syncErrorsWithGoogleSheets(user) {
   for (const sheet of sheets) {
     const sourceKeys = new Set();
     sourceKeysByField.set(sheet.field.toLowerCase(), sourceKeys);
+    if (sheet.imageReadError) {
+      warnings.push(`${sheet.field}: ${sheet.imageReadError}`);
+    }
     for (let index = sheet.headerRowIndex + 1; index < sheet.values.length; index += 1) {
       const row = sheet.values[index] || [];
       if (sheet.hiddenRows?.has(index)) continue;
@@ -2966,7 +3162,13 @@ async function syncErrorsWithGoogleSheets(user) {
         warnings.push(`${sheet.field}: bỏ qua dòng ${sourceRow} thiếu Title/Chapter/Error.`);
         continue;
       }
-      const imported = buildImportedError(row, sheet.headerIndex, freelancers, sourceRow, sheet.field, sheet.sourceUrl);
+      const imported = buildImportedError(row, sheet.headerIndex, freelancers, sourceRow, sheet.field, sheet.sourceUrl, sheet.cellData[index]);
+      const screenshotColumn = getErrorSheetHeaderIndex(sheet.headerIndex, 'screenshot');
+      const noteColumn = getErrorSheetHeaderIndex(sheet.headerIndex, 'note');
+      const directScreenshot = screenshotColumn === undefined ? '' : sheet.imageCells?.get(`${index}:${screenshotColumn}`) || '';
+      const directNote = noteColumn === undefined ? '' : sheet.imageCells?.get(`${index}:${noteColumn}`) || '';
+      if (!imported.screenshot && directScreenshot) imported.screenshot = directScreenshot;
+      if (directNote && !normalizeErrorScreenshot(imported.note)) imported.note = directNote;
       const importedErrorTypeValue = getErrorSheetValue(row, sheet.headerIndex, 'errorType');
       if (importedErrorTypeValue && !imported.errorType) {
         warnings.push(`${sheet.field}, dòng ${sourceRow}: Error Type "${importedErrorTypeValue}" không nằm trong danh sách cho phép.`);

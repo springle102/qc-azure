@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { IconCheck, IconExternalLink, IconFilter, IconPlus, IconRefresh, IconTrash, IconUpload, IconX } from '../common/Icons';
+import { IconCheck, IconExternalLink, IconFilter, IconPlus, IconRefresh, IconTrash, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
 
@@ -39,15 +39,13 @@ function isImageValue(value) {
 const MAX_SCREENSHOT_FILE_SIZE = 3 * 1024 * 1024;
 
 function ScreenshotUpload({ value, onChange, disabled = false, compact = false }) {
-  const inputRef = useRef(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState('');
 
   const readImageFile = (file) => {
     if (!file) return;
     setError('');
     if (!file.type.startsWith('image/')) {
-      setError('Vui lòng chọn hoặc dán một file hình ảnh.');
+      setError('Vui lòng dán một hình ảnh.');
       return;
     }
     if (file.size > MAX_SCREENSHOT_FILE_SIZE) {
@@ -69,59 +67,30 @@ function ScreenshotUpload({ value, onChange, disabled = false, compact = false }
     readImageFile(imageItem.getAsFile());
   };
 
-  const handleDrop = (event) => {
-    event.preventDefault();
-    setIsDragging(false);
-    readImageFile(event.dataTransfer?.files?.[0]);
-  };
-
   return (
-    <div className={`error-screenshot-upload${compact ? ' compact' : ''}`}>
+    <div
+      className={`error-screenshot-upload${compact ? ' compact' : ''}`}
+      tabIndex={disabled ? -1 : 0}
+      onPasteCapture={disabled ? undefined : handlePaste}
+      role="button"
+      aria-label="Dán screenshot bằng Ctrl + V"
+      title="Nhấn Ctrl + V để dán ảnh trực tiếp"
+    >
       <div
-        className={`error-screenshot-dropzone${isDragging ? ' is-dragging' : ''}${value ? ' has-image' : ''}`}
-        role="button"
-        tabIndex={disabled ? -1 : 0}
-        onClick={() => !disabled && inputRef.current?.click()}
-        onKeyDown={(event) => {
-          if (!disabled && (event.key === 'Enter' || event.key === ' ')) {
-            event.preventDefault();
-            inputRef.current?.click();
-          }
-        }}
-        onPaste={handlePaste}
-        onDragOver={(event) => {
-          event.preventDefault();
-          if (!disabled) setIsDragging(true);
-        }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={disabled ? undefined : handleDrop}
-        aria-label="Tải hoặc dán screenshot"
+        className={`error-screenshot-dropzone${value ? ' has-image' : ''}`}
       >
         {value ? (
           <>
             <img className="error-screenshot-upload-preview" src={value} alt="Screenshot lỗi" />
-            <span className="error-screenshot-upload-caption">Bấm để thay ảnh · Ctrl + V để dán ảnh khác</span>
+            <span className="error-screenshot-upload-caption">Ctrl + V để dán ảnh khác</span>
           </>
         ) : (
           <>
-            <IconUpload size={22} />
-            <strong>Chọn ảnh hoặc Ctrl + V</strong>
-            <span>Kéo thả ảnh vào đây · tối đa 3 MB</span>
+            <strong>Nhấn Ctrl + V để dán ảnh</strong>
+            <span>Dán trực tiếp vào ô này · tối đa 3 MB</span>
           </>
         )}
       </div>
-      <input
-        ref={inputRef}
-        className="visually-hidden"
-        type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
-        onChange={(event) => {
-          readImageFile(event.target.files?.[0]);
-          event.target.value = '';
-        }}
-        disabled={disabled}
-        tabIndex={-1}
-      />
       {value && <button type="button" className="text-button error-screenshot-remove" onClick={() => { setError(''); onChange?.(''); }} disabled={disabled}>Xóa ảnh</button>}
       {error && <span className="error-screenshot-error" role="alert">{error}</span>}
     </div>
@@ -382,6 +351,7 @@ export function ErrorManagementView({
   const [isCreatingError, setIsCreatingError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savingRowId, setSavingRowId] = useState(null);
+  const [selectedScreenshot, setSelectedScreenshot] = useState(null);
 
   useEffect(() => {
     setLocalErrors(errors);
@@ -709,7 +679,7 @@ export function ErrorManagementView({
                           <ErrorTypeControl value={rowDraft.errorType} onChange={(value) => updateRowDraft(row, 'errorType', value)} disabled={isRowSaving} ariaLabel={`Error Type cho ${row.title}`} />
                         ) : <ErrorTypeBadge value={row.errorType} />}
                       </td>
-                      <td className="error-screenshot-cell">{canManage ? <ScreenshotUpload compact value={rowDraft.screenshot} onChange={(value) => updateRowDraft(row, 'screenshot', value)} disabled={isRowSaving} /> : row.screenshot ? <a href={row.screenshot} target="_blank" rel="noreferrer" title="Mở screenshot"><img src={row.screenshot} alt={`Screenshot cho ${row.title}`} /></a> : <span className="error-screenshot-empty">—</span>}</td>
+                      <td className="error-screenshot-cell">{canManage ? <ScreenshotUpload compact value={rowDraft.screenshot} onChange={(value) => updateRowDraft(row, 'screenshot', value)} disabled={isRowSaving} /> : row.screenshot ? <button type="button" className="error-screenshot-preview-button" onClick={() => setSelectedScreenshot(row)} title="Xem chi tiết screenshot"><img src={row.screenshot} alt={`Screenshot cho ${row.title}`} /></button> : <span className="error-screenshot-empty">—</span>}</td>
                       <td className="error-description-cell">{canManage ? <textarea className="error-inline-textarea" value={rowDraft.error || ''} onChange={(event) => updateRowDraft(row, 'error', event.target.value)} disabled={isRowSaving} /> : row.error}</td>
                       <td className="error-note-cell">{canManage ? <NoteEditor value={rowDraft.note || ''} onChange={(value) => updateRowDraft(row, 'note', value)} disabled={isRowSaving} /> : <div className="error-note-readonly">{isImageValue(row.note) ? <img className="error-note-readonly-image" src={row.note} alt={`Note cho ${row.title}`} /> : (row.note || '—')}</div>}</td>
                       <td>{canManage ? <select className="error-inline-select" value={rowDraft.editorFreelancerId || ''} onChange={(event) => updateRowDraft(row, 'editorFreelancerId', event.target.value)} disabled={isRowSaving}><option value="">Chọn freelancer</option>{editorOptions.map((freelancer) => <option value={getFreelancerId(freelancer)} key={getFreelancerId(freelancer)}>{freelancer.name || freelancer.email}</option>)}</select> : <span className="error-editor-badge">{row.editor || 'Chưa gán'}</span>}</td>
@@ -722,6 +692,30 @@ export function ErrorManagementView({
             </div>
           </section>
         </>
+      )}
+
+      {selectedScreenshot && (
+        <div className="modal-overlay" onClick={() => setSelectedScreenshot(null)} role="presentation">
+          <div className="modal-content error-screenshot-preview-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="error-screenshot-preview-title">
+            <div className="modal-header">
+              <div>
+                <span className="qc-kicker">CHI TIẾT LỖI</span>
+                <div className="modal-title" id="error-screenshot-preview-title">{selectedScreenshot.title || 'Screenshot lỗi'}</div>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setSelectedScreenshot(null)} title="Đóng">
+                <IconX size={18} />
+              </button>
+            </div>
+            <div className="modal-body error-screenshot-preview-body">
+              <img src={selectedScreenshot.screenshot} alt={`Screenshot chi tiết cho ${selectedScreenshot.title || 'lỗi'}`} />
+              <div className="error-screenshot-preview-meta">
+                <strong>Chapter {selectedScreenshot.chapter || '—'}</strong>
+                <span>{selectedScreenshot.field || activeField} · {selectedScreenshot.errorType || 'Chưa chọn Error Type'}</span>
+                {selectedScreenshot.error && <p>{selectedScreenshot.error}</p>}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
