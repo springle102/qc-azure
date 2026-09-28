@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { IconEdit, IconPlus, IconRefresh, IconSearch, IconTasks, IconTrash, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
@@ -33,10 +34,10 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
       .map((level) => ({ ...level, priceRow: prices.get(priceKey(level.field, level.difficulty)) }))
       .filter((level) => !query || [level.field, level.difficulty, level.priceRow?.price].some((value) => String(value ?? '').toLowerCase().includes(query)))
       .sort((left, right) => {
-        const fieldDiff = fieldNames.indexOf(left.field) - fieldNames.indexOf(right.field);
+        const fieldDiff = String(left.field || '').localeCompare(String(right.field || ''), 'vi', { numeric: true, sensitivity: 'base' });
         return fieldDiff || String(left.difficulty || '').localeCompare(String(right.difficulty || ''), 'vi');
       });
-  }, [difficultyLevels, difficultyPrices, field, fieldNames, search]);
+  }, [difficultyLevels, difficultyPrices, field, search]);
 
   const levelsForPriceField = editingPrice
     ? difficultyLevels.filter((level) => level.field === editingPrice.field)
@@ -311,7 +312,7 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
         </div>
       </section>
 
-      {editingPrice && (
+      {editingPrice && createPortal(
         <div className="modal-overlay" onClick={() => !isSaving && setEditingPrice(null)}>
           <form className="modal-content price-edit-modal" onSubmit={savePrice} onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
@@ -339,10 +340,11 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
             </div>
             <div className="modal-footer"><button type="button" className="btn btn-outline" onClick={() => setEditingPrice(null)} disabled={isSaving}>Hủy</button><button type="submit" className="btn btn-primary" disabled={isSaving || levelsForPriceField.length === 0}>{isSaving ? 'Đang lưu...' : 'Lưu giá'}</button></div>
           </form>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {levelManagerField && (
+      {levelManagerField && createPortal(
         <div className="modal-overlay" onClick={() => !isSaving && setLevelManagerField(null)}>
           <div className="modal-content modal-lg difficulty-level-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
@@ -375,7 +377,8 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

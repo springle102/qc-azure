@@ -116,10 +116,11 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
       && (!search.trim() || text.includes(search.trim().toLowerCase()))
       && matchesColumnFilters;
     });
-    if (!columnSort) return filtered;
-    const sortKind = getColumnSortKind(columnSort.key);
+    const sortKey = columnSort?.key || columns[0][0];
+    const sortDirection = columnSort?.direction || 'asc';
+    const sortKind = getColumnSortKind(sortKey);
     if (!sortKind) return filtered;
-    return [...filtered].sort((left, right) => compareColumnValues(left, right, columnSort.key, sortKind, columnSort.direction));
+    return [...filtered].sort((left, right) => compareColumnValues(left, right, sortKey, sortKind, sortDirection));
   }, [columnFilters, columnSort, currentUser, deadlines, field, freelancer, freelancerOptions, qc, search, seriesId]);
 
   const updateColumnFilter = (key, selectedValues) => {
@@ -324,9 +325,9 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
     <div className="fade-in">
       <div className="page-header-row qc-page-heading">
         <div>
-          <span className="qc-kicker">TIẾN ĐỘ</span>
+          <span className="qc-kicker">QUẢN LÝ TIẾN ĐỘ</span>
           <h2 className="page-title">{title}</h2>
-          <p className="page-subtitle">{readOnly ? 'Bạn được sửa Status và Feedback của deadline được giao.' : 'Lọc và theo dõi các trường trong bảng SeriesList.'}</p>
+          <p className="page-subtitle">{readOnly ? 'Bạn được sửa Status và Feedback của deadline được giao.' : 'Giữ nguyên 100% cột dữ liệu, cuộn ngang mượt mà với ghim cố định 3 cột đầu.'}</p>
         </div>
         <div className="page-header-actions">
           {!readOnly && <button type="button" className="btn btn-primary" onClick={openCreate} disabled={isSaving}>
@@ -723,12 +724,24 @@ function renderValue(value, key, field, difficultyLevels, freelancers, qcs, item
     return getAdminAssignmentLabel(item.assignedAdminId, currentUser);
   }
   if (value === null || value === undefined || value === '') return '—';
+  if (key === 'seriesId') return <span className="series-id-badge">{value}</span>;
+  if (key === 'chapterNumber') return <span className="chapter-badge">Ch. {value}</span>;
   if (key === 'urlSeries') return /^https?:\/\//i.test(String(value))
     ? <a className="table-link" href={value} target="_blank" rel="noreferrer">Mở link</a>
     : '—';
   if (key === 'endTask') return formatDateOnly(value);
   if (key === 'price' || key === 'receivePrice') return formatMoney(value);
-  if (key === 'completionPercent') return <span className="completion-badge">{value}%</span>;
+  if (key === 'completionPercent') {
+    const num = Math.max(0, Math.min(100, Number(value) || 0));
+    return (
+      <div className="completion-cell-wrap">
+        <span className="completion-badge">{value}%</span>
+        <div className="mini-progress-track">
+          <div className="mini-progress-fill" style={{ width: `${num}%` }} />
+        </div>
+      </div>
+    );
+  }
   if (key === 'fIld') return findPersonName(value, freelancers);
   if (key === 'qcId') return findPersonName(value, qcs);
   if (key === 'difficulty') {

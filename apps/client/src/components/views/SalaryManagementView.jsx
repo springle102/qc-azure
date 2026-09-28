@@ -6,20 +6,26 @@ export function SalaryManagementView({ salaries = [], isLoading, onRefresh }) {
   const [selectedQR, setSelectedQR] = useState(null);
   const members = useMemo(() => Array.isArray(salaries) ? salaries : [], [salaries]);
 
-  const filteredFreelancers = useMemo(() => members.filter((freelancer) => {
+  const filteredFreelancers = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const memberFields = getMemberFields(freelancer);
-    const matchesSearch = !query || [
-      freelancer.fId || freelancer.fIld,
-      freelancer.name,
-      memberFields.join(', '),
-      freelancer.totalSalary ?? freelancer.salary ?? freelancer.luong,
-      freelancer.earnedAmount,
-      freelancer.bonus
-    ].some((value) => String(value ?? '').toLowerCase().includes(query));
+    const filtered = members.filter((freelancer) => {
+      const memberFields = getMemberFields(freelancer);
+      const matchesSearch = !query || [
+        freelancer.fId || freelancer.fIld,
+        freelancer.name,
+        memberFields.join(', '),
+        freelancer.totalSalary ?? freelancer.salary ?? freelancer.luong,
+        freelancer.earnedAmount,
+        freelancer.bonus
+      ].some((value) => String(value ?? '').toLowerCase().includes(query));
 
-    return matchesSearch;
-  }), [members, search]);
+      return matchesSearch;
+    });
+    return [...filtered].sort((left, right) => compareNumericValues(
+      left.fId ?? left.fIld ?? left.qcId ?? left.id,
+      right.fId ?? right.fIld ?? right.qcId ?? right.id
+    ));
+  }, [members, search]);
 
   return (
     <div className="fade-in">
@@ -113,4 +119,15 @@ function formatSalary(value) {
 function getMemberFields(member) {
   if (Array.isArray(member.fields) && member.fields.length > 0) return member.fields;
   return member.field ? [member.field] : [];
+}
+
+function compareNumericValues(leftValue, rightValue) {
+  const leftNumber = Number(leftValue);
+  const rightNumber = Number(rightValue);
+  const leftMissing = leftValue === null || leftValue === undefined || String(leftValue).trim() === '' || !Number.isFinite(leftNumber);
+  const rightMissing = rightValue === null || rightValue === undefined || String(rightValue).trim() === '' || !Number.isFinite(rightNumber);
+  if (leftMissing && !rightMissing) return 1;
+  if (!leftMissing && rightMissing) return -1;
+  if (!leftMissing && !rightMissing) return leftNumber - rightNumber;
+  return String(leftValue ?? '').localeCompare(String(rightValue ?? ''), 'vi', { numeric: true, sensitivity: 'base' });
 }

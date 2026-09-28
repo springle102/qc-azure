@@ -52,9 +52,14 @@ export function DeadlineRegistrationView({
   const ownRegistration = registrations.find((row) => String(row.fIld ?? row.fId ?? row.freelancerId ?? '') === ownFreelancerId);
   const filteredRegistrations = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return registrations;
-    return registrations.filter((row) => [row.fIld, row.name, row.chaptersPerWeek, row.chaptersPerMonth, row.stability, row.note]
-      .some((value) => String(value ?? '').toLowerCase().includes(query)));
+    const filtered = !query
+      ? registrations
+      : registrations.filter((row) => [row.fIld, row.name, row.chaptersPerWeek, row.chaptersPerMonth, row.stability, row.note]
+        .some((value) => String(value ?? '').toLowerCase().includes(query)));
+    return [...filtered].sort((left, right) => compareNumericValues(
+      left.fIld ?? left.fId ?? left.freelancerId,
+      right.fIld ?? right.fId ?? right.freelancerId
+    ));
   }, [registrations, search]);
 
   const openCreate = () => {
@@ -295,4 +300,15 @@ export function DeadlineRegistrationView({
       )}
     </div>
   );
+}
+
+function compareNumericValues(leftValue, rightValue) {
+  const leftNumber = Number(leftValue);
+  const rightNumber = Number(rightValue);
+  const leftMissing = leftValue === null || leftValue === undefined || String(leftValue).trim() === '' || !Number.isFinite(leftNumber);
+  const rightMissing = rightValue === null || rightValue === undefined || String(rightValue).trim() === '' || !Number.isFinite(rightNumber);
+  if (leftMissing && !rightMissing) return 1;
+  if (!leftMissing && rightMissing) return -1;
+  if (!leftMissing && !rightMissing) return leftNumber - rightNumber;
+  return String(leftValue ?? '').localeCompare(String(rightValue ?? ''), 'vi', { numeric: true, sensitivity: 'base' });
 }

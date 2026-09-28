@@ -61,14 +61,15 @@ export function FreelancerManagementView({ freelancers = [], accounts = [], fiel
   }), [columnFilters, field, search, freelancerRows]);
 
   const sortedFreelancers = useMemo(() => {
-    if (!columnSort) return filteredFreelancers;
+    const sortKey = columnSort?.key || FREELANCER_FILTER_COLUMNS[0].key;
+    const sortDirection = columnSort?.direction || 'asc';
     return [...filteredFreelancers].sort((left, right) => {
-      const comparison = getFreelancerFilterValue(left, columnSort.key).localeCompare(
-        getFreelancerFilterValue(right, columnSort.key),
+      const comparison = getFreelancerFilterValue(left, sortKey).localeCompare(
+        getFreelancerFilterValue(right, sortKey),
         'vi',
         { numeric: true, sensitivity: 'base' }
       );
-      return columnSort.direction === 'desc' ? -comparison : comparison;
+      return sortDirection === 'desc' ? -comparison : comparison;
     });
   }, [columnSort, filteredFreelancers]);
 
@@ -197,7 +198,7 @@ export function FreelancerManagementView({ freelancers = [], accounts = [], fiel
         </div>
       </section>
 
-      {editingFreelancer && (
+      {editingFreelancer && createPortal(
         <div className="modal-overlay" onClick={() => !isSaving && setEditingFreelancer(null)}>
           <form className="modal-content freelancer-edit-modal" onSubmit={saveFreelancer} onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
@@ -233,7 +234,8 @@ export function FreelancerManagementView({ freelancers = [], accounts = [], fiel
               <button type="submit" className="btn btn-primary" disabled={isSaving}>{isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}</button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

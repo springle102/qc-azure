@@ -57,16 +57,17 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
       }
       return selectedValues.includes(getAccountFilterValue(account, key, freelancerRows));
     }));
-    if (!columnSort) return filtered;
-    const sortColumn = ACCOUNT_FILTER_COLUMNS.find(({ key }) => key === columnSort.key);
+    const sortKey = columnSort?.key || ACCOUNT_FILTER_COLUMNS[0].key;
+    const sortDirection = columnSort?.direction || 'asc';
+    const sortColumn = ACCOUNT_FILTER_COLUMNS.find(({ key }) => key === sortKey);
     if (!sortColumn?.sortKind) return filtered;
     return [...filtered].sort((left, right) => {
-      const comparison = getAccountFilterValue(left, columnSort.key, freelancerRows).localeCompare(
-        getAccountFilterValue(right, columnSort.key, freelancerRows),
+      const comparison = getAccountFilterValue(left, sortKey, freelancerRows).localeCompare(
+        getAccountFilterValue(right, sortKey, freelancerRows),
         'vi',
         { numeric: true, sensitivity: 'base' }
       );
-      return columnSort.direction === 'desc' ? -comparison : comparison;
+      return sortDirection === 'desc' ? -comparison : comparison;
     });
   }, [accountRows, columnFilters, columnSort, freelancerRows]);
 

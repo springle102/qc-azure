@@ -419,10 +419,10 @@ export function ErrorManagementView({
     const filtered = localErrors
       .filter((row) => matchesField(row, activeField))
       .filter((row) => !Array.isArray(errorTypeFilter) || errorTypeFilter.includes(String(row.errorType ?? '')));
-    if (!titleSortDirection) return filtered;
-    return filtered.sort((left, right) => {
-      const compared = String(left.title || '').localeCompare(String(right.title || ''), 'vi', { sensitivity: 'base' });
-      return titleSortDirection === 'asc' ? compared : -compared;
+    const sortDirection = titleSortDirection || 'asc';
+    return [...filtered].sort((left, right) => {
+      const compared = String(left.title || '').localeCompare(String(right.title || ''), 'vi', { numeric: true, sensitivity: 'base' });
+      return sortDirection === 'asc' ? compared : -compared;
     });
   }, [activeField, errorTypeFilter, localErrors, titleSortDirection]);
 

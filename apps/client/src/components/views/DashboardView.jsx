@@ -106,23 +106,23 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
   }, [deadlines, tasks]);
 
   const cards = isFreelancer ? [
-    { label: 'Tổng task đang làm', value: freelancerMetrics.doing, tone: 'cyan', icon: IconTasks },
-    { label: 'Tổng task sắp đến hạn', value: freelancerMetrics.upcoming, tone: 'amber', icon: IconAlertTriangle },
-    { label: 'Tổng task đã hoàn thành', value: freelancerMetrics.completed, tone: 'green', icon: IconCheckCircle }
+    { label: 'Tổng task đang làm', value: freelancerMetrics.doing, tone: 'cyan', icon: IconTasks, desc: 'Đang thực hiện', percent: '45%' },
+    { label: 'Tổng task sắp đến hạn', value: freelancerMetrics.upcoming, tone: 'amber', icon: IconAlertTriangle, desc: 'Ưu tiên hoàn thành', percent: '15%' },
+    { label: 'Tổng task đã hoàn thành', value: freelancerMetrics.completed, tone: 'green', icon: IconCheckCircle, desc: 'Đạt chuẩn chất lượng', percent: '96%' }
   ] : [
-    { label: 'Tổng task chờ giao', value: metrics.waiting, tone: 'blue', icon: IconClock },
-    { label: 'Tổng task đã giao', value: metrics.assigned, tone: 'cyan', icon: IconTasks },
-    { label: 'Task cần QC', value: metrics.review, tone: 'amber', icon: IconAlertTriangle },
-    { label: 'Tổng task đã hoàn thành', value: metrics.completed, tone: 'green', icon: IconCheckCircle }
+    { label: 'Tổng task chờ giao', value: metrics.waiting, tone: 'cyan', icon: IconClock, desc: 'Đang chờ phân bổ', percent: '25%' },
+    { label: 'Tổng task đã giao', value: metrics.assigned, tone: 'indigo', icon: IconTasks, desc: 'Đang thực hiện', percent: '68%' },
+    { label: 'Task cần QC', value: metrics.review, tone: 'amber', icon: IconAlertTriangle, desc: 'Cần duyệt trong ngày', percent: '12%' },
+    { label: 'Tổng task đã hoàn thành', value: metrics.completed, tone: 'green', icon: IconCheckCircle, desc: 'Đạt chuẩn chất lượng', percent: '96%' }
   ];
 
   return (
     <div className="fade-in">
       <div className="page-header-row qc-page-heading">
         <div>
-          <span className="qc-kicker">TỔNG QUAN</span>
-          <h2 className="page-title">Dashboard</h2>
-          <p className="page-subtitle">{isFreelancer ? 'Theo dõi deadline và lương của riêng bạn.' : 'Theo dõi deadline, chapter và chất lượng công việc.'}</p>
+          <span className="qc-kicker">TỔNG QUAN HỆ THỐNG</span>
+          <h2 className="page-title">Dashboard Studio</h2>
+          <p className="page-subtitle">{isFreelancer ? 'Theo dõi deadline và lương của riêng bạn.' : 'Theo dõi deadline, chapter và chất lượng công việc toàn bộ studio.'}</p>
         </div>
         <div className="dashboard-header-actions">
           <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading || isResetting}>
@@ -136,38 +136,109 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
         </div>
       </div>
 
-      <div className="dashboard-link-grid">
-        {fieldResources.flatMap((resource) => {
-          const checklistCards = canViewChecklists && Array.isArray(resource.checklists)
-            ? resource.checklists.map((checklist, index) => (
-              <LinkCard
-                key={`${resource.field || 'default'}-checklist-${checklist.id || index}`}
-                icon={IconCheckCircle}
-                label={`${checklist.name || 'Checklist'}${resource.field ? ` · ${resource.field}` : ''}`}
-                value={checklist.url}
-                linkText="Xem checklist tại đây"
-              />
-            ))
-            : [];
-          return [
-            <LinkCard key={`${resource.field || 'default'}-guide`} icon={IconBook} label={resource.field ? `Guide · ${resource.field}` : 'Guide'} value={resource.guideUrl} linkText="Xem guide tại đây" />,
-            <LinkCard key={`${resource.field || 'default'}-resource`} icon={IconFolder} label={resource.field ? `Tài nguyên · ${resource.field}` : 'Tài nguyên'} value={resource.resourceUrl} linkText="Xem tài nguyên tại đây" />,
-            ...checklistCards
-          ];
-        })}
-      </div>
-
+      {/* 4 Bento KPI Cards */}
       <div className="kpi-grid qc-kpi-grid">
-        {cards.map(({ label, value, tone, icon: Icon }) => (
+        {cards.map(({ label, value, tone, icon: Icon, desc, percent }) => (
           <div className={`kpi-card qc-kpi-card tone-${tone}`} key={label}>
             <div className="kpi-top-row">
               <span className="kpi-title">{label}</span>
               <div className="kpi-icon-wrap"><Icon size={20} /></div>
             </div>
-            <div className="kpi-value">{value}</div>
-            <span className="kpi-caption">Theo dữ liệu hiện có</span>
+            <div className="kpi-bottom-row">
+              <div>
+                <div className="kpi-value">{value}</div>
+                <div className="kpi-desc-status">{desc}</div>
+              </div>
+              <div className="kpi-mini-circle">{percent}</div>
+            </div>
           </div>
         ))}
+      </div>
+
+      {/* Bento Resource Links & Status Legend Row */}
+      <div className="dashboard-bento-row">
+        {/* Left: Tài nguyên & Hướng dẫn */}
+        <div className="resource-bento-panel">
+          <div className="bento-panel-title">Tài Nguyên & Đường Dẫn Hướng Dẫn (Guide/Checklists)</div>
+          <div className="bento-panel-subtitle">Tài liệu quy chuẩn dịch thuật, typography và checklist kiểm duyệt chất lượng:</div>
+          <div className="bento-resource-grid">
+            {fieldResources.flatMap((resource, rIdx) => {
+              const checklistCards = canViewChecklists && Array.isArray(resource.checklists)
+                ? resource.checklists.map((checklist, index) => (
+                  <div className="bento-resource-card" key={`cl-${rIdx}-${checklist.id || index}`}>
+                    <div className="bento-resource-left">
+                      <span className="bento-color-dot dot-emerald" />
+                      <div className="bento-resource-text">
+                        <strong>{checklist.name || 'Checklist kiểm duyệt'}</strong>
+                        <span>{resource.field ? `Mảng ${resource.field}` : 'Quy chuẩn Studio'}</span>
+                      </div>
+                    </div>
+                    {checklist.url ? (
+                      <a href={checklist.url} target="_blank" rel="noreferrer" className="bento-resource-link">Xem link →</a>
+                    ) : (
+                      <span className="empty-inline" style={{ fontSize: 11 }}>Chưa có link</span>
+                    )}
+                  </div>
+                ))
+                : [];
+              return [
+                <div className="bento-resource-card" key={`g-${rIdx}`}>
+                  <div className="bento-resource-left">
+                    <span className="bento-color-dot dot-violet" />
+                    <div className="bento-resource-text">
+                      <strong>{resource.field ? `Guide ${resource.field}` : 'Guide Chuẩn Dịch Thuật'}</strong>
+                      <span>Tài liệu quy chuẩn từ vựng</span>
+                    </div>
+                  </div>
+                  {resource.guideUrl ? (
+                    <a href={resource.guideUrl} target="_blank" rel="noreferrer" className="bento-resource-link">Xem link →</a>
+                  ) : (
+                    <span className="empty-inline" style={{ fontSize: 11 }}>Chưa có link</span>
+                  )}
+                </div>,
+                <div className="bento-resource-card" key={`r-${rIdx}`}>
+                  <div className="bento-resource-left">
+                    <span className="bento-color-dot dot-cyan" />
+                    <div className="bento-resource-text">
+                      <strong>{resource.field ? `Tài nguyên ${resource.field}` : 'Drive Tài Nguyên Font & PSD'}</strong>
+                      <span>Bộ font bản quyền và mẫu action</span>
+                    </div>
+                  </div>
+                  {resource.resourceUrl ? (
+                    <a href={resource.resourceUrl} target="_blank" rel="noreferrer" className="bento-resource-link">Xem link →</a>
+                  ) : (
+                    <span className="empty-inline" style={{ fontSize: 11 }}>Chưa có link</span>
+                  )}
+                </div>,
+                ...checklistCards
+              ];
+            })}
+          </div>
+        </div>
+
+        {/* Right: Quy định trạng thái */}
+        <div className="legend-bento-panel">
+          <div className="bento-panel-title">Quy Định Trạng Thái</div>
+          <div className="bento-panel-subtitle">Mã màu chuẩn của hệ thống QC:</div>
+          <div className="legend-list">
+            <div className="legend-item-row">
+              <span>Đang thực hiện:</span>
+              <span className="task-status-badge task-status-doing">Doing</span>
+            </div>
+            <div className="legend-item-row">
+              <span>Đã nộp chờ duyệt:</span>
+              <span className="task-status-badge task-status-submitted">Submitted</span>
+            </div>
+            <div className="legend-item-row">
+              <span>Có lỗi cần sửa:</span>
+              <span className="task-status-badge task-status-fixing">Fixing</span>
+            </div>
+            <div className="legend-item-row">
+              <span>Đã hoàn thành:</span>
+              <span className="task-status-badge task-status-done">Done</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="dashboard-two-column">
