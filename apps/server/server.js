@@ -88,6 +88,22 @@ async function sendCollection(collection, req, res) {
   }
 }
 
+async function sendFieldScopedCollection(collection, req, res) {
+  try {
+    const rows = await getCollection(collection);
+    if (req.authUser.role === 'Admin') {
+      return res.json({ success: true, data: rows });
+    }
+
+    const visibleFields = await getVisibleFields(req.authUser);
+    const allowedFields = new Set(visibleFields.map((field) => String(field.name || '').trim().toLowerCase()));
+    const scopedRows = rows.filter((row) => allowedFields.has(String(row.field || '').trim().toLowerCase()));
+    return res.json({ success: true, data: scopedRows });
+  } catch (error) {
+    return res.status(502).json({ success: false, message: error.message });
+  }
+}
+
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -558,8 +574,8 @@ app.get('/api/deadlines', requireAuth, async (req, res) => {
     res.status(502).json({ success: false, message: error.message });
   }
 });
-app.get('/api/difficulty-levels', requireAuth, (req, res) => sendCollection('difficultyLevels', req, res));
-app.get('/api/difficulty-prices', requireAuth, (req, res) => sendCollection('difficultyPricing', req, res));
+app.get('/api/difficulty-levels', requireAuth, (req, res) => sendFieldScopedCollection('difficultyLevels', req, res));
+app.get('/api/difficulty-prices', requireAuth, (req, res) => sendFieldScopedCollection('difficultyPricing', req, res));
 app.get('/api/bonus-settings', requireAuth, async (req, res) => {
   try {
     res.json({ success: true, data: await getBonusSettings() });
