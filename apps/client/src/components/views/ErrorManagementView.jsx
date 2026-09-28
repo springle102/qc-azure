@@ -397,6 +397,7 @@ export function ErrorManagementView({
   const [draftRows, setDraftRows] = useState({});
   const [isCreatingError, setIsCreatingError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [savingRowId, setSavingRowId] = useState(null);
   const [selectedScreenshot, setSelectedScreenshot] = useState(null);
 
@@ -521,6 +522,7 @@ export function ErrorManagementView({
   };
 
   const handleSync = async () => {
+    setIsSyncing(true);
     setIsSaving(true);
     try {
       const result = await api.syncErrors();
@@ -533,6 +535,7 @@ export function ErrorManagementView({
       showToast(error.message || 'Không thể đồng bộ bảng lỗi.', 'error');
     } finally {
       setIsSaving(false);
+      setIsSyncing(false);
     }
   };
 
@@ -605,7 +608,7 @@ export function ErrorManagementView({
           <h2 className="page-title">Quản lý lỗi</h2>
         </div>
         <div className="page-header-actions">
-          {canManage && <button type="button" className="btn btn-primary" onClick={handleSync} disabled={isLoading || isSaving}><IconRefresh size={16} /> Đồng bộ lỗi</button>}
+          {canManage && <button type="button" className="btn btn-primary" onClick={handleSync} disabled={isLoading || isSaving}><IconRefresh size={16} /> {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ lỗi'}</button>}
           <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading || isSaving}><IconRefresh size={16} /> {isLoading ? 'Đang tải...' : 'Làm mới'}</button>
         </div>
       </div>

@@ -4343,8 +4343,15 @@
   background: rgba(240, 249, 255, 0.86);
 }
 
-:root[data-theme='light'] .error-screenshot-cell a {
-  background: rgba(248, 250, 252, 0.85);
+:root[data-theme='light'] .error-screenshot-cell a,
+:root[data-theme='light'] .error-screenshot-preview-button {
+  background: rgba(248, 250, 252, 0.95);
+  border-color: rgba(148, 163, 184, 0.42);
+}
+
+:root[data-theme='light'] .error-screenshot-preview-meta {
+  background: rgba(248, 250, 252, 0.95);
+  border-color: rgba(148, 163, 184, 0.32);
 }
 
 :root[data-theme='light'] .error-inline-input,
