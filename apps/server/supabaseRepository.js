@@ -3,7 +3,7 @@ import pg from 'pg';
 
 const { Pool } = pg;
 const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '';
 const databaseUrl = process.env.DATABASE_URL || '';
 let pool;
 const rowsCache = new Map();

@@ -65,7 +65,7 @@ export function Header({ currentUser, deadlines = [], errors = [], onNavigate, o
         {urgentCount > 0 && (
           <div className="qc-header-ticker" title="Các chapter có hạn hôm nay cần hoàn thành / kiểm duyệt">
             <span className="qc-ticker-dot" />
-            <span>Hôm nay: <strong>{urgentCount} chapter</strong> cần duyệt gấp</span>
+            <span>Hôm nay: <strong>{urgentCount} chapter</strong> cần QC gấp</span>
           </div>
         )}
         <div ref={notificationRef} className="qc-notification-wrap">

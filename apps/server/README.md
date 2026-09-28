@@ -60,7 +60,7 @@ Mặc định server chạy tại `http://localhost:5000`.
 - `GUIDE_URL`
 - `RESOURCE_URL`
 - `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` hoặc `SUPABASE_SECRET_KEY` (chỉ cần khai báo một; giữ key ở backend/Railway, không đưa vào client)
 - `SUPABASE_ERROR_SCREENSHOT_BUCKET` (mặc định `error-screenshots`; bucket public được tạo tự động để trình duyệt tải ảnh trực tiếp qua CDN)
 - `SUPABASE_TABLE_TASKS` (mặc định `SeriesList`)
 - `SUPABASE_TABLE_FREELANCERS` (mặc định `Freelancer`)

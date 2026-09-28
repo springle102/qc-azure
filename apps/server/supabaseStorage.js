@@ -1,7 +1,7 @@
 import 'dotenv/config';
 
 const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || '';
 const bucketName = process.env.SUPABASE_ERROR_SCREENSHOT_BUCKET || 'error-screenshots';
 let bucketPromise = null;
 
