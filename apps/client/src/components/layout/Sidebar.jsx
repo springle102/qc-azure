@@ -17,7 +17,7 @@ const NAV_ITEMS = [
   { id: 'freelancers', label: 'Quản lý freelancer', icon: IconUsers, tone: 'cyan' },
   { id: 'deadlineRegistrations', label: 'Đăng ký deadline', icon: IconBook, tone: 'indigo' },
   { id: 'deadlines', label: 'Quản lý Deadline', icon: IconTasks, tone: 'violet' },
-  { id: 'errors', label: 'Quản lý lỗi', icon: IconAlertTriangle, tone: 'rose', badge: '11 loại' },
+  { id: 'errors', label: 'Quản lý lỗi', icon: IconAlertTriangle, tone: 'rose' },
   { id: 'pricing', label: 'Giá tiền', icon: IconDollarSign, tone: 'amber' },
   { id: 'salary', label: 'Lương & QR', icon: IconBanknote, tone: 'emerald' },
   { id: 'settings', label: 'Cấu hình chung', icon: IconSettings, tone: 'slate' },
@@ -46,7 +46,6 @@ export function Sidebar({ currentView, onNavigate, currentUser, role = 'QC', onO
         <div>
           <div className="qc-brand-title-wrap">
             <strong>WZ System</strong>
-            <span className="qc-version-badge">v2.0</span>
           </div>
           <span>DEADLINE MANAGEMENT</span>
         </div>

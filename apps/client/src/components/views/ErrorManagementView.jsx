@@ -398,6 +398,7 @@ export function ErrorManagementView({
   const [isCreatingError, setIsCreatingError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isMigratingScreenshots, setIsMigratingScreenshots] = useState(false);
   const [savingRowId, setSavingRowId] = useState(null);
   const [selectedScreenshot, setSelectedScreenshot] = useState(null);
 
@@ -539,6 +540,21 @@ export function ErrorManagementView({
     }
   };
 
+  const handleMigrateScreenshots = async () => {
+    setIsMigratingScreenshots(true);
+    setIsSaving(true);
+    try {
+      const result = await api.migrateErrorScreenshots();
+      showToast(`Đã chuyển ${result.migrated || 0}/${result.candidates || 0} screenshot lên Storage.`, result.failed ? 'warning' : 'success');
+      await onRefresh?.();
+    } catch (error) {
+      showToast(error.message || 'Không thể chuyển screenshot lên Storage.', 'error');
+    } finally {
+      setIsSaving(false);
+      setIsMigratingScreenshots(false);
+    }
+  };
+
   const handleCreate = async (event) => {
     event.preventDefault();
     if (!activeField) {
@@ -608,6 +624,7 @@ export function ErrorManagementView({
           <h2 className="page-title">Quản lý lỗi</h2>
         </div>
         <div className="page-header-actions">
+          {currentUser.role === 'Admin' && <button type="button" className="btn btn-outline" onClick={handleMigrateScreenshots} disabled={isLoading || isSaving}><IconRefresh size={16} /> {isMigratingScreenshots ? 'Đang chuyển ảnh...' : 'Chuyển ảnh lên Storage'}</button>}
           {canManage && <button type="button" className="btn btn-primary" onClick={handleSync} disabled={isLoading || isSaving}><IconRefresh size={16} /> {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ lỗi'}</button>}
           <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading || isSaving}><IconRefresh size={16} /> {isLoading ? 'Đang tải...' : 'Làm mới'}</button>
         </div>

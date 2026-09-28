@@ -6,6 +6,8 @@ const supabaseUrl = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const databaseUrl = process.env.DATABASE_URL || '';
 let pool;
+const rowsCache = new Map();
+const ROWS_CACHE_TTL_MS = 3000;
 
 const tables = {
   tasks: process.env.SUPABASE_TABLE_TASKS || 'SeriesList',
@@ -37,29 +39,34 @@ export function getDataSource() {
 }
 
 export async function selectRows(collection) {
+  const cached = rowsCache.get(collection);
+  if (cached && Date.now() - cached.createdAt < ROWS_CACHE_TTL_MS) return cached.rows;
+
+  let rows;
   if (databaseUrl) {
     const table = tables[collection];
     if (!table) throw new Error(`Unknown collection: ${collection}`);
     const result = await getPool().query(`SELECT * FROM ${quoteIdentifier(table)}`);
-    return result.rows;
-  }
+    rows = result.rows;
+  } else {
+    if (!isSupabaseConfigured()) return [];
 
-  if (!isSupabaseConfigured()) return [];
+    const table = tables[collection];
+    const response = await fetch(`${supabaseUrl}/rest/v1/${encodeURIComponent(table)}?select=*`, {
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`
+      }
+    });
 
-  const table = tables[collection];
-  const response = await fetch(`${supabaseUrl}/rest/v1/${encodeURIComponent(table)}?select=*`, {
-    headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(`Supabase query failed for ${table}: ${message}`);
     }
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Supabase query failed for ${table}: ${message}`);
+    rows = await response.json();
   }
-
-  return response.json();
+  rowsCache.set(collection, { createdAt: Date.now(), rows });
+  return rows;
 }
 
 export async function updateRow(collection, keys, updates, allowedColumns) {
@@ -68,6 +75,7 @@ export async function updateRow(collection, keys, updates, allowedColumns) {
 
   const safeUpdates = Object.entries(updates || {}).filter(([column]) => allowedColumns.includes(column));
   if (safeUpdates.length === 0) throw new Error('Không có trường hợp lệ để cập nhật.');
+  rowsCache.delete(collection);
 
   if (databaseUrl) {
     const values = safeUpdates.map(([, value]) => value);
@@ -115,6 +123,7 @@ export async function insertRow(collection, values, allowedColumns) {
   if (!table) throw new Error(`Unknown collection: ${collection}`);
   const safeEntries = Object.entries(values || {}).filter(([column]) => allowedColumns.includes(column));
   if (safeEntries.length === 0) throw new Error('Không có dữ liệu hợp lệ để tạo.');
+  rowsCache.delete(collection);
 
   if (databaseUrl) {
     const columns = safeEntries.map(([column]) => quoteIdentifier(column)).join(', ');
@@ -152,6 +161,7 @@ export async function updateRowById(collection, id, updates, allowedColumns) {
 export async function deleteRowById(collection, id) {
   const table = tables[collection];
   if (!table) throw new Error(`Unknown collection: ${collection}`);
+  rowsCache.delete(collection);
 
   if (databaseUrl) {
     const result = await getPool().query(`DELETE FROM ${quoteIdentifier(table)} WHERE "id" = $1 RETURNING *`, [id]);
@@ -180,6 +190,7 @@ export async function deleteRowById(collection, id) {
 export async function deleteRowsByKeys(collection, keys) {
   const table = tables[collection];
   if (!table) throw new Error(`Unknown collection: ${collection}`);
+  rowsCache.delete(collection);
 
   if (databaseUrl) {
     const keyEntries = Object.entries(keys || {});

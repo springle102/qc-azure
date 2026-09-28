@@ -112,7 +112,7 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
   ] : [
     { label: 'Tổng task chờ giao', value: metrics.waiting, tone: 'cyan', icon: IconClock, desc: 'Đang chờ phân bổ', percent: '25%' },
     { label: 'Tổng task đã giao', value: metrics.assigned, tone: 'indigo', icon: IconTasks, desc: 'Đang thực hiện', percent: '68%' },
-    { label: 'Task cần QC', value: metrics.review, tone: 'amber', icon: IconAlertTriangle, desc: 'Cần duyệt trong ngày', percent: '12%' },
+    { label: 'Task cần QC', value: metrics.review, tone: 'amber', icon: IconAlertTriangle, desc: 'Đang cần QC gấp', percent: '12%' },
     { label: 'Tổng task đã hoàn thành', value: metrics.completed, tone: 'green', icon: IconCheckCircle, desc: 'Đạt chuẩn chất lượng', percent: '96%' }
   ];
 
@@ -159,8 +159,8 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
       <div className="dashboard-bento-row">
         {/* Left: Tài nguyên & Hướng dẫn */}
         <div className="resource-bento-panel">
-          <div className="bento-panel-title">Tài Nguyên & Đường Dẫn Hướng Dẫn (Guide/Checklists)</div>
-          <div className="bento-panel-subtitle">Tài liệu quy chuẩn dịch thuật, typography và checklist kiểm duyệt chất lượng:</div>
+          <div className="bento-panel-title">Tài nguyên & Guide & Checklist</div>
+          <div className="bento-panel-subtitle">Tài nguyên chính thức phục vụ cho công việc.</div>
           <div className="bento-resource-grid">
             {fieldResources.flatMap((resource, rIdx) => {
               const checklistCards = canViewChecklists && Array.isArray(resource.checklists)
@@ -187,7 +187,7 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
                     <span className="bento-color-dot dot-violet" />
                     <div className="bento-resource-text">
                       <strong>{resource.field ? `Guide ${resource.field}` : 'Guide Chuẩn Dịch Thuật'}</strong>
-                      <span>Tài liệu quy chuẩn từ vựng</span>
+                      <span>Quy tắc chung</span>
                     </div>
                   </div>
                   {resource.guideUrl ? (
@@ -201,7 +201,7 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
                     <span className="bento-color-dot dot-cyan" />
                     <div className="bento-resource-text">
                       <strong>{resource.field ? `Tài nguyên ${resource.field}` : 'Drive Tài Nguyên Font & PSD'}</strong>
-                      <span>Bộ font bản quyền và mẫu action</span>
+                      <span>Các action và file bóng đa dạng</span>
                     </div>
                   </div>
                   {resource.resourceUrl ? (
@@ -228,6 +228,10 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
             <div className="legend-item-row">
               <span>Đã nộp chờ duyệt:</span>
               <span className="task-status-badge task-status-submitted">Submitted</span>
+            </div>
+            <div className="legend-item-row">
+              <span>Đang kiểm tra:</span>
+              <span className="task-status-badge task-status-checking">Checking</span>
             </div>
             <div className="legend-item-row">
               <span>Có lỗi cần sửa:</span>

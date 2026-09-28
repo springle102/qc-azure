@@ -61,6 +61,7 @@ Mặc định server chạy tại `http://localhost:5000`.
 - `RESOURCE_URL`
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_ERROR_SCREENSHOT_BUCKET` (mặc định `error-screenshots`; bucket public được tạo tự động để trình duyệt tải ảnh trực tiếp qua CDN)
 - `SUPABASE_TABLE_TASKS` (mặc định `SeriesList`)
 - `SUPABASE_TABLE_FREELANCERS` (mặc định `Freelancer`)
 - `SUPABASE_TABLE_QC` (mặc định `QC`)
@@ -75,6 +76,10 @@ Mặc định server chạy tại `http://localhost:5000`.
 - `GOOGLE_SERVICE_ACCOUNT_JSON` hoặc `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` hoặc `GOOGLE_SERVICE_ACCOUNT_FILE` (thông tin Google Service Account; không commit secret)
 
 Mỗi dòng trong bảng `Fields` có thêm `guideUrl` và `resourceUrl`. Dashboard trả các link theo mảng; Freelancer chỉ nhận link của mảng được gán trong account.
+
+## Screenshot trên Supabase Storage
+
+Khi đã khai báo `SUPABASE_URL` và `SUPABASE_SERVICE_ROLE_KEY`, screenshot mới sẽ được upload vào bucket `SUPABASE_ERROR_SCREENSHOT_BUCKET` và bảng `Errors` chỉ lưu URL ảnh. Nếu bucket chưa tồn tại, server tự tạo bucket public `error-screenshots` để trình duyệt tải ảnh trực tiếp qua CDN. Admin có thể bấm `Chuyển ảnh lên Storage` một lần trong màn hình Quản lý lỗi để migrate các ảnh Base64 cũ.
 
 ## Đồng bộ Google Sheet riêng tư
 

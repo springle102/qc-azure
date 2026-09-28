@@ -13,6 +13,12 @@ import {
   updateRow,
   updateRowById
 } from './supabaseRepository.js';
+import {
+  getErrorScreenshotStoragePath,
+  isErrorScreenshotStorageConfigured,
+  removeErrorScreenshots,
+  uploadErrorScreenshot
+} from './supabaseStorage.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -108,13 +114,14 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'Webtoon Deadline Management API',
-    dataSource: getDataSource()
+    dataSource: getDataSource(),
+    screenshotStorageConfigured: isErrorScreenshotStorageConfigured()
   });
 });
 
 app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
   try {
-    await syncGoogleSheetIfDue({ waitForCompletion: true });
+    await syncGoogleSheetIfDue({ waitForCompletion: false });
     const [tasks, deadlines, settings] = await Promise.all([
       getCollection('tasks'),
       getCollection('deadlines'),
@@ -163,7 +170,7 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
 
 app.get('/api/tasks', requireAuth, async (req, res) => {
   try {
-    await syncGoogleSheetIfDue({ waitForCompletion: true });
+    await syncGoogleSheetIfDue({ waitForCompletion: false });
     return sendCollection('tasks', req, res);
   } catch (error) {
     return res.status(502).json({ success: false, message: error.message });
@@ -562,11 +569,17 @@ app.delete('/api/accounts/:id', requireAdmin, async (req, res) => {
 });
 app.get('/api/deadlines', requireAuth, async (req, res) => {
   try {
-    if (req.query?.refreshDrive === '1') googleDriveFolderCache.clear();
-    await syncGoogleSheetIfDue({ waitForCompletion: true });
+    const refreshDrive = req.query?.refreshDrive === '1';
+    if (refreshDrive) googleDriveFolderCache.clear();
+    await syncGoogleSheetIfDue({ waitForCompletion: false });
     const allDeadlines = await getCollection('deadlines');
     const settings = await getGeneralSettings();
-    const linkedDeadlines = await enrichStoredDeadlineUrls(allDeadlines, settings.googleDriveFolders);
+    // Drive lookups are reserved for an explicit refresh. A normal page load
+    // uses the URL already stored with the deadline and avoids one Drive
+    // request per series.
+    const linkedDeadlines = refreshDrive
+      ? await enrichStoredDeadlineUrls(allDeadlines, settings.googleDriveFolders)
+      : allDeadlines;
     const deadlines = filterRowsForUser(linkedDeadlines, req.authUser);
     const prices = await getCollection('difficultyPricing');
     res.json({ success: true, data: applyConfiguredPrices(deadlines, prices) });
@@ -663,6 +676,7 @@ app.get('/api/errors', requireAuth, async (req, res) => {
 app.post('/api/errors', requireManager, async (req, res) => {
   try {
     const payload = await validateErrorPayload(req.body, req.authUser);
+    payload.screenshot = await materializeErrorScreenshot(payload.screenshot, `pending/${crypto.randomUUID()}`);
     const now = new Date().toISOString();
     const data = await insertRow('errors', {
       ...payload,
@@ -685,6 +699,14 @@ app.post('/api/errors/sync', requireManager, async (req, res) => {
     res.status(error.statusCode || 502).json({ success: false, message: getSafeErrorMessage(error, 'Không thể đồng bộ bảng lỗi.') });
   }
 });
+app.post('/api/errors/migrate-screenshots', requireAdmin, async (req, res) => {
+  try {
+    const result = await migrateLegacyErrorScreenshots(await getCollection('errors'));
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: getSafeErrorMessage(error, 'Không thể chuyển screenshot lên Supabase Storage.') });
+  }
+});
 app.patch('/api/errors/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ success: false, message: 'ID lỗi không hợp lệ.' });
@@ -696,6 +718,10 @@ app.patch('/api/errors/:id', requireAuth, async (req, res) => {
     const updates = req.authUser.role === 'Freelancer'
       ? validateFreelancerErrorUpdatePayload(req.body, current, req.authUser)
       : await validateErrorUpdatePayload(req.body, req.authUser, current);
+    const previousScreenshot = current.screenshot;
+    if (Object.prototype.hasOwnProperty.call(updates, 'screenshot')) {
+      updates.screenshot = await materializeErrorScreenshot(updates.screenshot, id);
+    }
     updates.updatedAt = new Date().toISOString();
     const data = await updateRowById(
       'errors',
@@ -703,13 +729,15 @@ app.patch('/api/errors/:id', requireAuth, async (req, res) => {
       updates,
       ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'updatedAt']
     );
-    let sheetSyncError = '';
-    try {
-      await syncErrorWithGoogleSheet(data, { action: 'update' });
-    } catch (error) {
-      sheetSyncError = getSafeErrorMessage(error, 'Không thể cập nhật Google Sheet.');
+    if (Object.prototype.hasOwnProperty.call(updates, 'screenshot')) {
+      const nextPaths = new Set(getStoragePathsFromErrorScreenshot(data.screenshot));
+      const obsoletePaths = getStoragePathsFromErrorScreenshot(previousScreenshot).filter((path) => !nextPaths.has(path));
+      if (obsoletePaths.length > 0) void removeErrorScreenshots(obsoletePaths).catch((error) => console.error('Không thể dọn screenshot cũ:', error.message));
     }
-    res.json({ success: true, data: sheetSyncError ? { ...data, sheetSyncError } : data });
+    void syncErrorWithGoogleSheet(data, { action: 'update' }).catch((error) => {
+      console.error('Không thể cập nhật Google Sheet sau khi sửa lỗi:', error.message);
+    });
+    res.json({ success: true, data });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
   }
@@ -723,8 +751,11 @@ app.delete('/api/errors/:id', requireManager, async (req, res) => {
     const current = rows.find((row) => Number(row.id) === id);
     if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy lỗi cần xóa.' });
     assertManagerCanManageField(req.authUser, current.field);
-    await syncErrorWithGoogleSheet(current, { action: 'delete' });
     const data = await deleteRowById('errors', id);
+    void syncErrorWithGoogleSheet(current, { action: 'delete' }).catch((error) => {
+      console.error('Không thể xóa dòng lỗi trên Google Sheet sau khi xóa local:', error.message);
+    });
+    void removeErrorScreenshotFiles(current.screenshot);
     res.json({ success: true, data });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
@@ -732,7 +763,7 @@ app.delete('/api/errors/:id', requireManager, async (req, res) => {
 });
 app.get('/api/salaries', requireAuth, async (req, res) => {
   try {
-    await syncGoogleSheetIfDue({ waitForCompletion: true });
+    await syncGoogleSheetIfDue({ waitForCompletion: false });
     const [freelancers, qcs, deadlines, prices, bonusSettings] = await Promise.all([
       getCollection('freelancers'),
       getMergedQCs(),
@@ -1354,6 +1385,80 @@ function normalizeErrorScreenshot(value, { strict = false } = {}) {
 function getErrorScreenshotValues(value) {
   const normalized = normalizeErrorScreenshot(value);
   return normalized ? parseErrorScreenshotValues(normalized).map((item) => String(item)) : [];
+}
+
+function parseErrorImageDataUrl(value) {
+  const match = String(value ?? '').trim().match(/^data:(image\/(?:png|jpe?g|webp|gif));base64,([a-z0-9+/=\s]+)$/i);
+  if (!match) return null;
+  return {
+    contentType: match[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : match[1].toLowerCase(),
+    data: Buffer.from(match[2].replace(/\s+/g, ''), 'base64')
+  };
+}
+
+function getErrorImageExtension(contentType) {
+  return {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif'
+  }[contentType] || 'img';
+}
+
+function getStoragePathsFromErrorScreenshot(value) {
+  return getErrorScreenshotValues(value)
+    .map(getErrorScreenshotStoragePath)
+    .filter(Boolean);
+}
+
+async function materializeErrorScreenshot(value, ownerKey) {
+  const normalized = normalizeErrorScreenshot(value);
+  if (!normalized || !isErrorScreenshotStorageConfigured()) return normalized;
+
+  const values = getErrorScreenshotValues(normalized);
+  const storedValues = await runWithConcurrency(values, async (image, index) => {
+    const dataUrl = parseErrorImageDataUrl(image);
+    if (!dataUrl) return image;
+    const path = `errors/${String(ownerKey).replace(/[^a-z0-9/_-]/gi, '_')}/${crypto.randomUUID()}-${index}.${getErrorImageExtension(dataUrl.contentType)}`;
+    return uploadErrorScreenshot({ path, data: dataUrl.data, contentType: dataUrl.contentType });
+  }, MAX_ERROR_SCREENSHOT_COUNT);
+  return normalizeErrorScreenshot(storedValues, { strict: true });
+}
+
+async function removeErrorScreenshotFiles(value) {
+  const paths = getStoragePathsFromErrorScreenshot(value);
+  if (paths.length === 0) return;
+  try {
+    await removeErrorScreenshots(paths);
+  } catch (error) {
+    console.error('Không thể dọn screenshot khỏi Supabase Storage:', error.message);
+  }
+}
+
+async function migrateLegacyErrorScreenshots(rows) {
+  if (!isErrorScreenshotStorageConfigured()) {
+    throw validationError('Chưa cấu hình SUPABASE_URL và SUPABASE_SERVICE_ROLE_KEY để dùng Supabase Storage.');
+  }
+
+  const candidates = rows.filter((row) => getErrorScreenshotValues(row.screenshot).some(parseErrorImageDataUrl));
+  let migrated = 0;
+  let failed = 0;
+  const failures = [];
+  await runWithConcurrency(candidates, async (row) => {
+    try {
+      const previousPaths = getStoragePathsFromErrorScreenshot(row.screenshot);
+      const screenshot = await materializeErrorScreenshot(row.screenshot, row.id);
+      await updateRowById('errors', row.id, { screenshot, updatedAt: new Date().toISOString() }, ['screenshot', 'updatedAt']);
+      const nextPaths = new Set(getStoragePathsFromErrorScreenshot(screenshot));
+      const obsoletePaths = previousPaths.filter((path) => !nextPaths.has(path));
+      if (obsoletePaths.length > 0) void removeErrorScreenshots(obsoletePaths).catch((error) => console.error('Không thể dọn screenshot cũ sau khi migrate:', error.message));
+      migrated += 1;
+    } catch (error) {
+      failed += 1;
+      failures.push({ id: row.id, message: getSafeErrorMessage(error, 'Không thể chuyển screenshot lên Storage.') });
+    }
+  }, 4);
+  return { scanned: rows.length, candidates: candidates.length, migrated, failed, failures: failures.slice(0, 20) };
 }
 
 function isValidConfiguredFieldName(value) {
@@ -3497,12 +3602,19 @@ async function syncErrorsWithGoogleSheets(user) {
     }
 
     const writeResults = await runWithConcurrency(importedRows, async ({ imported, current }) => {
+      const storedImported = {
+        ...imported,
+        screenshot: await materializeErrorScreenshot(imported.screenshot, current?.id || `sheet-pending/${crypto.randomUUID()}`)
+      };
       if (current) {
-        if (!hasErrorSheetChanges(current, imported)) return 'unchanged';
-        await updateRowById('errors', current.id, imported, ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'updatedAt']);
+        if (!hasErrorSheetChanges(current, storedImported)) return 'unchanged';
+        await updateRowById('errors', current.id, storedImported, ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'updatedAt']);
+        const nextPaths = new Set(getStoragePathsFromErrorScreenshot(storedImported.screenshot));
+        const obsoletePaths = getStoragePathsFromErrorScreenshot(current.screenshot).filter((path) => !nextPaths.has(path));
+        if (obsoletePaths.length > 0) void removeErrorScreenshots(obsoletePaths).catch((error) => console.error('Không thể dọn screenshot cũ sau khi đồng bộ:', error.message));
         return 'updated';
       }
-      await insertRow('errors', { ...imported, createdAt: imported.updatedAt }, ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'createdAt', 'updatedAt']);
+      await insertRow('errors', { ...storedImported, createdAt: storedImported.updatedAt }, ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'createdAt', 'updatedAt']);
       return 'inserted';
     });
     inserted += writeResults.filter((result) => result === 'inserted').length;
@@ -3561,7 +3673,12 @@ function getTaskStatus(task) {
 }
 
 function isDashboardTaskComplete(task, role) {
-  return getTaskStatus(task) === (role === 'Freelancer' ? 'submitted' : 'done');
+  if (role === 'Freelancer') return isFreelancerTaskComplete(task);
+  return getTaskStatus(task) === 'done';
+}
+
+function isFreelancerTaskComplete(task) {
+  return ['submitted', 'done'].includes(getTaskStatus(task));
 }
 
 function getTaskDueTime(task) {
@@ -3774,14 +3891,14 @@ function buildSalaryRows(freelancers, deadlines, bonusSettings) {
     const freelancerDeadlines = deadlines.filter((deadline) => (
       String(deadline.fIld ?? deadline.fId ?? deadline.freelancerId ?? '') === String(freelancerId)
     ));
-    const completedTaskCount = freelancerDeadlines.filter((deadline) => Number(deadline.completionPercent ?? 100) === 100).length;
+    const completedTaskCount = freelancerDeadlines.filter(isFreelancerTaskComplete).length;
     const earnedAmount = freelancerDeadlines.reduce((total, deadline) => total + getDeadlineEarning(deadline), 0);
     const bonusByField = new Map();
     freelancerDeadlines.forEach((deadline) => {
       const fieldSettings = getBonusSettingsForField(bonusSettings, deadline.type);
       const key = fieldSettings.field || '__default__';
       const current = bonusByField.get(key) || { completedTaskCount: 0, bonusTaskCount: 0, bonusPerTask: fieldSettings.bonusPerTask };
-      if (Number(deadline.completionPercent ?? 100) === 100) current.completedTaskCount += 1;
+      if (isFreelancerTaskComplete(deadline)) current.completedTaskCount += 1;
       bonusByField.set(key, current);
     });
     let bonus = 0;

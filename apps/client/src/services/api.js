@@ -147,6 +147,7 @@ export const api = {
   }),
   syncGoogleSheet: () => request('/google-sheet/sync', { method: 'POST', timeoutMs: 120000 }),
   getErrors: () => request('/errors'),
+  migrateErrorScreenshots: () => request('/errors/migrate-screenshots', { method: 'POST', timeoutMs: 120000 }),
   createError: (error) => request('/errors', {
     method: 'POST',
     body: JSON.stringify(error)

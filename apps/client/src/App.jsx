@@ -322,7 +322,7 @@ export function App() {
   const page = useMemo(() => {
     const commonProps = {
       isLoading,
-      onRefresh: () => loadData({ forceDriveRefresh: true })
+      onRefresh: () => loadData()
     };
 
     switch (currentView) {
@@ -405,7 +405,7 @@ export function App() {
           {loadWarning && (
             <div className="data-connection-banner" role="status">
               <span>{loadWarning}</span>
-              <button type="button" className="btn btn-outline btn-sm" onClick={() => loadData({ forceDriveRefresh: true })}>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => loadData()}>
                 Thử lại
               </button>
             </div>
