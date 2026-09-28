@@ -16,7 +16,7 @@ const columns = [
   ['urlSeries', 'URL bộ truyện'],
   ['status', 'Status', 'status-select'],
   ['qcId', 'QC'],
-  ['difficulty', 'Độ khó'],
+  ['difficulty', 'Độ khó (có thể bổ sung sau)'],
   ['completionPercent', '% hoàn thành'],
   ['price', 'Giá'],
   ['receivePrice', 'Tiền nhận'],
@@ -161,9 +161,9 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
       }
       if (key === 'type') {
         const availableLevels = getDifficultyOptions(value, difficultyLevels, difficultyPrices);
-        const nextDifficulty = availableLevels.some((level) => level.difficulty === current.difficulty)
+        const nextDifficulty = current.difficulty && availableLevels.some((level) => level.difficulty === current.difficulty)
           ? current.difficulty
-          : availableLevels[0]?.difficulty || '';
+          : '';
         next.difficulty = nextDifficulty;
         next.price = getConfiguredPrice(value, nextDifficulty, difficultyPrices) ?? '';
         next.receivePrice = calculateReceivePrice(next.price, next.completionPercent);
@@ -1101,7 +1101,7 @@ function getDifficultyOptions(field, difficultyLevels, difficultyPrices) {
 
 function createNewEditState(difficultyLevels, difficultyPrices, freelancers, qcs, fieldOptions = []) {
   const type = fieldOptions[0] || '';
-  const difficulty = getDifficultyOptions(type, difficultyLevels, difficultyPrices)[0]?.difficulty || '';
+  const difficulty = '';
   const price = getConfiguredPrice(type, difficulty, difficultyPrices) ?? '';
   return {
     seriesId: '',

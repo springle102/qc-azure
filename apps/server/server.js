@@ -711,13 +711,17 @@ app.post('/api/deadlines', requireManager, async (req, res) => {
     }
     if (payload.status === 'doing') payload.doingStartedAt = new Date().toISOString();
     const prices = await selectRows('difficultyPricing');
-    const configuredPrice = prices.find((item) => item.field === payload.type && item.difficulty === payload.difficulty);
-    if (!configuredPrice) {
+    const configuredPrice = payload.difficulty
+      ? prices.find((item) => item.field === payload.type && item.difficulty === payload.difficulty)
+      : null;
+    if (payload.difficulty && !configuredPrice) {
       return res.status(400).json({ success: false, message: 'Chưa có giá tiền cho mảng và độ khó đã chọn.' });
     }
 
-    payload.price = configuredPrice.price;
-    payload.receivePrice = calculateReceivePrice(payload.price, payload.completionPercent);
+    payload.price = configuredPrice?.price ?? null;
+    payload.receivePrice = configuredPrice
+      ? calculateReceivePrice(payload.price, payload.completionPercent)
+      : null;
     const data = await insertDeadlineAndGoogleSheet(
       payload,
       ['seriesId', 'chapterNumber', 'endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'assignedAdminId', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'completionPercent']
@@ -827,25 +831,36 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber', requireAuth, async (req, re
     const needsReprice = Object.prototype.hasOwnProperty.call(updates, 'difficulty')
       || Object.prototype.hasOwnProperty.call(updates, 'type');
     const nextField = updates.type ?? current.type;
-    const nextDifficulty = updates.difficulty ?? current.difficulty;
+    const hasDifficultyUpdate = Object.prototype.hasOwnProperty.call(updates, 'difficulty');
+    const nextDifficulty = hasDifficultyUpdate
+      ? String(updates.difficulty ?? '').trim()
+      : String(current.difficulty ?? '').trim();
+    if (hasDifficultyUpdate) updates.difficulty = nextDifficulty || null;
     if (Object.prototype.hasOwnProperty.call(updates, 'type')) await assertConfiguredFields([nextField]);
     const prices = await selectRows('difficultyPricing');
-    const configuredPrice = prices.find((item) => item.field === nextField && item.difficulty === nextDifficulty);
+    const configuredPrice = nextDifficulty
+      ? prices.find((item) => item.field === nextField && item.difficulty === nextDifficulty)
+      : null;
     if (configuredPrice) {
       updates.price = configuredPrice.price;
-    } else if (needsReprice) {
+    } else if (needsReprice && nextDifficulty) {
       return res.status(400).json({ success: false, message: 'Chưa có giá tiền cho mảng và độ khó đã chọn.' });
+    } else if (needsReprice) {
+      updates.price = null;
+      updates.receivePrice = null;
     } else {
       delete updates.price;
     }
 
-    const nextPrice = updates.price ?? current.price;
-    const nextCompletionPercent = updates.completionPercent ?? current.completionPercent ?? 100;
-    const calculatedReceivePrice = calculateReceivePrice(nextPrice, nextCompletionPercent);
-    if (calculatedReceivePrice === null) {
-      delete updates.receivePrice;
-    } else {
-      updates.receivePrice = calculatedReceivePrice;
+    if (!needsReprice || configuredPrice) {
+      const nextPrice = Object.prototype.hasOwnProperty.call(updates, 'price') ? updates.price : current.price;
+      const nextCompletionPercent = updates.completionPercent ?? current.completionPercent ?? 100;
+      const calculatedReceivePrice = calculateReceivePrice(nextPrice, nextCompletionPercent);
+      if (calculatedReceivePrice === null) {
+        delete updates.receivePrice;
+      } else {
+        updates.receivePrice = calculatedReceivePrice;
+      }
     }
 
     if (Object.prototype.hasOwnProperty.call(updates, 'completionPercent')) {
@@ -3675,9 +3690,9 @@ function validateDeadlineCreatePayload(payload) {
   if (!chapterNumber || chapterNumber.length > 100) throw validationError('Chapter không được để trống và tối đa 100 ký tự.');
 
   const type = String(payload.type ?? '').trim();
-  const difficulty = String(payload.difficulty ?? '').trim();
+  const difficultyText = String(payload.difficulty ?? '').trim();
   normalizeConfiguredFieldName(type);
-  if (!difficulty || difficulty.length > 100) throw validationError('Độ khó phải có từ 1 đến 100 ký tự.');
+  if (difficultyText.length > 100) throw validationError('Độ khó tối đa 100 ký tự.');
 
   const completionPercent = payload.completionPercent === null || payload.completionPercent === undefined || payload.completionPercent === ''
     ? 100
@@ -3704,7 +3719,7 @@ function validateDeadlineCreatePayload(payload) {
     fIld: nullableInteger(payload.fIld, 'Freelancer'),
     assignedAdminId: nullableInteger(payload.assignedAdminId, 'Admin'),
     qcId: nullableInteger(payload.qcId, 'QC'),
-    difficulty,
+    difficulty: difficultyText || null,
     feedback: nullableText(payload.feedback),
     late: normalizeLateValue(payload.late),
     paymentApproved: false,
