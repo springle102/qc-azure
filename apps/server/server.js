@@ -1552,6 +1552,31 @@ async function googleDriveBinaryRequest(path) {
   return Buffer.from(await response.arrayBuffer());
 }
 
+async function googleSheetTabExportRequest(spreadsheetId, sheetId) {
+  const token = await getGoogleAccessToken();
+  const exportUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/export?format=xlsx&gid=${encodeURIComponent(sheetId)}`;
+  let response;
+  try {
+    response = await fetchWithTimeout(exportUrl, {
+      headers: { Authorization: `Bearer ${token}` }
+    }, GOOGLE_REQUEST_TIMEOUT_MS);
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Google Sheet phản hồi quá lâu khi tải ảnh trực tiếp.');
+    }
+    throw new Error('Không thể tải trực tiếp tab Google Sheet để đọc ảnh.');
+  }
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(getGoogleApiErrorMessage(message, 'Google Sheet'));
+  }
+  const workbookBuffer = Buffer.from(await response.arrayBuffer());
+  if (workbookBuffer.subarray(0, 2).toString('utf8') !== 'PK') {
+    throw new Error('Google Sheet không trả về file Excel hợp lệ để đọc ảnh.');
+  }
+  return workbookBuffer;
+}
+
 async function deleteGoogleDriveFile(fileId) {
   const token = await getGoogleAccessToken();
   const response = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`, {
@@ -2973,6 +2998,15 @@ function parseGoogleSheetImageCells(workbookBuffer, sheetTitle) {
 }
 
 async function readGoogleSheetImageCells(spreadsheetId, sheetId, sheetTitle) {
+  try {
+    const workbookBuffer = await googleSheetTabExportRequest(spreadsheetId, sheetId);
+    return parseGoogleSheetImageCells(workbookBuffer, sheetTitle);
+  } catch {
+    // Some Google accounts do not allow the direct export endpoint for a
+    // service account. Fall back to copying only the target tab so the full
+    // workbook size does not affect image extraction.
+  }
+
   let temporarySpreadsheetId = '';
   try {
     const temporarySpreadsheet = await googleSheetsRequest('spreadsheets', {
@@ -2989,6 +3023,11 @@ async function readGoogleSheetImageCells(spreadsheetId, sheetId, sheetTitle) {
     const exportPath = `files/${encodeURIComponent(temporarySpreadsheetId)}/export?mimeType=${encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}`;
     const workbookBuffer = await googleDriveBinaryRequest(exportPath);
     return parseGoogleSheetImageCells(workbookBuffer, copiedSheet.title || `Copy of ${sheetTitle}`);
+  } catch (error) {
+    if (/Service Account chưa được cấp quyền truy cập Google Sheets API/i.test(error?.message || '')) {
+      throw new Error('Service Account cần quyền Editor trên Google Sheet để đọc ảnh trực tiếp.');
+    }
+    throw error;
   } finally {
     if (temporarySpreadsheetId) {
       try {
@@ -3021,7 +3060,10 @@ async function readErrorGoogleSheet(field, sheetUrl) {
     try {
       imageCells = await readGoogleSheetImageCells(spreadsheetId, selectedSheet.properties.sheetId, selectedSheet.properties.title);
     } catch (error) {
-      imageReadError = getSafeErrorMessage(error, 'Không thể đọc ảnh trực tiếp từ Google Sheet.');
+      const message = getSafeErrorMessage(error, 'Không thể đọc ảnh trực tiếp từ Google Sheet.');
+      imageReadError = /cần quyền Editor trên Google Sheet để đọc ảnh trực tiếp/i.test(message)
+        ? `Service Account cần quyền Editor trên Google Sheet lỗi của mảng "${field}" để đọc ảnh trực tiếp.`
+        : message;
     }
   }
   return {
@@ -3208,11 +3250,10 @@ async function syncErrorsWithGoogleSheets(user) {
       if (isDecorativeErrorSheetRow(row, sheet.headerIndex)) continue;
       const sourceRow = sheet.rangeMeta.startRow + index + 1;
       sourceKeys.add(sourceRow);
-      if (isIncompleteErrorSheetRow(row, sheet.headerIndex)) {
-        skipped += 1;
-        warnings.push(`${sheet.field}: bỏ qua dòng ${sourceRow} thiếu Title/Chapter/Error.`);
-        continue;
-      }
+    if (isIncompleteErrorSheetRow(row, sheet.headerIndex)) {
+      skipped += 1;
+      continue;
+    }
       const imported = buildImportedError(row, sheet.headerIndex, freelancers, sourceRow, sheet.field, sheet.sourceUrl, sheet.cellData[index]);
       const screenshotColumn = getErrorSheetHeaderIndex(sheet.headerIndex, 'screenshot');
       const noteColumn = getErrorSheetHeaderIndex(sheet.headerIndex, 'note');
