@@ -2075,6 +2075,58 @@
   gap: 0 18px;
 }
 
+.deadline-stability-select.deadline-stability-month {
+  background: #ffc9c3;
+  border-color: #f59e91;
+  color: #b42318;
+  font-weight: 700;
+}
+
+.deadline-stability-select.deadline-stability-next {
+  background: #ffd0ac;
+  border-color: #f2ae78;
+  color: #9a4816;
+  font-weight: 700;
+}
+
+.deadline-stability-select.deadline-stability-fixed {
+  background: #ffdf8f;
+  border-color: #edc85e;
+  color: #7a5a00;
+  font-weight: 700;
+}
+
+.deadline-stability-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.deadline-stability-month {
+  background: #ffc9c3;
+  color: #b42318;
+}
+
+.deadline-stability-next {
+  background: #ffd0ac;
+  color: #9a4816;
+}
+
+.deadline-stability-fixed {
+  background: #ffdf8f;
+  color: #7a5a00;
+}
+
+.deadline-stability-legacy {
+  background: rgba(148, 163, 184, 0.18);
+  color: var(--text-muted);
+}
+
 .deadline-column-header {
   display: inline-flex;
   align-items: center;

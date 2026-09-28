@@ -12,6 +12,16 @@ const EMPTY_FORM = {
   note: ''
 };
 
+const STABILITY_OPTIONS = [
+  { value: 'Trong tháng', className: 'deadline-stability-month', backgroundColor: '#ffc9c3', color: '#b42318' },
+  { value: '2-3 tháng kế', className: 'deadline-stability-next', backgroundColor: '#ffd0ac', color: '#9a4816' },
+  { value: 'cố định mỗi tháng', className: 'deadline-stability-fixed', backgroundColor: '#ffdf8f', color: '#7a5a00' }
+];
+
+function getStabilityOption(value) {
+  return STABILITY_OPTIONS.find((option) => option.value === value);
+}
+
 export function DeadlineRegistrationView({
   registrations = [],
   freelancers = [],
@@ -96,6 +106,10 @@ export function DeadlineRegistrationView({
     }
     if (!editingRegistration.fIld) {
       showToast('Hãy chọn freelancer.', 'error');
+      return;
+    }
+    if (!getStabilityOption(editingRegistration.stability)) {
+      showToast('Hãy chọn độ ổn định.', 'error');
       return;
     }
 
@@ -196,7 +210,11 @@ export function DeadlineRegistrationView({
                   <td className="strong-cell">{registration.name || '—'}</td>
                   <td>{registration.chaptersPerWeek ?? '—'}</td>
                   <td>{registration.chaptersPerMonth ?? '—'}</td>
-                  <td>{registration.stability || '—'}</td>
+                  <td>
+                    {registration.stability
+                      ? <span className={`deadline-stability-badge ${getStabilityOption(registration.stability)?.className || 'deadline-stability-legacy'}`}>{registration.stability}</span>
+                      : '—'}
+                  </td>
                   <td>{registration.note || '—'}</td>
                   <td>
                     <div className="table-actions">
@@ -245,7 +263,21 @@ export function DeadlineRegistrationView({
               </div>
               <div className="form-group form-group-full">
                 <label className="form-label" htmlFor="deadline-registration-stability">Độ ổn định</label>
-                <input id="deadline-registration-stability" className="form-input" value={editingRegistration.stability} onChange={(event) => updateField('stability', event.target.value)} placeholder="Ví dụ: Ổn định, có thể nhận thêm" disabled={isSaving} />
+                <select
+                  id="deadline-registration-stability"
+                  className={`form-select deadline-stability-select ${getStabilityOption(editingRegistration.stability)?.className || ''}`}
+                  value={editingRegistration.stability}
+                  onChange={(event) => updateField('stability', event.target.value)}
+                  disabled={isSaving}
+                  required
+                >
+                  <option value="">Chọn độ ổn định</option>
+                  {STABILITY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value} style={{ backgroundColor: option.backgroundColor, color: option.color }}>
+                      {option.value}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="form-group form-group-full">
                 <label className="form-label" htmlFor="deadline-registration-note">Note</label>
@@ -262,4 +294,3 @@ export function DeadlineRegistrationView({
     </div>
   );
 }
-

@@ -21,6 +21,7 @@ const SESSION_TTL_MS = 1000 * 60 * 60 * 24;
 const GOOGLE_REQUEST_TIMEOUT_MS = 30_000;
 const SYNC_WRITE_CONCURRENCY = 8;
 const GOOGLE_DRIVE_FOLDER_CACHE_TTL_MS = 10 * 60 * 1000;
+const DEADLINE_REGISTRATION_STABILITY_OPTIONS = ['Trong tháng', '2-3 tháng kế', 'cố định mỗi tháng'];
 
 const corsOptions = {
   origin: true,
@@ -4292,7 +4293,9 @@ function validateDeadlineRegistrationPayload(payload, { forcedFreelancerId = und
   if (fIld === null) throw validationError('FLID không được để trống.');
   if (chaptersPerWeek === null) throw validationError('Số chap 1 tuần nhận được không được để trống.');
   if (chaptersPerMonth === null) throw validationError('Số chap 1 tháng không được để trống.');
-  if (stability.length > 100) throw validationError('Độ ổn định tối đa 100 ký tự.');
+  if (!DEADLINE_REGISTRATION_STABILITY_OPTIONS.includes(stability)) {
+    throw validationError(`Độ ổn định phải là một trong: ${DEADLINE_REGISTRATION_STABILITY_OPTIONS.join(', ')}.`);
+  }
   return {
     fIld,
     chaptersPerWeek,
