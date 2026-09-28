@@ -3,6 +3,7 @@ import {
   IconDashboard,
   IconAlertTriangle,
   IconUsers,
+  IconBook,
   IconTasks,
   IconDollarSign,
   IconBanknote,
@@ -14,6 +15,7 @@ import {
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
   { id: 'freelancers', label: 'Quản lý freelancer', icon: IconUsers },
+  { id: 'deadlineRegistrations', label: 'Đăng ký deadline', icon: IconBook },
   { id: 'deadlines', label: 'Quản lý Deadline', icon: IconTasks },
   { id: 'errors', label: 'Quản lý lỗi', icon: IconAlertTriangle },
   { id: 'pricing', label: 'Giá tiền', icon: IconDollarSign },
@@ -23,9 +25,9 @@ const NAV_ITEMS = [
 ];
 
 const ROLE_VIEWS = {
-  Admin: ['dashboard', 'freelancers', 'deadlines', 'errors', 'pricing', 'settings', 'salary', 'profile'],
-  QC: ['dashboard', 'profile', 'salary', 'deadlines', 'errors'],
-  Freelancer: ['dashboard', 'profile', 'salary', 'deadlines', 'errors']
+  Admin: ['dashboard', 'freelancers', 'deadlineRegistrations', 'deadlines', 'errors', 'pricing', 'settings', 'salary', 'profile'],
+  QC: ['dashboard', 'profile', 'salary', 'deadlineRegistrations', 'deadlines', 'errors'],
+  Freelancer: ['dashboard', 'profile', 'salary', 'deadlineRegistrations', 'deadlines', 'errors']
 };
 
 export function Sidebar({ currentView, onNavigate, currentUser, role = 'QC', onOpenLogout, isOpen = false }) {

@@ -37,6 +37,7 @@ const emptyCollections = {
   freelancers: [],
   qcs: [],
   accounts: [],
+  deadlineRegistrations: [],
   deadlines: [],
   difficultyLevels: [],
   difficultyPricing: [],
@@ -174,6 +175,105 @@ app.get('/api/freelancers', requireAuth, async (req, res) => {
     res.status(502).json({ success: false, message: error.message });
   }
 });
+
+app.get('/api/deadline-registrations', requireAuth, async (req, res) => {
+  try {
+    const [rows, freelancers] = await Promise.all([
+      getCollection('deadlineRegistrations'),
+      getCollection('freelancers')
+    ]);
+    const visibleRows = filterDeadlineRegistrationRowsForUser(rows, req.authUser);
+    const data = visibleRows.map((row) => {
+      const freelancer = freelancers.find((item) => String(getFreelancerId(item)) === String(row.fIld ?? ''));
+      return {
+        ...row,
+        fIld: row.fIld ?? row.fId ?? row.freelancerId ?? null,
+        name: freelancer?.name || row.name || ''
+      };
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/deadline-registrations', requireAuth, async (req, res) => {
+  try {
+    const forcedFreelancerId = req.authUser.role === 'Freelancer' ? req.authUser.freelancerId : undefined;
+    const payload = validateDeadlineRegistrationPayload(req.body, { forcedFreelancerId });
+    const freelancers = await getCollection('freelancers');
+    const freelancer = freelancers.find((item) => String(getFreelancerId(item)) === String(payload.fIld));
+    if (!freelancer) throw validationError('Freelancer không tồn tại trong hệ thống.');
+
+    const existingRows = await getCollection('deadlineRegistrations');
+    if (existingRows.some((row) => String(row.fIld ?? '') === String(payload.fIld))) {
+      return res.status(409).json({ success: false, message: 'Freelancer này đã có đăng ký deadline.' });
+    }
+
+    const now = new Date().toISOString();
+    const data = await insertRow('deadlineRegistrations', {
+      ...payload,
+      name: freelancer.name,
+      createdAt: now,
+      updatedAt: now
+    }, ['fIld', 'name', 'chaptersPerWeek', 'chaptersPerMonth', 'stability', 'note', 'createdAt', 'updatedAt']);
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    res.status(error.statusCode || (error.code === '23505' ? 409 : 502)).json({ success: false, message: error.code === '23505' ? 'Freelancer này đã có đăng ký deadline.' : error.message });
+  }
+});
+
+app.patch('/api/deadline-registrations/:id', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ success: false, message: 'ID đăng ký deadline không hợp lệ.' });
+
+  try {
+    const rows = await getCollection('deadlineRegistrations');
+    const current = rows.find((row) => Number(row.id) === id);
+    if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy đăng ký deadline cần cập nhật.' });
+    if (req.authUser.role === 'Freelancer' && String(current.fIld ?? '') !== String(req.authUser.freelancerId ?? '')) {
+      return res.status(403).json({ success: false, message: 'Freelancer chỉ được sửa thông tin của mình.' });
+    }
+
+    const forcedFreelancerId = req.authUser.role === 'Freelancer' ? current.fIld : undefined;
+    const payload = validateDeadlineRegistrationPayload({ ...current, ...req.body }, { forcedFreelancerId });
+    const freelancers = await getCollection('freelancers');
+    const freelancer = freelancers.find((item) => String(getFreelancerId(item)) === String(payload.fIld));
+    if (!freelancer) throw validationError('Freelancer không tồn tại trong hệ thống.');
+    if (rows.some((row) => Number(row.id) !== id && String(row.fIld ?? '') === String(payload.fIld))) {
+      return res.status(409).json({ success: false, message: 'Freelancer này đã có đăng ký deadline.' });
+    }
+
+    const data = await updateRowById(
+      'deadlineRegistrations',
+      id,
+      { ...payload, name: freelancer.name, updatedAt: new Date().toISOString() },
+      ['fIld', 'name', 'chaptersPerWeek', 'chaptersPerMonth', 'stability', 'note', 'updatedAt']
+    );
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(error.statusCode || (error.code === '23505' ? 409 : 502)).json({ success: false, message: error.code === '23505' ? 'Freelancer này đã có đăng ký deadline.' : error.message });
+  }
+});
+
+app.delete('/api/deadline-registrations/:id', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ success: false, message: 'ID đăng ký deadline không hợp lệ.' });
+
+  try {
+    const rows = await getCollection('deadlineRegistrations');
+    const current = rows.find((row) => Number(row.id) === id);
+    if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy đăng ký deadline cần xóa.' });
+    if (req.authUser.role === 'Freelancer' && String(current.fIld ?? '') !== String(req.authUser.freelancerId ?? '')) {
+      return res.status(403).json({ success: false, message: 'Freelancer chỉ được xóa thông tin của mình.' });
+    }
+    const data = await deleteRowById('deadlineRegistrations', id);
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: error.message });
+  }
+});
+
 app.patch('/api/freelancers/:id', requireManager, async (req, res) => {
   const freelancerId = Number(req.params.id);
   if (!Number.isInteger(freelancerId)) return res.status(400).json({ success: false, message: 'ID freelancer không hợp lệ.' });
@@ -4033,6 +4133,14 @@ function filterFreelancerRowsForUser(rows, user) {
   return [];
 }
 
+function filterDeadlineRegistrationRowsForUser(rows, user) {
+  if (['Admin', 'QC'].includes(user?.role)) return rows;
+  if (user?.role === 'Freelancer') {
+    return rows.filter((row) => String(row.fIld ?? row.fId ?? row.freelancerId ?? '') === String(user.freelancerId ?? ''));
+  }
+  return [];
+}
+
 function canManagerManageField(user, field) {
   if (user?.role === 'Admin') return true;
   if (user?.role !== 'QC') return false;
@@ -4171,6 +4279,27 @@ function validateFreelancerUpdatePayload(payload) {
   }
   if (Object.keys(updates).length === 0) throw validationError('Cần có ít nhất một trường để cập nhật freelancer.');
   return updates;
+}
+
+function validateDeadlineRegistrationPayload(payload, { forcedFreelancerId = undefined } = {}) {
+  if (!payload || typeof payload !== 'object') throw validationError('Dữ liệu đăng ký deadline không hợp lệ.');
+  const fIld = forcedFreelancerId !== undefined
+    ? nullableInteger(forcedFreelancerId, 'FLID')
+    : nullableInteger(payload.fIld ?? payload.fId ?? payload.freelancerId, 'FLID');
+  const chaptersPerWeek = nullableInteger(payload.chaptersPerWeek, 'Số chap 1 tuần nhận được');
+  const chaptersPerMonth = nullableInteger(payload.chaptersPerMonth, 'Số chap 1 tháng');
+  const stability = String(payload.stability ?? '').trim();
+  if (fIld === null) throw validationError('FLID không được để trống.');
+  if (chaptersPerWeek === null) throw validationError('Số chap 1 tuần nhận được không được để trống.');
+  if (chaptersPerMonth === null) throw validationError('Số chap 1 tháng không được để trống.');
+  if (stability.length > 100) throw validationError('Độ ổn định tối đa 100 ký tự.');
+  return {
+    fIld,
+    chaptersPerWeek,
+    chaptersPerMonth,
+    stability: stability || null,
+    note: nullableText(payload.note)
+  };
 }
 
 function validateAccountUpdatePayload(payload, current) {

@@ -94,6 +94,18 @@ export const api = {
   getDashboard: () => request('/dashboard/summary'),
   getTasks: () => request('/tasks'),
   getFreelancers: () => request('/freelancers'),
+  getDeadlineRegistrations: () => request('/deadline-registrations'),
+  createDeadlineRegistration: (registration) => request('/deadline-registrations', {
+    method: 'POST',
+    body: JSON.stringify(registration)
+  }),
+  updateDeadlineRegistration: (id, registration) => request(`/deadline-registrations/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(registration)
+  }),
+  deleteDeadlineRegistration: (id) => request(`/deadline-registrations/${id}`, {
+    method: 'DELETE'
+  }),
   updateFreelancer: (id, freelancer) => request(`/freelancers/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(freelancer)

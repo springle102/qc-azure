@@ -5,6 +5,7 @@ import { Footer } from './components/layout/Footer';
 import { ToastContainer, showToast } from './components/common/ToastContainer';
 import { DashboardView } from './components/views/DashboardView';
 import { FreelancerManagementView } from './components/views/FreelancerManagementView';
+import { DeadlineRegistrationView } from './components/views/DeadlineRegistrationView';
 import { SalaryManagementView } from './components/views/SalaryManagementView';
 import { DeadlineManagementView } from './components/views/DeadlineManagementView';
 import { PriceManagementView } from './components/views/PriceManagementView';
@@ -19,6 +20,7 @@ const EMPTY_DATA = {
   dashboard: { guideUrl: '', resourceUrl: '', fieldResources: [] },
   tasks: [],
   freelancers: [],
+  deadlineRegistrations: [],
   qcs: [],
   deadlines: [],
   difficultyLevels: [],
@@ -32,14 +34,15 @@ const EMPTY_DATA = {
 };
 
 const ROLE_VIEWS = {
-  Admin: ['dashboard', 'freelancers', 'deadlines', 'errors', 'pricing', 'settings', 'salary', 'profile'],
-  QC: ['dashboard', 'profile', 'salary', 'deadlines', 'errors'],
-  Freelancer: ['dashboard', 'profile', 'salary', 'deadlines', 'errors']
+  Admin: ['dashboard', 'freelancers', 'deadlineRegistrations', 'deadlines', 'errors', 'pricing', 'settings', 'salary', 'profile'],
+  QC: ['dashboard', 'profile', 'salary', 'deadlineRegistrations', 'deadlines', 'errors'],
+  Freelancer: ['dashboard', 'profile', 'salary', 'deadlineRegistrations', 'deadlines', 'errors']
 };
 
 const VIEW_RESOURCES = {
   dashboard: ['dashboard', 'tasks', 'deadlines', 'errors'],
   freelancers: ['freelancers', 'accounts', 'fields', 'errors'],
+  deadlineRegistrations: ['deadlineRegistrations', 'freelancers'],
   deadlines: ['deadlines', 'freelancers', 'qcs', 'fields', 'difficultyLevels', 'difficultyPrices', 'errors'],
   errors: ['errors', 'fields', 'freelancers', 'generalSettings'],
   pricing: ['difficultyLevels', 'difficultyPrices', 'fields', 'bonusSettings', 'errors'],
@@ -129,6 +132,7 @@ export function App() {
       dashboard: api.getDashboard,
       tasks: api.getTasks,
       freelancers: api.getFreelancers,
+      deadlineRegistrations: api.getDeadlineRegistrations,
       qcs: api.getQCs,
       deadlines: () => api.getDeadlines({ forceDriveRefresh }),
       difficultyLevels: api.getDifficultyLevels,
@@ -144,6 +148,7 @@ export function App() {
       dashboard: EMPTY_DATA.dashboard,
       tasks: EMPTY_DATA.tasks,
       freelancers: EMPTY_DATA.freelancers,
+      deadlineRegistrations: EMPTY_DATA.deadlineRegistrations,
       qcs: EMPTY_DATA.qcs,
       deadlines: EMPTY_DATA.deadlines,
       difficultyLevels: EMPTY_DATA.difficultyLevels,
@@ -204,6 +209,29 @@ export function App() {
         String(deadline.seriesId) !== String(deletedDeadline.seriesId)
         || String(deadline.chapterNumber) !== String(deletedDeadline.chapterNumber)
       ))
+    }));
+  }, []);
+
+  const handleUpdateDeadlineRegistration = useCallback((updatedRegistration) => {
+    setData((current) => ({
+      ...current,
+      deadlineRegistrations: current.deadlineRegistrations.map((registration) => (
+        String(registration.id) === String(updatedRegistration.id) ? updatedRegistration : registration
+      ))
+    }));
+  }, []);
+
+  const handleCreateDeadlineRegistration = useCallback((createdRegistration) => {
+    setData((current) => ({
+      ...current,
+      deadlineRegistrations: [createdRegistration, ...current.deadlineRegistrations]
+    }));
+  }, []);
+
+  const handleDeleteDeadlineRegistration = useCallback((deletedRegistration) => {
+    setData((current) => ({
+      ...current,
+      deadlineRegistrations: current.deadlineRegistrations.filter((registration) => String(registration.id) !== String(deletedRegistration.id))
     }));
   }, []);
 
@@ -300,6 +328,8 @@ export function App() {
     switch (currentView) {
       case 'freelancers':
         return <FreelancerManagementView {...commonProps} freelancers={data.freelancers} accounts={data.accounts} fields={data.fields} canManageAccounts={profile.role === 'Admin'} canEdit={profile.role !== 'Freelancer'} />;
+      case 'deadlineRegistrations':
+        return <DeadlineRegistrationView {...commonProps} registrations={data.deadlineRegistrations} freelancers={data.freelancers} currentUser={profile} onCreate={handleCreateDeadlineRegistration} onUpdate={handleUpdateDeadlineRegistration} onDelete={handleDeleteDeadlineRegistration} />;
       case 'salary':
         return <SalaryManagementView {...commonProps} freelancers={data.freelancers} salaries={data.salaries} fields={data.fields} bonusSettings={data.bonusSettings} restrictToSalaryRows={profile.role === 'QC'} />;
       case 'pricing':
@@ -326,7 +356,7 @@ export function App() {
           />
         );
     }
-  }, [currentView, data, handleCreateDeadline, handleCreateError, handleDeleteDeadline, handleDeleteError, handleNavigate, handleResetAll, handleSaveProfile, handleUpdateDeadline, handleUpdateError, isLoading, loadData, profile]);
+  }, [currentView, data, handleCreateDeadline, handleCreateDeadlineRegistration, handleCreateError, handleDeleteDeadline, handleDeleteDeadlineRegistration, handleDeleteError, handleNavigate, handleResetAll, handleSaveProfile, handleUpdateDeadline, handleUpdateDeadlineRegistration, handleUpdateError, isLoading, loadData, profile]);
 
   if (isAuthChecking) {
     return (

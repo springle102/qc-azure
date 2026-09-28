@@ -12,6 +12,7 @@ const tables = {
   freelancers: process.env.SUPABASE_TABLE_FREELANCERS || 'Freelancer',
   qcs: process.env.SUPABASE_TABLE_QC || 'QC',
   accounts: process.env.SUPABASE_TABLE_ACCOUNTS || 'Accounts',
+  deadlineRegistrations: process.env.SUPABASE_TABLE_DEADLINE_REGISTRATIONS || 'DeadlineRegistrations',
   deadlines: process.env.SUPABASE_TABLE_DEADLINES || 'SeriesList',
   difficultyLevels: process.env.SUPABASE_TABLE_DIFFICULTY_LEVELS || 'DifficultyLevels',
   difficultyPricing: process.env.SUPABASE_TABLE_DIFFICULTY_PRICING || 'DifficultyPricing',

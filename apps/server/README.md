@@ -18,6 +18,10 @@ Mặc định server chạy tại `http://localhost:5000`.
 - `GET /api/dashboard/summary`
 - `GET /api/tasks`
 - `GET /api/freelancers`
+- `GET /api/deadline-registrations`
+- `POST /api/deadline-registrations` (Admin/QC quản lý mọi freelancer; Freelancer chỉ đăng ký cho chính mình)
+- `PATCH /api/deadline-registrations/:id`
+- `DELETE /api/deadline-registrations/:id`
 - `GET /api/qcs`
 - `POST /api/auth/login`
 - `GET /api/auth/me`
@@ -61,6 +65,7 @@ Mặc định server chạy tại `http://localhost:5000`.
 - `SUPABASE_TABLE_FREELANCERS` (mặc định `Freelancer`)
 - `SUPABASE_TABLE_QC` (mặc định `QC`)
 - `SUPABASE_TABLE_ACCOUNTS` (mặc định `Accounts`)
+- `SUPABASE_TABLE_DEADLINE_REGISTRATIONS` (mặc định `DeadlineRegistrations`)
 - `SUPABASE_TABLE_DEADLINES` (mặc định `SeriesList`)
 - `SUPABASE_TABLE_DIFFICULTY_LEVELS` (mặc định `DifficultyLevels`)
 - `SUPABASE_TABLE_DIFFICULTY_PRICING` (mặc định `DifficultyPricing`)

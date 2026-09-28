@@ -14,6 +14,7 @@ Sidebar hiện gồm:
 
 - Dashboard
 - Quản lý freelancer (hồ sơ freelancer và cấp/chỉnh account)
+- Đăng ký deadline (khả năng nhận chapter theo tuần/tháng của freelancer)
 - Quản lý Deadline
 - Giá tiền
 - Cấu hình chung (deadline mặc định theo giờ và thêm/sửa/xóa mảng)
@@ -23,6 +24,7 @@ Sidebar hiện gồm:
 Các bảng giao diện bám theo schema trong `docs/database diagram.png` và schema mẫu:
 
 - `Freelancer`: `fIld`, `name`, `email`, `field`, `note`, `salary`, `imageQR`
+- `DeadlineRegistrations`: `fIld`, `name`, số chapter nhận theo tuần/tháng, độ ổn định và note
 - `SeriesList`: thông tin deadline, chapter dạng văn bản, status tiến độ, thời gian làm và `% hoàn thành`
 - `DifficultyLevels`: danh sách độ khó, màu nền và màu chữ tùy chỉnh theo từng mảng
 - `DifficultyPricing`: giá theo mảng và độ khó do người dùng tự định nghĩa cho từng mảng
@@ -32,7 +34,7 @@ Các bảng giao diện bám theo schema trong `docs/database diagram.png` và s
 
 Deadline công ty và bảng `Companies` đã được loại bỏ khỏi giao diện, API và database.
 
-File PostgreSQL mẫu để tạo schema và dữ liệu test: `docs/sample-database.sql`. Nếu database đã tồn tại từ trước, chạy các migration trong `docs/migrations/` trong SQL Editor để thêm cột màu chữ, mapping folder Drive và bảng Quản lý lỗi. Sheet lỗi gốc cần có các cột `Title`, `Chapter`, `Error Type`, `Error`, `Note`, `Editor`, `Fix/Check`; Service Account cần quyền Editor trên từng Sheet. `Error Type` gồm: `TR`, `File`, `Censor`, `Exposure`, `Logo/Credit`, `Text`, `SFX`, `Image`, `Bubble`, `Aesthetics`, `RD`.
+File PostgreSQL mẫu để tạo schema và dữ liệu test: `docs/sample-database.sql`. Nếu database đã tồn tại từ trước, chạy các migration trong `docs/migrations/` trong SQL Editor để thêm đăng ký deadline, cột màu chữ, mapping folder Drive và bảng Quản lý lỗi. Sheet lỗi gốc cần có các cột `Title`, `Chapter`, `Error Type`, `Error`, `Note`, `Editor`, `Fix/Check`; Service Account cần quyền Editor trên từng Sheet. `Error Type` gồm: `TR`, `File`, `Censor`, `Exposure`, `Logo/Credit`, `Text`, `SFX`, `Image`, `Bubble`, `Aesthetics`, `RD`.
 
 ## Cấu hình dữ liệu
 
