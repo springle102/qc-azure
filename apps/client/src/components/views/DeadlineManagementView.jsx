@@ -418,8 +418,9 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
                         <div className="task-status-cell">
                           <TaskStatusControl
                             value={getStatusDisplayValue(item, statusOverrides)}
-                            options={getVisibleStatusOptions(getStatusDisplayValue(item, statusOverrides), readOnly)}
-                            disabled={(readOnly && !['doing', 'submitted'].includes(String(item.status || '').toLowerCase())) || taskStatusUpdatingKey === String(item.seriesId) + '-' + String(item.chapterNumber)}
+                            options={getVisibleStatusOptions(readOnly)}
+                            allowPending={!readOnly}
+                            disabled={taskStatusUpdatingKey === String(item.seriesId) + '-' + String(item.chapterNumber)}
                             onChange={(status) => updateTaskStatus(item, status)}
                           />
                         </div>
@@ -777,11 +778,9 @@ function getStatusDisplayValue(item, overrides = {}) {
     : item?.status;
 }
 
-function getVisibleStatusOptions(value, readOnly) {
+function getVisibleStatusOptions(readOnly) {
   if (!readOnly) return STATUS_OPTIONS;
-  const allowed = STATUS_OPTIONS.filter((option) => ['doing', 'submitted'].includes(option.value));
-  const current = getStatusOption(value);
-  return current && !allowed.some((option) => option.value === current.value) ? [...allowed, current] : allowed;
+  return STATUS_OPTIONS.filter((option) => ['doing', 'submitted'].includes(option.value));
 }
 
 function TaskStatusBadge({ value }) {
@@ -791,7 +790,7 @@ function TaskStatusBadge({ value }) {
     : <span className="task-status-badge task-status-pending">Chưa bắt đầu</span>;
 }
 
-function TaskStatusControl({ value, options, disabled, onChange }) {
+function TaskStatusControl({ value, options, allowPending = true, disabled, onChange }) {
   const [isOpen, setIsOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState(null);
   const dropdownRef = useRef(null);
@@ -877,16 +876,18 @@ function TaskStatusControl({ value, options, disabled, onChange }) {
       </button>
       {isOpen && menuPosition && createPortal(
         <div ref={menuRef} className="task-status-menu" style={menuPosition} role="listbox" aria-label="Chọn trạng thái">
-          <button
-            type="button"
-            className={`task-status-option task-status-pending ${!selectedOption ? 'is-selected' : ''}`}
-            role="option"
-            aria-selected={!selectedOption}
-            onClick={() => selectStatus('')}
-          >
-            <span className="task-status-dot" aria-hidden="true" />
-            Chưa bắt đầu
-          </button>
+          {allowPending && (
+            <button
+              type="button"
+              className={`task-status-option task-status-pending ${!selectedOption ? 'is-selected' : ''}`}
+              role="option"
+              aria-selected={!selectedOption}
+              onClick={() => selectStatus('')}
+            >
+              <span className="task-status-dot" aria-hidden="true" />
+              Chưa bắt đầu
+            </button>
+          )}
           {options.map((option) => (
             <button
               type="button"
