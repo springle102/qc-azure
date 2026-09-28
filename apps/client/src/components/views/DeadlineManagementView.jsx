@@ -16,7 +16,7 @@ const columns = [
   ['urlSeries', 'URL bộ truyện'],
   ['status', 'Status', 'status-select'],
   ['qcId', 'QC'],
-  ['difficulty', 'Độ khó (có thể bổ sung sau)'],
+  ['difficulty', 'Độ khó'],
   ['completionPercent', '% hoàn thành'],
   ['price', 'Giá'],
   ['receivePrice', 'Tiền nhận'],

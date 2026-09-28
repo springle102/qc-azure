@@ -181,12 +181,14 @@ export function DeadlineRegistrationView({
       </div>
 
       <section className="glass-panel qc-table-panel">
-        <div className="table-toolbar">
-          <div className="toolbar-search">
-            <IconSearch size={17} />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo FLID, họ tên, độ ổn định hoặc note" />
+        {canManageAll && (
+          <div className="table-toolbar">
+            <div className="toolbar-search">
+              <IconSearch size={17} />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo FLID, họ tên, độ ổn định hoặc note" />
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="table-wrapper table-wrapper-flat">
           <table className="custom-table deadline-registration-table">
