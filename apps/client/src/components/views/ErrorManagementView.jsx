@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { IconCheck, IconExternalLink, IconFilter, IconPlus, IconRefresh, IconTrash, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
-import { api } from '../../services/api';
+import { api, getUserFacingErrorMessage } from '../../services/api';
 
 const ERROR_TYPE_OPTIONS = ['TR', 'File', 'Censor', 'Exposure', 'Logo/Credit', 'Text', 'SFX', 'Image', 'Bubble', 'Aesthetics', 'RD'];
 const EMPTY_ERROR_ROW = { title: '', chapter: '', errorType: '', screenshot: '', error: '', note: '', editorFreelancerId: '' };
@@ -477,7 +477,9 @@ export function ErrorManagementView({
     setIsSaving(true);
     try {
       const result = await api.syncErrors();
-      const warning = result.warnings?.length ? ` Cảnh báo: ${result.warnings.slice(0, 2).join(' ')}` : '';
+      const warning = result.warnings?.length
+        ? ` Cảnh báo: ${result.warnings.slice(0, 2).map((item) => getUserFacingErrorMessage(item, 'Không thể xử lý một số dữ liệu từ Google Sheet.')).join(' ')}`
+        : '';
       showToast(`Đã đồng bộ lỗi: ${result.inserted || 0} mới, ${result.updated || 0} cập nhật, ${result.appended || 0} đẩy lên Sheet, ${result.deleted || 0} đã xóa.${warning}`, warning ? 'warning' : 'success');
       await onRefresh?.();
     } catch (error) {
@@ -517,7 +519,9 @@ export function ErrorManagementView({
     try {
       const updated = await api.updateError(row.id, updates);
       updateLocalRow(updated);
-      if (updated.sheetSyncError) showToast(`Đã lưu trên hệ thống nhưng chưa cập nhật Sheet: ${updated.sheetSyncError}`, 'warning');
+      if (updated.sheetSyncError) {
+        showToast(`Đã lưu trên hệ thống nhưng chưa cập nhật Sheet: ${getUserFacingErrorMessage(updated.sheetSyncError, 'Không thể cập nhật Google Sheet.')}`, 'warning');
+      }
       return updated;
     } catch (error) {
       showToast(error.message || 'Không thể cập nhật lỗi.', 'error');

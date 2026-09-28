@@ -2,6 +2,24 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const SESSION_KEY = 'qc_webtoon_session';
 const REQUEST_TIMEOUT_MS = 15000;
 
+export function getUserFacingErrorMessage(message, fallback = 'Không thể hoàn tất yêu cầu.') {
+  const text = String(message ?? '').replace(/\s+/g, ' ').trim();
+  if (!text) return fallback;
+  if (/exportSizeLimitExceeded|too large to be exported|file is too large/i.test(text)) {
+    return 'File Google Sheet quá lớn nên không thể đọc ảnh trực tiếp.';
+  }
+  if (/permission|not have access|does not have permission|insufficient permissions/i.test(text)) {
+    return 'Service Account chưa được cấp quyền truy cập Google Sheet.';
+  }
+  if (/SERVICE_DISABLED|has not been used in project|API .* disabled/i.test(text)) {
+    return 'Google API cần thiết chưa được bật.';
+  }
+  if (/^\s*[{[]/.test(text) || /"(?:error|errors|code|message)"\s*:/i.test(text) || /API trả về lỗi \d+/i.test(text)) {
+    return fallback;
+  }
+  return text.length > 260 ? `${text.slice(0, 257)}...` : text;
+}
+
 function getStoredSession() {
   try {
     return JSON.parse(window.localStorage.getItem(SESSION_KEY) || 'null');
@@ -34,7 +52,7 @@ async function request(path, options = {}) {
     }
 
     if (!response.ok) {
-      throw new Error(payload?.message || `Request failed with status ${response.status}`);
+      throw new Error(getUserFacingErrorMessage(payload?.message, `Không thể thực hiện yêu cầu (mã lỗi ${response.status}).`));
     }
 
     return payload?.data ?? payload;

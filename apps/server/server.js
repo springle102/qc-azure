@@ -514,7 +514,7 @@ app.post('/api/google-sheet/sync', requireAdmin, async (req, res) => {
     const result = await syncGoogleSheet();
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(error.statusCode || 502).json({ success: false, message: error.message });
+    res.status(error.statusCode || 502).json({ success: false, message: getSafeErrorMessage(error, 'Không thể đồng bộ Google Sheet.') });
   }
 });
 app.get('/api/errors', requireAuth, async (req, res) => {
@@ -558,7 +558,7 @@ app.post('/api/errors/sync', requireManager, async (req, res) => {
     const result = await syncErrorsWithGoogleSheets(req.authUser);
     res.json({ success: true, data: result });
   } catch (error) {
-    res.status(error.statusCode || 502).json({ success: false, message: error.message });
+    res.status(error.statusCode || 502).json({ success: false, message: getSafeErrorMessage(error, 'Không thể đồng bộ bảng lỗi.') });
   }
 });
 app.patch('/api/errors/:id', requireAuth, async (req, res) => {
@@ -583,7 +583,7 @@ app.patch('/api/errors/:id', requireAuth, async (req, res) => {
     try {
       await syncErrorWithGoogleSheet(data, { action: 'update' });
     } catch (error) {
-      sheetSyncError = error.message;
+      sheetSyncError = getSafeErrorMessage(error, 'Không thể cập nhật Google Sheet.');
     }
     res.json({ success: true, data: sheetSyncError ? { ...data, sheetSyncError } : data });
   } catch (error) {
@@ -1269,6 +1269,32 @@ let googleSheetSyncPromise = null;
 const googleDriveFolderCache = new Map();
 const pendingStatusSheetSyncs = new Map();
 
+function getGoogleApiErrorMessage(message, serviceLabel = 'Google API') {
+  const raw = String(message ?? '').replace(/\s+/g, ' ').trim();
+  if (/exportSizeLimitExceeded|too large to be exported|file is too large/i.test(raw)) {
+    return 'File Google Sheet quá lớn nên không thể đọc ảnh trực tiếp.';
+  }
+  if (/SERVICE_DISABLED|has not been used in project|API .* disabled/i.test(raw)) {
+    return `${serviceLabel} đang bị tắt. Hãy bật dịch vụ Google tương ứng rồi thử lại.`;
+  }
+  if (/permission|not have access|does not have permission|insufficient permissions/i.test(raw)) {
+    return `Service Account chưa được cấp quyền truy cập ${serviceLabel}.`;
+  }
+  return `${serviceLabel} không thể xử lý yêu cầu lúc này.`;
+}
+
+function getSafeErrorMessage(error, fallback = 'Không thể hoàn tất yêu cầu.') {
+  const text = String(error?.message ?? error ?? '').replace(/\s+/g, ' ').trim();
+  if (!text) return fallback;
+  if (/exportSizeLimitExceeded|too large to be exported|file is too large/i.test(text)) {
+    return 'File Google Sheet quá lớn nên không thể đọc ảnh trực tiếp.';
+  }
+  if (/^\s*[{[]/.test(text) || /"(?:error|errors|code|message)"\s*:/i.test(text) || /API trả về lỗi \d+/i.test(text)) {
+    return fallback;
+  }
+  return text.length > 260 ? `${text.slice(0, 257)}...` : text;
+}
+
 function normalizeGoogleSheetUrl(value) {
   const urlText = nullableText(value);
   if (!urlText) return '';
@@ -1416,7 +1442,8 @@ async function getGoogleAccessToken() {
     iss: credentials.client_email,
     scope: [
       'https://www.googleapis.com/auth/spreadsheets',
-      'https://www.googleapis.com/auth/drive.readonly'
+      'https://www.googleapis.com/auth/drive.readonly',
+      'https://www.googleapis.com/auth/drive.file'
     ].join(' '),
     aud: 'https://oauth2.googleapis.com/token',
     iat: issuedAt,
@@ -1447,7 +1474,7 @@ async function getGoogleAccessToken() {
 
   if (!response.ok) {
     const message = await response.text();
-    throw new Error(`Google OAuth không cấp được access token: ${message}`);
+    throw new Error(getGoogleApiErrorMessage(message, 'Google OAuth'));
   }
 
   const payload = await response.json();
@@ -1479,13 +1506,7 @@ async function googleSheetsRequest(path, options = {}) {
   }
   if (!response.ok) {
     const message = await response.text();
-    if (response.status === 403 && /SERVICE_DISABLED|has not been used in project|Sheets API/i.test(message)) {
-      throw new Error('Google Sheets API đang bị tắt. Hãy bật Google Sheets API trong Google Cloud project rồi thử lại sau vài phút.');
-    }
-    if (response.status === 403 && /permission|not have access|does not have permission/i.test(message)) {
-      throw new Error('Service Account chưa được cấp quyền Editor trên Google Sheet. Hãy chia sẻ file cho email client_email trong file JSON.');
-    }
-    throw new Error(`Google Sheets API trả về lỗi ${response.status}: ${message}`);
+    throw new Error(getGoogleApiErrorMessage(message, 'Google Sheets API'));
   }
   if (response.status === 204) return {};
   return response.json();
@@ -1506,13 +1527,7 @@ async function googleDriveRequest(path) {
   }
   if (!response.ok) {
     const message = await response.text();
-    if (response.status === 403 && /SERVICE_DISABLED|has not been used in project|Drive API/i.test(message)) {
-      throw new Error('Google Drive API đang bị tắt. Hãy bật Google Drive API trong Google Cloud project rồi thử lại sau vài phút.');
-    }
-    if (response.status === 403 && /permission|not have access|does not have permission/i.test(message)) {
-      throw new Error('Service Account chưa được cấp quyền đọc Drive tổng. Hãy chia sẻ Drive hoặc folder tổng cho email client_email trong file JSON.');
-    }
-    throw new Error(`Google Drive API trả về lỗi ${response.status}: ${message}`);
+    throw new Error(getGoogleApiErrorMessage(message, 'Google Drive API'));
   }
   return response.json();
 }
@@ -1532,12 +1547,21 @@ async function googleDriveBinaryRequest(path) {
   }
   if (!response.ok) {
     const message = await response.text();
-    if (response.status === 403 && /permission|not have access|does not have permission/i.test(message)) {
-      throw new Error('Service Account chưa được cấp quyền đọc file Google Sheet qua Google Drive.');
-    }
-    throw new Error(`Không thể xuất Google Sheet để đọc ảnh trực tiếp (${response.status}): ${message}`);
+    throw new Error(getGoogleApiErrorMessage(message, 'Google Sheet'));
   }
   return Buffer.from(await response.arrayBuffer());
+}
+
+async function deleteGoogleDriveFile(fileId) {
+  const token = await getGoogleAccessToken();
+  const response = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
+  }, GOOGLE_REQUEST_TIMEOUT_MS);
+  if (!response.ok && response.status !== 404) {
+    const message = await response.text();
+    throw new Error(getGoogleApiErrorMessage(message, 'Google Drive'));
+  }
 }
 
 function escapeGoogleDriveQueryValue(value) {
@@ -2671,9 +2695,10 @@ async function syncGoogleSheet() {
     if (deleted) {
       syncWarnings.push(`Đã xóa ${deleted} dòng không còn trên Google Sheet.`);
     }
-    if (skippedRows.length || duplicateRows) {
-      syncWarnings.push(`Bỏ qua ${skippedRows.length} dòng thiếu dữ liệu và ${duplicateRows} dòng trùng series ID + Chap; ưu tiên bản ghi cuối.`);
-    }
+    // Rows without a complete synchronization key are treated as acceptable
+    // Sheet rows and are simply ignored for deadline reconciliation. Duplicate
+    // keys are resolved by the Map above, so the last row remains authoritative.
+    // Neither case is an error or a user-facing warning.
     if (invalidRows.length) {
       const invalidSummary = invalidRows.slice(0, 5)
         .map(({ rowNumber, message }) => `Dòng ${rowNumber}: ${String(message).replace(/^Dòng \d+:\s*/i, '')}`)
@@ -2684,7 +2709,7 @@ async function syncGoogleSheet() {
       syncWarnings.push(`Không tìm thấy folder Google Drive cho ${driveLinkResult.missing} ID bộ truyện.`);
     }
     if (driveLinkResult.error) {
-      syncWarnings.push(`Không thể tự gắn link Google Drive: ${driveLinkResult.error}`);
+      syncWarnings.push(`Không thể tự gắn link Google Drive: ${getSafeErrorMessage(driveLinkResult.error, 'Không thể tự gắn link Google Drive.')}`);
     }
     if (missingTabs.length) {
       syncWarnings.push(`Bỏ qua ${missingTabs.length} tab chưa tồn tại: ${missingTabs.map(({ field, missingTab }) => `${field} → "${missingTab}"`).join(', ')}.`);
@@ -2701,12 +2726,12 @@ async function syncGoogleSheet() {
         googleSheetLastSyncError: syncWarnings.join(' ')
       }, ['googleSheetLastSyncedAt', 'googleSheetLastSyncCount', 'googleSheetLastSyncError']);
     }
-    return { inserted, updated, deleted, total: uniqueRows.length, sheetRows: uniqueRows.length, skipped: skippedRows.length + invalidRows.length, invalid: invalidRows.length, duplicates: duplicateRows, hidden: hiddenRows, driveLinked: driveLinkResult.linked, driveMissing: driveLinkResult.missing, driveError: driveLinkResult.error, skippedRows: [...skippedRows, ...invalidRows].slice(0, 20), syncedAt };
+    return { inserted, updated, deleted, total: uniqueRows.length, sheetRows: uniqueRows.length, skipped: skippedRows.length + invalidRows.length, invalid: invalidRows.length, duplicates: duplicateRows, hidden: hiddenRows, driveLinked: driveLinkResult.linked, driveMissing: driveLinkResult.missing, driveError: driveLinkResult.error ? getSafeErrorMessage(driveLinkResult.error, 'Không thể tự gắn link Google Drive.') : '', skippedRows: [...skippedRows, ...invalidRows].slice(0, 20), syncedAt };
   })().catch(async (error) => {
     try {
       const currentSettings = (await getCollection('generalSettings'))[0];
       if (currentSettings) {
-        await updateRow('generalSettings', { id: currentSettings.id }, { googleSheetLastSyncError: error.message }, ['googleSheetLastSyncError']);
+        await updateRow('generalSettings', { id: currentSettings.id }, { googleSheetLastSyncError: getSafeErrorMessage(error, 'Google Sheet chưa đồng bộ thành công.') }, ['googleSheetLastSyncError']);
       }
     } catch {
       // Preserve the original Google Sheet error.
@@ -2919,9 +2944,7 @@ function imageBufferToDataUrl(filePath, data) {
   return `data:${mimeType};base64,${data.toString('base64')}`;
 }
 
-async function readGoogleSheetImageCells(spreadsheetId, sheetTitle) {
-  const exportPath = `files/${encodeURIComponent(spreadsheetId)}/export?mimeType=${encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}`;
-  const workbookBuffer = await googleDriveBinaryRequest(exportPath);
+function parseGoogleSheetImageCells(workbookBuffer, sheetTitle) {
   const entries = parseZipEntries(workbookBuffer);
   const workbookXml = getZipText(entries, 'xl/workbook.xml');
   const workbookRelationships = parseZipRelationships(getZipText(entries, 'xl/_rels/workbook.xml.rels'));
@@ -2949,6 +2972,34 @@ async function readGoogleSheetImageCells(spreadsheetId, sheetTitle) {
   return imageCells;
 }
 
+async function readGoogleSheetImageCells(spreadsheetId, sheetId, sheetTitle) {
+  let temporarySpreadsheetId = '';
+  try {
+    const temporarySpreadsheet = await googleSheetsRequest('spreadsheets', {
+      method: 'POST',
+      body: { properties: { title: `QC image sync ${Date.now()}` } }
+    });
+    temporarySpreadsheetId = temporarySpreadsheet.spreadsheetId || '';
+    if (!temporarySpreadsheetId) throw new Error('Không tạo được file tạm để đọc ảnh trực tiếp từ Google Sheet.');
+
+    const copiedSheet = await googleSheetsRequest(
+      `spreadsheets/${encodeURIComponent(spreadsheetId)}/sheets/${encodeURIComponent(sheetId)}:copyTo`,
+      { method: 'POST', body: { destinationSpreadsheetId: temporarySpreadsheetId } }
+    );
+    const exportPath = `files/${encodeURIComponent(temporarySpreadsheetId)}/export?mimeType=${encodeURIComponent('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}`;
+    const workbookBuffer = await googleDriveBinaryRequest(exportPath);
+    return parseGoogleSheetImageCells(workbookBuffer, copiedSheet.title || `Copy of ${sheetTitle}`);
+  } finally {
+    if (temporarySpreadsheetId) {
+      try {
+        await deleteGoogleDriveFile(temporarySpreadsheetId);
+      } catch (error) {
+        console.warn('Không thể dọn file tạm đọc ảnh Google Sheet:', error.message);
+      }
+    }
+  }
+}
+
 async function readErrorGoogleSheet(field, sheetUrl) {
   const { spreadsheetId, gid } = parseGoogleSheetReference(sheetUrl);
   const metadata = await getGoogleSheetMetadata(spreadsheetId);
@@ -2968,9 +3019,9 @@ async function readErrorGoogleSheet(field, sheetUrl) {
   let imageReadError = '';
   if (getErrorSheetHeaderIndex(new Map(headers.map((header, index) => [header, index])), 'screenshot') !== undefined) {
     try {
-      imageCells = await readGoogleSheetImageCells(spreadsheetId, selectedSheet.properties.title);
+      imageCells = await readGoogleSheetImageCells(spreadsheetId, selectedSheet.properties.sheetId, selectedSheet.properties.title);
     } catch (error) {
-      imageReadError = error.message || 'Không thể đọc ảnh trực tiếp từ Google Sheet.';
+      imageReadError = getSafeErrorMessage(error, 'Không thể đọc ảnh trực tiếp từ Google Sheet.');
     }
   }
   return {

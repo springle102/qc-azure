@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { IconBook, IconEdit, IconFolder, IconPlus, IconRefresh, IconTrash, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
-import { api } from '../../services/api';
+import { api, getUserFacingErrorMessage } from '../../services/api';
 
 const createChecklistId = () => `checklist-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -171,14 +171,14 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
         googleSheetAutoSync
       });
       const result = await api.syncGoogleSheet();
-      const skippedMessage = result.skipped ? ' Bỏ qua ' + result.skipped + ' dòng thiếu dữ liệu bắt buộc.' : '';
-      const duplicateMessage = result.duplicates ? ' Có ' + result.duplicates + ' dòng trùng, đã ưu tiên bản ghi cuối.' : '';
       const deletedMessage = result.deleted ? ' Đã xóa ' + result.deleted + ' dòng không còn trên Sheet.' : '';
       const hiddenMessage = result.hidden ? ' Bỏ qua ' + result.hidden + ' dòng đang ẩn.' : '';
       const driveLinkedMessage = result.driveLinked ? ' Đã tự gắn ' + result.driveLinked + ' link folder Google Drive.' : '';
       const driveMissingMessage = result.driveMissing ? ' Không tìm thấy folder cho ' + result.driveMissing + ' ID bộ truyện.' : '';
-      const driveErrorMessage = result.driveError ? ' Lỗi gắn link Drive: ' + result.driveError : '';
-      showToast('Đã đồng bộ ' + (result.sheetRows ?? result.total) + ' dòng hợp lệ từ Sheet (' + result.inserted + ' mới, ' + result.updated + ' cập nhật).' + deletedMessage + skippedMessage + duplicateMessage + hiddenMessage + driveLinkedMessage + driveMissingMessage + driveErrorMessage, 'success');
+      const driveErrorMessage = result.driveError
+        ? ' Lỗi gắn link Drive: ' + getUserFacingErrorMessage(result.driveError, 'Không thể tự gắn link Google Drive.')
+        : '';
+      showToast('Đã đồng bộ ' + (result.sheetRows ?? result.total) + ' dòng từ Sheet (' + result.inserted + ' mới, ' + result.updated + ' cập nhật).' + deletedMessage + hiddenMessage + driveLinkedMessage + driveMissingMessage + driveErrorMessage, 'success');
       await onRefresh?.();
     } catch (error) {
       showToast(error.message || 'Không thể đồng bộ Google Sheet.', 'error');
@@ -285,7 +285,7 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
           </div>
         </form>
         {generalSettings?.googleSheetLastSyncedAt && <p className="form-help general-settings-sync-status">Lần đồng bộ gần nhất: {new Date(generalSettings.googleSheetLastSyncedAt).toLocaleString('vi-VN')} · {generalSettings.googleSheetLastSyncCount ?? 0} dòng hợp lệ</p>}
-        {generalSettings?.googleSheetLastSyncError && <p className="form-help general-settings-sync-error">Cảnh báo/lỗi gần nhất: {generalSettings.googleSheetLastSyncError}</p>}
+        {generalSettings?.googleSheetLastSyncError && <p className="form-help general-settings-sync-error">Cảnh báo/lỗi gần nhất: {getUserFacingErrorMessage(generalSettings.googleSheetLastSyncError, 'Google Sheet chưa đồng bộ thành công.')}</p>}
       </section>
 
       <section className="glass-panel qc-table-panel">
