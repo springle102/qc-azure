@@ -33,6 +33,7 @@ export function DeadlineRegistrationView({
   onDelete
 }) {
   const [search, setSearch] = useState('');
+  const [fieldFilter, setFieldFilter] = useState('');
   const [editingRegistration, setEditingRegistration] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -48,19 +49,28 @@ export function DeadlineRegistrationView({
       .filter((freelancer) => freelancer.id !== null && freelancer.id !== undefined && freelancer.id !== '')
       .sort((left, right) => String(left.name).localeCompare(String(right.name), 'vi'))
   ), [freelancers]);
+  const freelancersById = useMemo(() => new Map(
+    freelancers
+      .map((freelancer) => [String(freelancer.fIld ?? freelancer.fId ?? freelancer.id), freelancer])
+      .filter(([id]) => id !== 'undefined' && id !== 'null' && id !== '')
+  ), [freelancers]);
+  const fieldOptions = useMemo(() => getFieldOptions(freelancers), [freelancers]);
 
   const ownRegistration = registrations.find((row) => String(row.fIld ?? row.fId ?? row.freelancerId ?? '') === ownFreelancerId);
   const filteredRegistrations = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const filtered = !query
-      ? registrations
-      : registrations.filter((row) => [row.fIld, row.name, row.chaptersPerWeek, row.chaptersPerMonth, row.stability, row.note]
-        .some((value) => String(value ?? '').toLowerCase().includes(query)));
+    const filtered = registrations.filter((row) => {
+      const registrationFields = getRegistrationFields(row, freelancersById);
+      const matchesSearch = !query || [row.fIld, row.name, registrationFields.join(', '), row.chaptersPerWeek, row.chaptersPerMonth, row.stability, row.note]
+        .some((value) => String(value ?? '').toLowerCase().includes(query));
+      const matchesField = !fieldFilter || registrationFields.some((field) => String(field).trim().toLowerCase() === fieldFilter.trim().toLowerCase());
+      return matchesSearch && matchesField;
+    });
     return [...filtered].sort((left, right) => compareNumericValues(
       left.fIld ?? left.fId ?? left.freelancerId,
       right.fIld ?? right.fId ?? right.freelancerId
     ));
-  }, [registrations, search]);
+  }, [fieldFilter, freelancersById, registrations, search]);
 
   const openCreate = () => {
     const firstFreelancer = canManageAll ? freelancerOptions[0] : freelancerOptions.find((item) => String(item.id) === ownFreelancerId);
@@ -190,8 +200,12 @@ export function DeadlineRegistrationView({
           <div className="table-toolbar">
             <div className="toolbar-search">
               <IconSearch size={17} />
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo FLID, họ tên, độ ổn định hoặc note" />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo FLID, họ tên, mảng, độ ổn định hoặc note" />
             </div>
+            <select className="form-select toolbar-filter" value={fieldFilter} onChange={(event) => setFieldFilter(event.target.value)} aria-label="Lọc theo mảng">
+              <option value="">Tất cả mảng</option>
+              {fieldOptions.map((field) => <option value={field} key={field}>{field}</option>)}
+            </select>
           </div>
         )}
 
@@ -201,8 +215,9 @@ export function DeadlineRegistrationView({
               <tr>
                 <th>FLID</th>
                 <th>Họ và tên</th>
-                <th>Số chap 1 tuần nhận được</th>
-                <th>Số chap 1 tháng</th>
+                <th>Mảng</th>
+                <th className="deadline-registration-week-column">Tuần</th>
+                <th className="deadline-registration-month-column">Tháng</th>
                 <th>Độ ổn định</th>
                 <th>Note</th>
                 <th>Thao tác</th>
@@ -210,13 +225,14 @@ export function DeadlineRegistrationView({
             </thead>
             <tbody>
               {filteredRegistrations.length === 0 ? (
-                <tr><td colSpan="7"><div className="empty-state table-empty"><IconTasks size={24} /><strong>{isLoading ? 'Đang tải dữ liệu...' : 'Chưa có đăng ký deadline.'}</strong></div></td></tr>
+                <tr><td colSpan="8"><div className="empty-state table-empty"><IconTasks size={24} /><strong>{isLoading ? 'Đang tải dữ liệu...' : 'Chưa có đăng ký deadline.'}</strong></div></td></tr>
               ) : filteredRegistrations.map((registration) => (
                 <tr key={registration.id}>
                   <td className="mono-cell">{registration.fIld ?? registration.fId ?? '—'}</td>
                   <td className="strong-cell">{registration.name || '—'}</td>
-                  <td>{registration.chaptersPerWeek ?? '—'}</td>
-                  <td>{registration.chaptersPerMonth ?? '—'}</td>
+                  <td><span className="field-badge">{getRegistrationFields(registration, freelancersById).join(', ') || '—'}</span></td>
+                  <td className="deadline-registration-week-column">{registration.chaptersPerWeek ?? '—'}</td>
+                  <td className="deadline-registration-month-column">{registration.chaptersPerMonth ?? '—'}</td>
                   <td>
                     {registration.stability
                       ? <span className={`deadline-stability-badge ${getStabilityOption(registration.stability)?.className || 'deadline-stability-legacy'}`}>{registration.stability}</span>
@@ -311,4 +327,23 @@ function compareNumericValues(leftValue, rightValue) {
   if (!leftMissing && rightMissing) return -1;
   if (!leftMissing && !rightMissing) return leftNumber - rightNumber;
   return String(leftValue ?? '').localeCompare(String(rightValue ?? ''), 'vi', { numeric: true, sensitivity: 'base' });
+}
+
+function getFreelancerFields(freelancer) {
+  if (Array.isArray(freelancer?.fields) && freelancer.fields.length > 0) return freelancer.fields;
+  return freelancer?.field ? [freelancer.field] : [];
+}
+
+function getFieldOptions(freelancers) {
+  const values = freelancers.flatMap((freelancer) => getFreelancerFields(freelancer))
+    .map((field) => String(field ?? '').trim())
+    .filter(Boolean);
+  return [...new Map(values.map((field) => [field.toLowerCase(), field])).values()]
+    .sort((left, right) => left.localeCompare(right, 'vi', { sensitivity: 'base' }));
+}
+
+function getRegistrationFields(registration, freelancersById) {
+  const freelancerId = registration?.fIld ?? registration?.fId ?? registration?.freelancerId;
+  const freelancer = freelancersById.get(String(freelancerId));
+  return getFreelancerFields(freelancer);
 }

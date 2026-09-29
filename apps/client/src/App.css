@@ -2650,6 +2650,18 @@
   min-width: 920px;
 }
 
+.deadline-registration-table .deadline-registration-week-column,
+.deadline-registration-table .deadline-registration-month-column {
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
+  box-sizing: border-box;
+  padding-right: 8px;
+  padding-left: 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .deadline-registration-modal {
   max-width: 720px;
 }
