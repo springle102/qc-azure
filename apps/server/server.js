@@ -748,9 +748,6 @@ app.patch('/api/errors/:id', requireAuth, async (req, res) => {
       const obsoletePaths = getStoragePathsFromErrorScreenshot(previousScreenshot).filter((path) => !nextPaths.has(path));
       if (obsoletePaths.length > 0) void removeErrorScreenshots(obsoletePaths).catch((error) => console.error('Không thể dọn screenshot cũ:', error.message));
     }
-    void syncErrorWithGoogleSheet(data, { action: 'update' }).catch((error) => {
-      console.error('Không thể cập nhật Google Sheet sau khi sửa lỗi:', error.message);
-    });
     res.json({ success: true, data });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
@@ -766,9 +763,6 @@ app.delete('/api/errors/:id', requireManager, async (req, res) => {
     if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy lỗi cần xóa.' });
     assertManagerCanManageField(req.authUser, current.field);
     const data = await deleteRowById('errors', id);
-    void syncErrorWithGoogleSheet(current, { action: 'delete' }).catch((error) => {
-      console.error('Không thể xóa dòng lỗi trên Google Sheet sau khi xóa local:', error.message);
-    });
     void removeErrorScreenshotFiles(current.screenshot);
     res.json({ success: true, data });
   } catch (error) {
@@ -3571,94 +3565,9 @@ function hasErrorSheetChanges(current, imported) {
     .some((column) => normalizeErrorSyncValue(current[column], column) !== normalizeErrorSyncValue(imported[column], column));
 }
 
-function getErrorRowNumberFromAppendResponse(response) {
-  const updatedRange = String(response?.updates?.updatedRange || response?.updates?.tableRange || '');
-  const match = updatedRange.match(/![A-Z]+(\d+)(?::[A-Z]+\d+)?$/i);
-  return match ? Number(match[1]) : null;
-}
-
-function getErrorSheetCellValue(row, key) {
-  if (key === 'fixCheck') return Boolean(row.fixCheck);
-  if (key === 'screenshot' || key === 'note') {
-    const screenshots = getErrorScreenshotValues(row[key]);
-    if (key === 'screenshot' && screenshots.length > 1) {
-      const firstRemoteImage = screenshots.find((screenshot) => isHttpUrl(screenshot));
-      return firstRemoteImage ? `=IMAGE("${firstRemoteImage.replace(/"/g, '""')}")` : '';
-    }
-    const screenshot = screenshots[0] || '';
-    if (isHttpUrl(screenshot)) return `=IMAGE("${screenshot.replace(/"/g, '""')}")`;
-    return key === 'screenshot' ? screenshot : (row.note ?? '');
-  }
-  return row[key] ?? '';
-}
-
-async function writeErrorGoogleSheetCells(sheet, rowNumber, row) {
-  const data = ERROR_SHEET_COLUMNS
-    .map((key) => {
-      const columnIndex = getErrorSheetHeaderIndex(sheet.headerIndex, key);
-      if (columnIndex === undefined) return null;
-      return {
-        range: `${quoteGoogleSheetTitle(sheet.sheetTitle)}!${googleSheetIndexToColumn(sheet.rangeMeta.startColumn + columnIndex)}${rowNumber}`,
-        values: [[getErrorSheetCellValue(row, key)]]
-      };
-    })
-    .filter(Boolean);
-  if (data.length === 0) return { skipped: true };
-  return googleSheetsRequest(`spreadsheets/${encodeURIComponent(sheet.spreadsheetId)}/values:batchUpdate`, {
-    method: 'POST',
-    body: { valueInputOption: 'USER_ENTERED', data }
-  });
-}
-
-async function appendErrorGoogleSheetRow(sheet, row) {
-  const mappedColumns = ERROR_SHEET_COLUMNS
-    .map((key) => getErrorSheetHeaderIndex(sheet.headerIndex, key))
-    .filter((index) => index !== undefined);
-  if (mappedColumns.length < 3) throw new Error(`Sheet lỗi của mảng "${sheet.field}" thiếu cột Title, Chapter hoặc Error.`);
-  const lastColumn = Math.max(...mappedColumns);
-  const values = Array.from({ length: lastColumn + 1 }, () => '');
-  ERROR_SHEET_COLUMNS.forEach((key) => {
-    const columnIndex = getErrorSheetHeaderIndex(sheet.headerIndex, key);
-    if (columnIndex !== undefined) values[columnIndex] = getErrorSheetCellValue(row, key);
-  });
-  const startColumn = googleSheetIndexToColumn(sheet.rangeMeta.startColumn);
-  const endColumn = googleSheetIndexToColumn(sheet.rangeMeta.startColumn + lastColumn);
-  return googleSheetsRequest(`spreadsheets/${encodeURIComponent(sheet.spreadsheetId)}/values/${encodeURIComponent(`${quoteGoogleSheetTitle(sheet.sheetTitle)}!${startColumn}:${endColumn}`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS&includeValuesInResponse=true`, {
-    method: 'POST',
-    body: { majorDimension: 'ROWS', values: [values] }
-  });
-}
-
-async function deleteErrorGoogleSheetRow(sheet, rowNumber) {
-  if (sheet.sheetId === undefined || sheet.sheetId === null) throw new Error(`Không xác định được sheetId của tab lỗi "${sheet.sheetTitle}".`);
-  return googleSheetsRequest(`spreadsheets/${encodeURIComponent(sheet.spreadsheetId)}:batchUpdate`, {
-    method: 'POST',
-    body: {
-      requests: [{
-        deleteDimension: {
-          range: {
-            sheetId: Number(sheet.sheetId),
-            dimension: 'ROWS',
-            startIndex: rowNumber - 1,
-            endIndex: rowNumber
-          }
-        }
-      }]
-    }
-  });
-}
-
-async function syncErrorWithGoogleSheet(row, { action = 'update' } = {}) {
-  const settings = await getGeneralSettings();
-  const sheetUrl = getConfiguredErrorSheetUrl(settings.errorSheetUrls, row.field) || normalizeGoogleSheetUrl(row.sourceUrl);
-  if (!sheetUrl) return { skipped: true, reason: 'sheet-not-configured' };
-  if (!row.sourceRow) return { skipped: true, reason: 'row-not-linked' };
-  const sheet = await readErrorGoogleSheet(row.field, sheetUrl);
-  if (action === 'delete') return deleteErrorGoogleSheetRow(sheet, Number(row.sourceRow));
-  return writeErrorGoogleSheetCells(sheet, Number(row.sourceRow), row);
-}
-
 async function syncErrorsWithGoogleSheets(user) {
+  // Error sheets are read-only sources of truth. This sync may only import
+  // sheet rows into the app database; it must never write back to Google Sheets.
   const settings = await getGeneralSettings();
   const configuredUrls = normalizeErrorSheetUrls(settings.errorSheetUrls);
   const mappings = Object.entries(configuredUrls)
@@ -3678,7 +3587,6 @@ async function syncErrorsWithGoogleSheets(user) {
   const warnings = [];
   let inserted = 0;
   let updated = 0;
-  let appended = 0;
   let deleted = 0;
   let skipped = 0;
 
@@ -3764,28 +3672,6 @@ async function syncErrorsWithGoogleSheets(user) {
     updated += writeResults.filter((result) => result === 'updated').length;
   }
 
-  const sheetByField = new Map(sheets.map((sheet) => [sheet.field.toLowerCase(), sheet]));
-  const localRows = await getCollection('errors');
-  for (const row of localRows.filter((item) => canManagerManageField(user, item.field) && !item.sourceRow)) {
-    const sheet = sheetByField.get(String(row.field).toLowerCase());
-    if (!sheet) {
-      warnings.push(`${row.field}: chưa cấu hình sheet nên chưa thể thêm lỗi "${row.title}".`);
-      continue;
-    }
-    const response = await appendErrorGoogleSheetRow(sheet, row);
-    const sourceRow = getErrorRowNumberFromAppendResponse(response);
-    if (!sourceRow) {
-      warnings.push(`${row.field}: đã thêm lỗi vào sheet nhưng không xác định được số dòng nguồn.`);
-      continue;
-    }
-    await updateRowById('errors', row.id, {
-      sourceRow,
-      sourceUrl: sheet.sourceUrl,
-      updatedAt: new Date().toISOString()
-    }, ['sourceRow', 'sourceUrl', 'updatedAt']);
-    appended += 1;
-  }
-
   const rowsAfterImport = await getCollection('errors');
   for (const row of rowsAfterImport.filter((item) => canManagerManageField(user, item.field) && item.sourceRow)) {
     const sourceKeys = sourceKeysByField.get(String(row.field).toLowerCase());
@@ -3798,7 +3684,6 @@ async function syncErrorsWithGoogleSheets(user) {
   return {
     inserted,
     updated,
-    appended,
     deleted,
     skipped,
     total: (await getCollection('errors')).filter((row) => canManagerManageField(user, row.field)).length,

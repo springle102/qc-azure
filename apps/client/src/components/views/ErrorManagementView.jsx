@@ -534,7 +534,7 @@ export function ErrorManagementView({
       const warning = result.warnings?.length
         ? ` Cảnh báo: ${result.warnings.slice(0, 2).map((item) => getUserFacingErrorMessage(item, 'Không thể xử lý một số dữ liệu từ Google Sheet.')).join(' ')}`
         : '';
-      showToast(`Đã đồng bộ lỗi: ${result.inserted || 0} mới, ${result.updated || 0} cập nhật, ${result.appended || 0} đẩy lên Sheet, ${result.deleted || 0} đã xóa.${warning}`, warning ? 'warning' : 'success');
+      showToast(`Đã đồng bộ từ Sheet lỗi: ${result.inserted || 0} mới, ${result.updated || 0} cập nhật, ${result.deleted || 0} đã xóa trên web.${warning}`, warning ? 'warning' : 'success');
       await onRefresh?.();
     } catch (error) {
       showToast(error.message || 'Không thể đồng bộ bảng lỗi.', 'error');
@@ -576,7 +576,7 @@ export function ErrorManagementView({
       onCreate?.(created);
       setNewError(EMPTY_ERROR_ROW);
       setIsCreatingError(false);
-      showToast('Đã nhập lỗi. Bấm Đồng bộ lỗi để đẩy lên Google Sheet.', 'success');
+      showToast('Đã nhập lỗi trên hệ thống. Dữ liệu không được ghi vào Sheet lỗi gốc.', 'success');
     } catch (error) {
       showToast(error.message || 'Không thể nhập lỗi.', 'error');
     } finally {
@@ -589,9 +589,6 @@ export function ErrorManagementView({
     try {
       const updated = await api.updateError(row.id, updates);
       updateLocalRow(updated);
-      if (updated.sheetSyncError) {
-        showToast(`Đã lưu trên hệ thống nhưng chưa cập nhật Sheet: ${getUserFacingErrorMessage(updated.sheetSyncError, 'Không thể cập nhật Google Sheet.')}`, 'warning');
-      }
       return updated;
     } catch (error) {
       showToast(error.message || 'Không thể cập nhật lỗi.', 'error');
@@ -612,7 +609,7 @@ export function ErrorManagementView({
       await api.deleteError(row.id);
       setLocalErrors((current) => current.filter((item) => item.id !== row.id));
       onDelete?.(row);
-      showToast('Đã xóa lỗi khỏi hệ thống và Google Sheet.', 'success');
+      showToast('Đã xóa lỗi khỏi hệ thống. Sheet lỗi gốc không bị thay đổi.', 'success');
     } catch (error) {
       showToast(error.message || 'Không thể xóa lỗi.', 'error');
     } finally {
@@ -629,7 +626,7 @@ export function ErrorManagementView({
         </div>
         <div className="page-header-actions">
           {currentUser.role === 'Admin' && <button type="button" className="btn btn-outline" onClick={handleMigrateScreenshots} disabled={isLoading || isSaving}><IconRefresh size={16} /> {isMigratingScreenshots ? 'Đang chuyển ảnh...' : 'Chuyển ảnh lên Storage'}</button>}
-          {canManage && <button type="button" className="btn btn-primary" onClick={handleSync} disabled={isLoading || isSaving}><IconRefresh size={16} /> {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ lỗi'}</button>}
+          {canManage && <button type="button" className="btn btn-primary" onClick={handleSync} disabled={isLoading || isSaving}><IconRefresh size={16} /> {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ từ Sheet'}</button>}
           <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading || isSaving}><IconRefresh size={16} /> {isLoading ? 'Đang tải...' : 'Làm mới'}</button>
         </div>
       </div>
