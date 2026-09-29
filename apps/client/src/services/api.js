@@ -113,7 +113,7 @@ export const api = {
   getQCs: () => request('/qcs'),
   getDeadlines: ({ forceDriveRefresh = false } = {}) => request(`/deadlines${forceDriveRefresh ? '?refreshDrive=1' : ''}`, {
     timeoutMs: 120000,
-    ...(forceDriveRefresh ? { cache: 'no-store' } : {})
+    cache: 'no-store'
   }),
   createDeadline: (deadline) => request('/deadlines', {
     method: 'POST',

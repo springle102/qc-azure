@@ -585,12 +585,10 @@ app.get('/api/deadlines', requireAuth, async (req, res) => {
     await syncGoogleSheetIfDue({ waitForCompletion: false });
     const allDeadlines = await getCollection('deadlines');
     const settings = await getGeneralSettings();
-    // Drive lookups are reserved for an explicit refresh. A normal page load
-    // uses the URL already stored with the deadline and avoids one Drive
-    // request per series.
-    const linkedDeadlines = refreshDrive
-      ? await enrichStoredDeadlineUrls(allDeadlines, settings.googleDriveFolders)
-      : allDeadlines;
+    // Re-check missing/stale Drive links on every deadline load. The lookup
+    // layer keeps a short cache, so a normal page load does not repeatedly hit
+    // Google Drive while still repairing links that were previously missing.
+    const linkedDeadlines = await enrichStoredDeadlineUrls(allDeadlines, settings.googleDriveFolders);
     const deadlines = filterRowsForUser(linkedDeadlines, req.authUser);
     const prices = await getCollection('difficultyPricing');
     res.json({ success: true, data: applyConfiguredPrices(deadlines, prices) });
@@ -2031,11 +2029,14 @@ async function findDirectGoogleDriveFolders(parentId) {
 
 function normalizeDriveFolderSearchText(value) {
   return String(value ?? '')
+    .normalize('NFKC')
+    .toLocaleLowerCase('und')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/gu, '')
     .replace(/đ/gi, 'd')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
+    // Keep Unicode letters and numbers so Korean, Chinese, Japanese and
+    // other non-Latin folder names remain searchable.
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .replace(/\s+/g, ' ');
 }
@@ -2091,6 +2092,12 @@ async function findGoogleDriveFolderUrl(seriesId, field, googleDriveFolders = {}
     }
   } else {
     folder = await findGoogleDriveFolder(seriesFolderName);
+    if (!folder && seriesName) {
+      // When no field root is configured, also allow the folder to be named
+      // after the series title instead of the numeric series ID.
+      const namedFolders = await findGoogleDriveFolders(seriesName);
+      folder = findDriveFolderBySeriesName(namedFolders, seriesName) || namedFolders[0] || null;
+    }
   }
   const url = folder?.webViewLink || (folder?.id ? `https://drive.google.com/drive/folders/${folder.id}` : '');
   googleDriveFolderCache.set(cacheKey, { checkedAt: now, url });
