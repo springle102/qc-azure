@@ -258,7 +258,7 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
                   <td className="mono-cell">{account.username}</td>
                   <td className="strong-cell">{account.displayName || '—'}</td>
                   <td>{account.email || '—'}</td>
-                  <td><span className={'role-badge role-' + String(account.role || '').toLowerCase()}>{formatRoles(account)}</span></td>
+                  <td className="account-role-cell">{renderRoleBadges(account)}</td>
                   <td>{formatFields(account.fields, account.field)}</td>
                   <td>{account.freelancerName || getFreelancerName(account.freelancerId, freelancerRows)}</td>
                   <td><span className={'data-status ' + (account.isActive ? 'completed' : 'pending')}>{account.isActive ? 'Đang hoạt động' : 'Đã khóa'}</span></td>
@@ -411,6 +411,16 @@ function getEffectiveRole(roles) {
 
 function formatRoles(account) {
   return getAccountRoles(account).join(' + ');
+}
+
+function renderRoleBadges(account) {
+  return (
+    <span className="role-badges" aria-label={`Role: ${formatRoles(account)}`}>
+      {getAccountRoles(account).map((role) => (
+        <span className={'role-badge role-' + role.toLowerCase()} key={role}>{role}</span>
+      ))}
+    </span>
+  );
 }
 
 function FieldCheckboxes({ options = [], value = [], onChange, disabled = false }) {
