@@ -1,3 +1,5 @@
+import jsQR from 'jsqr';
+
 const QR_DETECTION_MAX_SIZE = 1600;
 const QR_OUTPUT_SIZE = 900;
 const QR_PADDING = 54;
@@ -44,18 +46,18 @@ async function loadImageSource(file) {
 async function detectQrCorners(canvas) {
   const BarcodeDetectorApi = globalThis.BarcodeDetector;
   if (!BarcodeDetectorApi) {
-    throw new Error('Trình duyệt hiện tại chưa hỗ trợ tự nhận diện QR. Hãy dùng Chrome hoặc Edge bản mới nhất.');
+    return detectQrCornersWithJsQr(canvas);
   }
 
   try {
     const supportedFormats = await BarcodeDetectorApi.getSupportedFormats?.();
     if (Array.isArray(supportedFormats) && !supportedFormats.includes('qr_code')) {
-      throw new Error('Trình duyệt hiện tại chưa hỗ trợ tự nhận diện QR. Hãy dùng Chrome hoặc Edge bản mới nhất.');
+      return detectQrCornersWithJsQr(canvas);
     }
     const detector = new BarcodeDetectorApi({ formats: ['qr_code'] });
     const detections = await detector.detect(canvas);
     const detection = detections.find((item) => item.format === 'qr_code') || detections[0];
-    if (!detection) return null;
+    if (!detection) return detectQrCornersWithJsQr(canvas);
 
     const points = Array.isArray(detection.cornerPoints) && detection.cornerPoints.length >= 4
       ? detection.cornerPoints.slice(0, 4).map(({ x, y }) => ({ x: Number(x), y: Number(y) }))
@@ -71,9 +73,21 @@ async function detectQrCorners(canvas) {
       { x: box.x, y: box.y + box.height }
     ];
   } catch (error) {
-    if (error instanceof Error && error.message.includes('chưa hỗ trợ')) throw error;
-    throw new Error('Không thể nhận diện mã QR. Vui lòng chọn ảnh có mã QR rõ hơn.');
+    const fallbackCorners = detectQrCornersWithJsQr(canvas);
+    if (fallbackCorners) return fallbackCorners;
+    if (error instanceof Error && error.message.includes('chưa hỗ trợ')) return null;
+    return null;
   }
+}
+
+function detectQrCornersWithJsQr(canvas) {
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  const image = context.getImageData(0, 0, canvas.width, canvas.height);
+  const detection = jsQR(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
+  if (!detection?.location) return null;
+  const { topLeftCorner, topRightCorner, bottomRightCorner, bottomLeftCorner } = detection.location;
+  return [topLeftCorner, topRightCorner, bottomRightCorner, bottomLeftCorner]
+    .map(({ x, y }) => ({ x: Number(x), y: Number(y) }));
 }
 
 function perspectiveCropToPng(sourceCanvas, corners) {
