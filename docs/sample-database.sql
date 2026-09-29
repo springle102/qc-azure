@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS "Accounts" (
   "passwordHash" text NOT NULL,
   "passwordSalt" varchar(64) NOT NULL,
   "role" varchar(20) NOT NULL CHECK ("role" IN ('Admin', 'QC', 'Freelancer')),
+  "roles" text[] NOT NULL DEFAULT ARRAY[]::text[],
   "displayName" varchar(150) NOT NULL,
   "email" varchar(255),
   "field" varchar(50),
@@ -110,13 +111,23 @@ ALTER TABLE "Accounts" ADD COLUMN IF NOT EXISTS "freelancerId" integer;
 ALTER TABLE "Accounts" ADD COLUMN IF NOT EXISTS "field" varchar(50);
 ALTER TABLE "Accounts" ADD COLUMN IF NOT EXISTS "fields" text[];
 ALTER TABLE "Accounts" ADD COLUMN IF NOT EXISTS "avatar" text;
+ALTER TABLE "Accounts" ADD COLUMN IF NOT EXISTS "roles" text[];
 UPDATE "Accounts"
 SET "fields" = CASE WHEN "field" IS NULL THEN ARRAY[]::text[] ELSE ARRAY["field"]::text[] END
 WHERE "fields" IS NULL;
+UPDATE "Accounts"
+SET "roles" = ARRAY["role"]::text[]
+WHERE "roles" IS NULL OR cardinality("roles") = 0;
 ALTER TABLE "Accounts" ALTER COLUMN "fields" SET DEFAULT ARRAY[]::text[];
 ALTER TABLE "Accounts" ALTER COLUMN "fields" SET NOT NULL;
+ALTER TABLE "Accounts" ALTER COLUMN "roles" SET DEFAULT ARRAY[]::text[];
+ALTER TABLE "Accounts" ALTER COLUMN "roles" SET NOT NULL;
 ALTER TABLE "Accounts" DROP CONSTRAINT IF EXISTS "Accounts_field_check";
 ALTER TABLE "Accounts" DROP CONSTRAINT IF EXISTS "Accounts_fields_check";
+ALTER TABLE "Accounts" DROP CONSTRAINT IF EXISTS "Accounts_roles_check";
+ALTER TABLE "Accounts"
+  ADD CONSTRAINT "Accounts_roles_check"
+  CHECK (cardinality("roles") BETWEEN 1 AND 2 AND "roles" <@ ARRAY['Admin', 'QC', 'Freelancer']::text[]);
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -127,6 +138,43 @@ BEGIN
       FOREIGN KEY ("freelancerId") REFERENCES "Freelancer" ("fIld") ON DELETE SET NULL;
   END IF;
 END $$;
+
+CREATE OR REPLACE FUNCTION public.sync_account_role_from_roles()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  role_values text[];
+BEGIN
+  role_values := COALESCE(NEW."roles", ARRAY[]::text[]);
+  IF cardinality(role_values) = 0 THEN
+    role_values := ARRAY[NEW."role"]::text[];
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM unnest(role_values) AS item(value)
+    WHERE item.value NOT IN ('Admin', 'QC', 'Freelancer')
+  ) OR cardinality(role_values) > 2 THEN
+    RAISE EXCEPTION 'Accounts.roles chỉ được chứa tối đa hai role hợp lệ';
+  END IF;
+  NEW."roles" := ARRAY(SELECT DISTINCT item.value FROM unnest(role_values) AS item(value));
+  IF 'Admin' = ANY(NEW."roles") THEN
+    NEW."role" := 'Admin';
+  ELSIF 'QC' = ANY(NEW."roles") THEN
+    NEW."role" := 'QC';
+  ELSE
+    NEW."role" := 'Freelancer';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS "Accounts_sync_role_from_roles" ON "Accounts";
+DROP TRIGGER IF EXISTS "Accounts_00_sync_role_from_roles" ON "Accounts";
+CREATE TRIGGER "Accounts_00_sync_role_from_roles"
+BEFORE INSERT OR UPDATE OF "role", "roles"
+ON "Accounts"
+FOR EACH ROW
+EXECUTE FUNCTION public.sync_account_role_from_roles();
 
 -- Keep one account per Freelancer and synchronize account identity fields into Freelancer.
 CREATE UNIQUE INDEX IF NOT EXISTS "Accounts_freelancer_unique"
@@ -140,7 +188,7 @@ AS $$
 DECLARE
   next_freelancer_id integer;
 BEGIN
-  IF NEW."role" IN ('Freelancer', 'QC') AND NEW."freelancerId" IS NULL THEN
+  IF NEW."roles" && ARRAY['Freelancer', 'QC']::text[] AND NEW."freelancerId" IS NULL THEN
     SELECT COALESCE(MAX("fIld"), 0) + 1 INTO next_freelancer_id FROM "Freelancer";
     INSERT INTO "Freelancer" ("fIld", "name", "email", "field", "fields")
     VALUES (next_freelancer_id, NEW."displayName", NEW."email", NEW."field", NEW."fields");
@@ -162,7 +210,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF NEW."role" IN ('Freelancer', 'QC') AND NEW."freelancerId" IS NOT NULL THEN
+  IF NEW."roles" && ARRAY['Freelancer', 'QC']::text[] AND NEW."freelancerId" IS NOT NULL THEN
     UPDATE "Freelancer"
     SET "name" = NEW."displayName",
         "email" = NEW."email",
@@ -187,7 +235,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF NEW."role" = 'QC' THEN
+  IF 'QC' = ANY(NEW."roles") THEN
     INSERT INTO "QC" ("qcId", "name", "email")
     VALUES (NEW."id"::integer, NEW."displayName", NEW."email")
     ON CONFLICT ("qcId") DO UPDATE

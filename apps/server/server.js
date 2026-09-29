@@ -3,7 +3,6 @@ import cors from 'cors';
 import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { inflateRawSync } from 'node:zlib';
-import nodemailer from 'nodemailer';
 import { calculateMonthlyBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, validateBonusRule } from './bonus.mjs';
 import {
   deleteRowById,
@@ -38,8 +37,9 @@ const PASSWORD_RESET_OTP_TTL_MS = 10 * 60 * 1000;
 const PASSWORD_RESET_OTP_MAX_ATTEMPTS = 5;
 const PASSWORD_RESET_REQUEST_COOLDOWN_MS = 60 * 1000;
 const passwordResetChallenges = new Map();
-let passwordResetTransporter = null;
 const PRESENCE_TTL_MS = 90 * 1000;
+const ACCOUNT_ROLES = ['Admin', 'QC', 'Freelancer'];
+const ROLE_PRIORITY = { Freelancer: 1, QC: 2, Admin: 3 };
 const GOOGLE_REQUEST_TIMEOUT_MS = 30_000;
 const SYNC_WRITE_CONCURRENCY = 8;
 const GOOGLE_DRIVE_FOLDER_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -355,7 +355,7 @@ async function getMergedQCs() {
     getCollection('accounts')
   ]);
   const accountQcs = accounts
-    .filter((account) => account.role === 'QC')
+    .filter((account) => hasAccountRole(account, 'QC'))
     .map((account) => ({
       qcId: account.id,
       freelancerId: account.freelancerId ?? null,
@@ -461,10 +461,10 @@ app.post('/api/accounts', requireAdmin, async (req, res) => {
   try {
     const payload = validateAccountPayload(req.body);
     await assertConfiguredFields(payload.fields);
-    if (['Freelancer', 'QC'].includes(payload.role) && payload.freelancerId === null) {
+    if (hasAnyRole(payload.roles, ['Freelancer', 'QC']) && payload.freelancerId === null) {
       payload.freelancerId = await ensureFreelancerForAccount(payload);
     }
-    await assertFreelancerExists(payload.freelancerId, payload.role);
+    await assertFreelancerExists(payload.freelancerId, payload.roles);
     await assertFreelancerAccountAvailable(payload.freelancerId);
     const { hash, salt } = hashPassword(payload.password);
     const data = await insertRow(
@@ -474,6 +474,7 @@ app.post('/api/accounts', requireAdmin, async (req, res) => {
         passwordHash: hash,
         passwordSalt: salt,
         role: payload.role,
+        roles: payload.roles,
         displayName: payload.displayName,
         email: payload.email,
         field: payload.field,
@@ -481,7 +482,7 @@ app.post('/api/accounts', requireAdmin, async (req, res) => {
         freelancerId: payload.freelancerId,
         isActive: true
       },
-      ['username', 'passwordHash', 'passwordSalt', 'role', 'displayName', 'email', 'field', 'fields', 'freelancerId', 'isActive']
+      ['username', 'passwordHash', 'passwordSalt', 'role', 'roles', 'displayName', 'email', 'field', 'fields', 'freelancerId', 'isActive']
     );
     await syncFreelancerFromAccount(data);
     res.status(201).json({ success: true, data: toPublicAccount(data, await getCollection('freelancers')) });
@@ -500,10 +501,10 @@ app.patch('/api/accounts/:id', requireAdmin, async (req, res) => {
 
     const payload = validateAccountUpdatePayload(req.body, current);
     await assertConfiguredFields(payload.fields);
-    if (['Freelancer', 'QC'].includes(payload.role) && payload.freelancerId === null) {
+    if (hasAnyRole(payload.roles, ['Freelancer', 'QC']) && payload.freelancerId === null) {
       payload.freelancerId = await ensureFreelancerForAccount({ ...current, ...payload });
     }
-    await assertFreelancerExists(payload.freelancerId, payload.role);
+    await assertFreelancerExists(payload.freelancerId, payload.roles);
     await assertFreelancerAccountAvailable(payload.freelancerId, id);
     const updates = { ...payload };
     if (updates.password) {
@@ -517,7 +518,7 @@ app.patch('/api/accounts/:id', requireAdmin, async (req, res) => {
       'accounts',
       id,
       updates,
-      ['username', 'passwordHash', 'passwordSalt', 'role', 'displayName', 'email', 'field', 'fields', 'freelancerId', 'isActive']
+      ['username', 'passwordHash', 'passwordSalt', 'role', 'roles', 'displayName', 'email', 'field', 'fields', 'freelancerId', 'isActive']
     );
     await syncFreelancerFromAccount(data);
     invalidateAccountSessions(id);
@@ -537,11 +538,11 @@ app.delete('/api/accounts/:id', requireAdmin, async (req, res) => {
     const accounts = await getCollection('accounts');
     const current = accounts.find((account) => Number(account.id) === id);
     if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy account cần xóa.' });
-    if (current.role === 'Admin' && accounts.filter((account) => account.role === 'Admin').length <= 1) {
+    if (hasAccountRole(current, 'Admin') && accounts.filter((account) => hasAccountRole(account, 'Admin')).length <= 1) {
       return res.status(400).json({ success: false, message: 'Phải giữ lại ít nhất một account Admin.' });
     }
 
-    const linkedFreelancerId = ['Freelancer', 'QC'].includes(current.role)
+    const linkedFreelancerId = hasAnyRole(getAccountRoles(current), ['Freelancer', 'QC'])
       ? current.freelancerId
       : null;
     const hasAnotherAccountForFreelancer = linkedFreelancerId !== null
@@ -564,7 +565,7 @@ app.delete('/api/accounts/:id', requireAdmin, async (req, res) => {
         : linkedFreelancer?.id !== undefined
           ? { id: linkedFreelancer.id }
           : null;
-    const linkedQcs = current.role === 'QC' ? await getCollection('qcs') : [];
+    const linkedQcs = hasAccountRole(current, 'QC') ? await getCollection('qcs') : [];
     const accountName = String(current.displayName || current.username || '').trim().toLowerCase();
     const accountEmail = String(current.email || '').trim().toLowerCase();
     const qcDeleteKeys = linkedQcs
@@ -4466,14 +4467,14 @@ function nullableInteger(value, label) {
 async function assertAdminAssignment(adminId) {
   if (adminId === null || adminId === undefined || adminId === '') return;
   const accounts = await getCollection('accounts');
-  const account = accounts.find((item) => String(item.id) === String(adminId) && item.role === 'Admin' && item.isActive !== false);
+  const account = accounts.find((item) => String(item.id) === String(adminId) && hasAccountRole(item, 'Admin') && item.isActive !== false);
   if (!account) throw validationError('Tài khoản Admin được giao không tồn tại hoặc đã bị khóa.');
 }
 
 function nullableField(value, role) {
   const field = String(value ?? '').trim();
   if (!field) {
-    if (['Freelancer', 'QC'].includes(role)) throw validationError('Account Freelancer/QC phải chọn ít nhất một mảng đã cấu hình.');
+    if (hasAnyRole(role, ['Freelancer', 'QC'])) throw validationError('Account Freelancer/QC phải chọn ít nhất một mảng đã cấu hình.');
     return null;
   }
   normalizeConfiguredFieldName(field);
@@ -4497,7 +4498,7 @@ function normalizeAccountFields(value, fallback, role) {
   if (fields.some((field) => !isValidConfiguredFieldName(field))) {
     throw validationError('Mảng có tên không hợp lệ.');
   }
-  if (['Freelancer', 'QC'].includes(role) && fields.length === 0) {
+  if (hasAnyRole(role, ['Freelancer', 'QC']) && fields.length === 0) {
     throw validationError('Account Freelancer/QC phải chọn ít nhất một mảng đã cấu hình.');
   }
   return fields;
@@ -4648,45 +4649,60 @@ function maskEmail(email) {
   return `${visibleStart}${'*'.repeat(Math.max(2, localPart.length - visibleStart.length - visibleEnd.length))}${visibleEnd}@${domain}`;
 }
 
-function getPasswordResetTransporter() {
-  if (passwordResetTransporter) return passwordResetTransporter;
-  const host = String(process.env.SMTP_HOST || '').trim();
-  const port = Number(process.env.SMTP_PORT || 587);
-  const user = String(process.env.SMTP_USER || '').trim();
-  const password = String(process.env.SMTP_PASSWORD || '');
-  const from = String(process.env.SMTP_FROM || user).trim();
-  if (!host || !from) {
-    const error = new Error('Chưa cấu hình SMTP_HOST và SMTP_FROM để gửi mã OTP.');
+function getResendConfig() {
+  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+  const from = String(process.env.RESEND_FROM || '').trim();
+  if (!apiKey || !from) {
+    const error = new Error('Chưa cấu hình RESEND_API_KEY và RESEND_FROM để gửi mã OTP.');
     error.statusCode = 503;
     throw error;
   }
-  if (!Number.isInteger(port) || port <= 0) {
-    const error = new Error('SMTP_PORT không hợp lệ.');
-    error.statusCode = 503;
-    throw error;
-  }
-
-  const transportOptions = {
-    host,
-    port,
-    secure: String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' || port === 465
-  };
-  if (user || password) transportOptions.auth = { user, pass: password };
-  passwordResetTransporter = nodemailer.createTransport(transportOptions);
-  return passwordResetTransporter;
+  return { apiKey, from };
 }
 
 async function sendPasswordResetOtp(email, otp) {
-  const from = String(process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
-  const transporter = getPasswordResetTransporter();
+  const { apiKey, from } = getResendConfig();
   const safeOtp = String(otp);
-  await transporter.sendMail({
-    from,
-    to: email,
-    subject: 'Mã OTP đặt lại mật khẩu - WZ System',
-    text: `Mã OTP đặt lại mật khẩu của bạn là ${safeOtp}. Mã có hiệu lực trong 10 phút và chỉ sử dụng một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này.`,
-    html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033"><h2>Đặt lại mật khẩu WZ System</h2><p>Mã OTP của bạn là:</p><p style="font-size:28px;font-weight:700;letter-spacing:8px;color:#2563eb">${safeOtp}</p><p>Mã có hiệu lực trong 10 phút và chỉ sử dụng một lần.</p><p>Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này.</p></div>`
-  });
+  let response;
+  try {
+    response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from,
+        to: [email],
+        subject: 'Mã OTP đặt lại mật khẩu - WZ System',
+        text: `Mã OTP đặt lại mật khẩu của bạn là ${safeOtp}. Mã có hiệu lực trong 10 phút và chỉ sử dụng một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này.`,
+        html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033"><h2>Đặt lại mật khẩu WZ System</h2><p>Mã OTP của bạn là:</p><p style="font-size:28px;font-weight:700;letter-spacing:8px;color:#2563eb">${safeOtp}</p><p>Mã có hiệu lực trong 10 phút và chỉ sử dụng một lần.</p><p>Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này.</p></div>`
+      })
+    });
+  } catch (error) {
+    const networkError = new Error(`Không thể kết nối Resend để gửi OTP: ${error.message}`);
+    networkError.statusCode = 502;
+    throw networkError;
+  }
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+  if (!response.ok) {
+    const providerMessage = payload?.message || payload?.error?.message || `Resend từ chối gửi email (HTTP ${response.status}).`;
+    const providerError = new Error(`Resend: ${providerMessage}`);
+    providerError.statusCode = response.status >= 500 ? 502 : 503;
+    throw providerError;
+  }
+
+  if (!payload?.id) {
+    const providerError = new Error('Resend không trả về mã email sau khi gửi OTP.');
+    providerError.statusCode = 502;
+    throw providerError;
+  }
 }
 
 function hasFreelancerAssignment(row) {
@@ -4809,15 +4825,55 @@ function verifyPassword(password, hash, salt) {
   }
 }
 
+function normalizeAccountRoles(rawRoles, fallbackRole = '') {
+  const values = Array.isArray(rawRoles) && rawRoles.length > 0
+    ? rawRoles
+    : (rawRoles === undefined || rawRoles === null || rawRoles === '' ? [fallbackRole] : [rawRoles]);
+  return [...new Set(values.map((value) => String(value ?? '').trim()).filter((value) => ACCOUNT_ROLES.includes(value)))];
+}
+
+function getAccountRoles(accountOrRoles, fallbackRole = '') {
+  if (Array.isArray(accountOrRoles)) return normalizeAccountRoles(accountOrRoles, fallbackRole);
+  if (accountOrRoles && typeof accountOrRoles === 'object') {
+    return normalizeAccountRoles(accountOrRoles.roles, accountOrRoles.role);
+  }
+  return normalizeAccountRoles(accountOrRoles, fallbackRole);
+}
+
+function getEffectiveRole(accountOrRoles) {
+  const roles = getAccountRoles(accountOrRoles);
+  return roles.sort((left, right) => ROLE_PRIORITY[right] - ROLE_PRIORITY[left])[0] || 'Freelancer';
+}
+
+function hasAnyRole(accountOrRoles, roles) {
+  const accountRoles = getAccountRoles(accountOrRoles);
+  return roles.some((role) => accountRoles.includes(role));
+}
+
+function hasAccountRole(accountOrRoles, role) {
+  return hasAnyRole(accountOrRoles, [role]);
+}
+
+function validateRoleFields(roles, fields) {
+  if (hasAnyRole(roles, ['Freelancer', 'QC']) && fields.length === 0) {
+    throw validationError('Account Freelancer/QC phải chọn ít nhất một mảng đã cấu hình.');
+  }
+  if (hasAccountRole(roles, 'Freelancer') && !hasAccountRole(roles, 'QC') && fields.length > 1) {
+    throw validationError('Freelancer chỉ được chọn một mảng.');
+  }
+}
+
 function toPublicAccount(account, freelancers = []) {
   const linkedFreelancer = freelancers.find((freelancer) => String(freelancer.fIld ?? freelancer.fId ?? freelancer.id) === String(account.freelancerId ?? ''));
   const fields = normalizeStoredFields(account.fields || linkedFreelancer?.fields, account.field || linkedFreelancer?.field);
+  const roles = getAccountRoles(account);
   return {
     id: account.id,
     username: account.username,
     displayName: account.displayName,
     email: account.email || '',
-    role: account.role,
+    role: getEffectiveRole(roles),
+    roles,
     field: fields[0] || '',
     fields,
     freelancerId: account.freelancerId ?? null,
@@ -4835,14 +4891,17 @@ function validateAccountPayload(payload) {
   const password = String(payload.password ?? '');
   const displayName = String(payload.displayName ?? '').trim();
   const email = String(payload.email ?? '').trim() || null;
-  const role = String(payload.role ?? '').trim();
-  const fields = normalizeAccountFields(payload.fields, payload.field, role);
+  const roles = normalizeAccountRoles(payload.roles, payload.role);
+  const role = getEffectiveRole(roles);
+  const fields = normalizeAccountFields(payload.fields, payload.field, roles);
   if (!/^[a-z0-9._-]{3,50}$/.test(username)) throw validationError('Username dài 3-50 ký tự, chỉ gồm chữ thường, số, dấu chấm, gạch dưới hoặc gạch ngang.');
   if (password.length < 6) throw validationError('Password phải có ít nhất 6 ký tự.');
-  if (!['Admin', 'QC', 'Freelancer'].includes(role)) throw validationError('Role phải là Admin, QC hoặc Freelancer.');
+  if (roles.length === 0) throw validationError('Phải chọn ít nhất một role hợp lệ.');
+  if (roles.length > 2) throw validationError('Mỗi account chỉ được có tối đa hai role.');
   if (!displayName || displayName.length > 150) throw validationError('Họ và tên không được để trống và tối đa 150 ký tự.');
   if (email && email.length > 255) throw validationError('Email không hợp lệ.');
-  return { username, password, displayName, email, role, field: fields[0] || null, fields, freelancerId: null };
+  validateRoleFields(roles, fields);
+  return { username, password, displayName, email, role, roles, field: fields[0] || null, fields, freelancerId: null };
 }
 
 function validateFreelancerUpdatePayload(payload) {
@@ -4916,34 +4975,40 @@ function validateAccountUpdatePayload(payload, current) {
     if (email && email.length > 255) throw validationError('Email không hợp lệ.');
     result.email = email;
   }
-  if (Object.prototype.hasOwnProperty.call(payload, 'role')) {
-    const role = String(payload.role ?? '').trim();
-    if (!['Admin', 'QC', 'Freelancer'].includes(role)) throw validationError('Role phải là Admin, QC hoặc Freelancer.');
-    result.role = role;
+  if (Object.prototype.hasOwnProperty.call(payload, 'roles') || Object.prototype.hasOwnProperty.call(payload, 'role')) {
+    const roles = normalizeAccountRoles(payload.roles, payload.role);
+    if (roles.length === 0) throw validationError('Phải chọn ít nhất một role hợp lệ.');
+    if (roles.length > 2) throw validationError('Mỗi account chỉ được có tối đa hai role.');
+    result.roles = roles;
+    result.role = getEffectiveRole(roles);
   }
   if (Object.prototype.hasOwnProperty.call(payload, 'field')) {
-    result.field = nullableField(payload.field, result.role || current.role);
+    result.field = nullableField(payload.field, result.roles || getAccountRoles(current));
   }
   if (Object.prototype.hasOwnProperty.call(payload, 'fields')) {
-    result.fields = normalizeAccountFields(payload.fields, payload.field, result.role || current.role);
+    result.fields = normalizeAccountFields(payload.fields, payload.field, result.roles || getAccountRoles(current));
   }
   if (Object.prototype.hasOwnProperty.call(payload, 'isActive')) {
     result.isActive = payload.isActive === true || payload.isActive === 'true' || payload.isActive === 1 || payload.isActive === '1';
   }
 
-  const nextRole = result.role || current.role;
+  const nextRoles = result.roles || getAccountRoles(current);
+  const nextRole = result.role || getEffectiveRole(nextRoles);
   const nextFields = Object.prototype.hasOwnProperty.call(result, 'fields')
     ? result.fields
     : normalizeAccountFields(current.fields, result.field ?? current.field, nextRole, true);
-  if (['Freelancer', 'QC'].includes(nextRole) && nextFields.length === 0) {
+  if (hasAnyRole(nextRoles, ['Freelancer', 'QC']) && nextFields.length === 0) {
     throw validationError('Account Freelancer/QC phải chọn ít nhất một mảng đã cấu hình.');
   }
-  if (nextRole === 'Freelancer' && nextFields.length > 1) {
+  if (hasAccountRole({ roles: nextRoles }, 'Freelancer') && !hasAccountRole({ roles: nextRoles }, 'QC') && nextFields.length > 1) {
     throw validationError('Freelancer chỉ được chọn một mảng.');
   }
-  result.fields = ['Freelancer', 'QC'].includes(nextRole) ? nextFields : [];
+  result.fields = hasAnyRole(nextRoles, ['Freelancer', 'QC']) ? nextFields : [];
   result.field = nextFields[0] || null;
-  result.freelancerId = ['Freelancer', 'QC'].includes(nextRole) ? (current.freelancerId ?? null) : null;
+  result.freelancerId = hasAnyRole(nextRoles, ['Freelancer', 'QC']) ? (current.freelancerId ?? null) : null;
+  result.roles = nextRoles;
+  result.role = nextRole;
+  validateRoleFields(nextRoles, nextFields);
 
   if (Object.keys(result).length === 3 && Object.prototype.hasOwnProperty.call(result, 'freelancerId') && Object.prototype.hasOwnProperty.call(result, 'field') && Object.prototype.hasOwnProperty.call(result, 'fields') && !Object.prototype.hasOwnProperty.call(payload, 'role') && !Object.prototype.hasOwnProperty.call(payload, 'field') && !Object.prototype.hasOwnProperty.call(payload, 'fields')) {
     throw validationError('Cần có ít nhất một trường để cập nhật.');
@@ -4952,14 +5017,14 @@ function validateAccountUpdatePayload(payload, current) {
 }
 
 async function assertFreelancerExists(freelancerId, role) {
-  if (!['Freelancer', 'QC'].includes(role)) return;
+  if (!hasAnyRole(role, ['Freelancer', 'QC'])) return;
   const freelancers = await getCollection('freelancers');
   const exists = freelancers.some((freelancer) => String(freelancer.fIld ?? freelancer.fId ?? freelancer.id) === String(freelancerId));
   if (!exists) throw validationError('Freelancer được liên kết không tồn tại.');
 }
 
 async function ensureFreelancerForAccount(account) {
-  if (!['Freelancer', 'QC'].includes(account.role)) return null;
+  if (!hasAnyRole(account.roles || account.role, ['Freelancer', 'QC'])) return null;
   if (account.freelancerId !== null && account.freelancerId !== undefined && account.freelancerId !== '') {
     return Number(account.freelancerId);
   }
@@ -4997,7 +5062,7 @@ async function assertFreelancerAccountAvailable(freelancerId, accountId = null) 
 }
 
 async function syncFreelancerFromAccount(account) {
-  if (!['Freelancer', 'QC'].includes(account.role) || account.freelancerId === null || account.freelancerId === undefined) return;
+  if (!hasAnyRole(account.roles || account.role, ['Freelancer', 'QC']) || account.freelancerId === null || account.freelancerId === undefined) return;
   await updateRow(
     'freelancers',
     { fIld: account.freelancerId },

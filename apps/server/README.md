@@ -57,6 +57,19 @@ Mặc định server chạy tại `http://localhost:5000`.
 - `GET /api/general-settings`
 - `PATCH /api/general-settings` (Admin; cấu hình kết nối Google Sheet)
 - `POST /api/google-sheet/sync` (Admin; đối soát hai chiều Google Sheet và `SeriesList`)
+
+### Account có hai role
+
+Mặc định mỗi account có một role. Role thứ hai chỉ được cấp bằng SQL trong bảng `Accounts`; giao diện vẫn chỉ cấp hoặc đổi một role. Hệ thống luôn dùng role có quyền cao nhất theo thứ tự `Admin > QC > Freelancer`.
+
+```sql
+UPDATE public."Accounts"
+SET "roles" = ARRAY['Admin', 'Freelancer']::text[]
+WHERE "username" = 'username_can_cap_quyen'
+RETURNING "id", "username", "roles", "role";
+```
+
+Chạy migration `docs/migrations/20260929_add_account_roles.sql` trước. Trigger sẽ tự đồng bộ cột `role` cũ thành `Admin` trong ví dụ trên. Chỉ người có role hiệu lực `Admin` mới có thể quản lý account.
 - `GET /api/difficulty-levels`
 - `POST /api/difficulty-levels`
 - `PATCH /api/difficulty-levels/:id`
@@ -93,9 +106,9 @@ Mặc định server chạy tại `http://localhost:5000`.
 - `SUPABASE_TABLE_FIELDS` (mặc định `Fields`)
 - `SUPABASE_TABLE_GENERAL_SETTINGS` (mặc định `GeneralSettings`)
 - `GOOGLE_SERVICE_ACCOUNT_JSON` hoặc `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` hoặc `GOOGLE_SERVICE_ACCOUNT_FILE` (thông tin Google Service Account; không commit secret)
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` (cấu hình SMTP để gửi OTP quên mật khẩu; không commit secret)
+- `RESEND_API_KEY`, `RESEND_FROM` (cấu hình Resend API để gửi OTP quên mật khẩu; không commit secret; `RESEND_FROM` phải là địa chỉ thuộc domain đã xác minh trên Resend)
 
-Luồng quên mật khẩu gửi OTP 6 số tới email đang lưu trong `Accounts`. OTP có hiệu lực 10 phút, tối đa 5 lần nhập; sau khi đặt mật khẩu mới, các phiên đăng nhập cũ của account sẽ bị thu hồi. Cần cấu hình SMTP trên backend/Railway trước khi dùng tính năng này.
+Luồng quên mật khẩu gửi OTP 6 số tới email đang lưu trong `Accounts`. OTP có hiệu lực 10 phút, tối đa 5 lần nhập; sau khi đặt mật khẩu mới, các phiên đăng nhập cũ của account sẽ bị thu hồi. Cần cấu hình `RESEND_API_KEY` và `RESEND_FROM` trên backend/Railway trước khi dùng tính năng này.
 
 Mỗi dòng trong bảng `Fields` có thêm `guideUrl` và `resourceUrl`. Dashboard trả các link theo mảng; Freelancer chỉ nhận link của mảng được gán trong account.
 

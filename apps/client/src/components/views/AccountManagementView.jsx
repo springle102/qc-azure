@@ -23,6 +23,7 @@ const INITIAL_FORM = {
   displayName: '',
   email: '',
   role: 'QC',
+  roles: ['QC'],
   field: '',
   fields: [],
   freelancerId: ''
@@ -90,7 +91,7 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
 
   const createAccount = async (event) => {
     event.preventDefault();
-    if (['QC', 'Freelancer'].includes(form.role) && form.fields.length === 0) {
+    if (hasRole(form.roles, ['QC', 'Freelancer']) && form.fields.length === 0) {
       showToast('Account Freelancer/QC cần chọn ít nhất một mảng.', 'error');
       return;
     }
@@ -115,6 +116,7 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
       displayName: account.displayName || '',
       email: account.email || '',
       role: account.role || 'QC',
+      roles: getAccountRoles(account),
       field: account.field || '',
       fields: Array.isArray(account.fields) ? account.fields : (account.field ? [account.field] : []),
       freelancerId: account.freelancerId ?? '',
@@ -129,7 +131,7 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
   const saveEdit = async (event) => {
     event.preventDefault();
     if (!editingAccount) return;
-    if (['QC', 'Freelancer'].includes(editForm.role) && editForm.fields.length === 0) {
+    if (hasRole(editForm.roles, ['QC', 'Freelancer']) && editForm.fields.length === 0) {
       showToast('Account Freelancer/QC cần chọn ít nhất một mảng.', 'error');
       return;
     }
@@ -201,7 +203,10 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
           </div>
           <div className="form-group">
             <label className="form-label" htmlFor="account-role">Role</label>
-            <select id="account-role" className="form-select" value={form.role} onChange={(event) => updateField('role', event.target.value)}>
+            <select id="account-role" className="form-select" value={form.role} onChange={(event) => {
+              const role = event.target.value;
+              setForm((current) => ({ ...current, role, roles: [role] }));
+            }}>
               {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
             </select>
           </div>
@@ -253,7 +258,7 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
                   <td className="mono-cell">{account.username}</td>
                   <td className="strong-cell">{account.displayName || '—'}</td>
                   <td>{account.email || '—'}</td>
-                  <td><span className={'role-badge role-' + String(account.role || '').toLowerCase()}>{account.role}</span></td>
+                  <td><span className={'role-badge role-' + String(account.role || '').toLowerCase()}>{formatRoles(account)}</span></td>
                   <td>{formatFields(account.fields, account.field)}</td>
                   <td>{account.freelancerName || getFreelancerName(account.freelancerId, freelancerRows)}</td>
                   <td><span className={'data-status ' + (account.isActive ? 'completed' : 'pending')}>{account.isActive ? 'Đang hoạt động' : 'Đã khóa'}</span></td>
@@ -299,8 +304,11 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
                 <input id="edit-account-email" className="form-input" type="email" value={editForm.email} onChange={(event) => updateEditField('email', event.target.value)} disabled={isSaving} />
               </div>
               <div className="form-group">
-                <label className="form-label" htmlFor="edit-account-role">Role</label>
-                <select id="edit-account-role" className="form-select" value={editForm.role} onChange={(event) => updateEditField('role', event.target.value)} disabled={isSaving}>
+                <label className="form-label" htmlFor="edit-account-role">Role hiệu lực</label>
+                <select id="edit-account-role" className="form-select" value={editForm.role} onChange={(event) => {
+                  const role = event.target.value;
+                  setEditForm((current) => ({ ...current, role, roles: role === current.role ? current.roles : [role] }));
+                }} disabled={isSaving}>
                   {ROLE_OPTIONS.map((role) => <option key={role} value={role}>{role}</option>)}
                 </select>
               </div>
@@ -327,11 +335,13 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
 }
 
 function toApiAccount(form, includePassword) {
+  const roles = getAccountRoles(form);
   const payload = {
     username: form.username,
     displayName: form.displayName,
     email: form.email,
-    role: form.role,
+    role: getEffectiveRole(roles),
+    roles,
     field: form.fields[0] || null,
     fields: form.fields
   };
@@ -341,6 +351,7 @@ function toApiAccount(form, includePassword) {
 }
 
 function getAccountFilterValue(account, key, freelancers) {
+  if (key === 'role') return formatRoles(account);
   if (key === 'fields') return getMemberFields(account).join(', ');
   if (key === 'freelancerName') return account.freelancerName || getFreelancerName(account.freelancerId, freelancers);
   if (key === 'status') return account.isActive ? 'Đang hoạt động' : 'Đã khóa';
@@ -382,6 +393,24 @@ function getMemberFields(member = {}) {
   if (!member || typeof member !== 'object') return [];
   if (Array.isArray(member.fields) && member.fields.length > 0) return member.fields;
   return member.field ? [member.field] : [];
+}
+
+function getAccountRoles(account = {}) {
+  const values = Array.isArray(account.roles) && account.roles.length > 0 ? account.roles : [account.role || 'QC'];
+  return [...new Set(values.filter((role) => ROLE_OPTIONS.includes(role)))];
+}
+
+function hasRole(roles, expected) {
+  return expected.some((role) => (Array.isArray(roles) ? roles : []).includes(role));
+}
+
+function getEffectiveRole(roles) {
+  const values = Array.isArray(roles) ? roles : [];
+  return values.includes('Admin') ? 'Admin' : values.includes('QC') ? 'QC' : 'Freelancer';
+}
+
+function formatRoles(account) {
+  return getAccountRoles(account).join(' + ');
 }
 
 function FieldCheckboxes({ options = [], value = [], onChange, disabled = false }) {
