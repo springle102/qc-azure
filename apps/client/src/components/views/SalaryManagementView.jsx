@@ -1,31 +1,41 @@
 import React, { useMemo, useState } from 'react';
 import { IconEye, IconRefresh, IconSearch, IconUsers, IconX } from '../common/Icons';
 
-export function SalaryManagementView({ salaries = [], isLoading, onRefresh }) {
+export function SalaryManagementView({ salaries = [], fields = [], isLoading, onRefresh }) {
   const [search, setSearch] = useState('');
+  const [fieldFilter, setFieldFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
   const [selectedQR, setSelectedQR] = useState(null);
   const members = useMemo(() => Array.isArray(salaries) ? salaries : [], [salaries]);
+  const fieldOptions = useMemo(() => getFieldOptions(fields, members), [fields, members]);
+  const roleOptions = useMemo(() => getRoleOptions(members), [members]);
 
   const filteredFreelancers = useMemo(() => {
     const query = search.trim().toLowerCase();
     const filtered = members.filter((freelancer) => {
       const memberFields = getMemberFields(freelancer);
+      const memberRole = getMemberRole(freelancer);
       const matchesSearch = !query || [
         freelancer.fId || freelancer.fIld,
         freelancer.name,
         memberFields.join(', '),
+        memberRole,
         freelancer.totalSalary ?? freelancer.salary ?? freelancer.luong,
         freelancer.earnedAmount,
         freelancer.bonus
       ].some((value) => String(value ?? '').toLowerCase().includes(query));
+      const matchesField = !fieldFilter || memberFields.some((field) => (
+        String(field).trim().toLowerCase() === fieldFilter.trim().toLowerCase()
+      ));
+      const matchesRole = !roleFilter || memberRole === roleFilter;
 
-      return matchesSearch;
+      return matchesSearch && matchesField && matchesRole;
     });
     return [...filtered].sort((left, right) => compareNumericValues(
       left.fId ?? left.fIld ?? left.qcId ?? left.id,
       right.fId ?? right.fIld ?? right.qcId ?? right.id
     ));
-  }, [members, search]);
+  }, [fieldFilter, members, roleFilter, search]);
 
   return (
     <div className="fade-in">
@@ -45,6 +55,24 @@ export function SalaryManagementView({ salaries = [], isLoading, onRefresh }) {
             <IconSearch size={17} />
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo ID, họ tên hoặc mảng" />
           </div>
+          <select
+            className="form-select toolbar-filter"
+            value={fieldFilter}
+            onChange={(event) => setFieldFilter(event.target.value)}
+            aria-label="Lọc theo mảng"
+          >
+            <option value="">Tất cả mảng</option>
+            {fieldOptions.map((field) => <option value={field} key={field}>{field}</option>)}
+          </select>
+          <select
+            className="form-select toolbar-filter"
+            value={roleFilter}
+            onChange={(event) => setRoleFilter(event.target.value)}
+            aria-label="Lọc theo role"
+          >
+            <option value="">Tất cả role</option>
+            {roleOptions.map((role) => <option value={role} key={role}>{role}</option>)}
+          </select>
         </div>
 
         <div className="table-wrapper table-wrapper-flat">
@@ -119,6 +147,28 @@ function formatSalary(value) {
 function getMemberFields(member) {
   if (Array.isArray(member.fields) && member.fields.length > 0) return member.fields;
   return member.field ? [member.field] : [];
+}
+
+function getMemberRole(member) {
+  return member.isQc || member.role === 'QC' ? 'QC' : 'Freelancer';
+}
+
+function getFieldOptions(fields, members) {
+  const values = [
+    ...(Array.isArray(fields) ? fields.map((field) => field?.name || field) : []),
+    ...members.flatMap((member) => getMemberFields(member))
+  ]
+    .map((field) => String(field ?? '').trim())
+    .filter(Boolean);
+
+  return [...new Map(values.map((field) => [field.toLowerCase(), field])).values()]
+    .sort((left, right) => left.localeCompare(right, 'vi', { sensitivity: 'base' }));
+}
+
+function getRoleOptions(members) {
+  const roles = new Set(['Freelancer', 'QC']);
+  members.forEach((member) => roles.add(getMemberRole(member)));
+  return [...roles].sort((left, right) => left === 'Freelancer' ? -1 : right === 'Freelancer' ? 1 : left.localeCompare(right, 'vi'));
 }
 
 function compareNumericValues(leftValue, rightValue) {

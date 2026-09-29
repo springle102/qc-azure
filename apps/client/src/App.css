@@ -1073,11 +1073,11 @@
 .chapter-badge {
   font-family: var(--font-mono);
   font-weight: 700;
-  color: #38bdf8;
+  color: #ffffff;
 }
 
 :root[data-theme='light'] .chapter-badge {
-  color: #0284c7;
+  color: #000000;
 }
 
 .series-id-badge {
@@ -5002,6 +5002,13 @@
   box-sizing: border-box !important;
 }
 
+.deadline-table .deadline-column-type {
+  width: 92px !important;
+  min-width: 92px !important;
+  max-width: 92px !important;
+  box-sizing: border-box !important;
+}
+
 /* Cột 1: Hạn DL (Cố định ở vị trí 0) */
 .deadline-table th.deadline-column-endTask,
 .deadline-table td.deadline-column-endTask {
@@ -5034,11 +5041,27 @@
   background: #0a0f1d !important;
 }
 
-/* Cột 3: Tên bộ truyện (Cố định ở vị trí 220px = 116px + 104px) */
+/* Cột 3: Mảng (Cố định ở vị trí 220px = 116px + 104px) */
+.deadline-table th.deadline-column-type,
+.deadline-table td.deadline-column-type {
+  position: sticky;
+  left: 220px;
+  z-index: 10;
+  background: #0d1527 !important;
+  background-clip: padding-box;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.deadline-table th.deadline-column-type {
+  z-index: 25;
+  background: #0a0f1d !important;
+}
+
+/* Cột 4: Tên bộ truyện (Cố định ở vị trí 312px = 220px + 92px) */
 .deadline-table th.deadline-column-seriesName,
 .deadline-table td.deadline-column-seriesName {
   position: sticky;
-  left: 220px;
+  left: 312px;
   z-index: 10;
   background: #0d1527 !important;
   background-clip: padding-box;
@@ -5055,6 +5078,7 @@
 /* Hover Dark Mode: Nền 100% đặc (solid opaque) hoàn toàn không trong suốt để không thấy nội dung trượt bên dưới */
 .deadline-table tr:hover td.deadline-column-endTask,
 .deadline-table tr:hover td.deadline-column-seriesId,
+.deadline-table tr:hover td.deadline-column-type,
 .deadline-table tr:hover td.deadline-column-seriesName {
   background: #151f38 !important;
 }
@@ -5267,6 +5291,7 @@
 /* Sticky Table Columns in Light Mode */
 :root[data-theme='light'] .deadline-table th.deadline-column-endTask,
 :root[data-theme='light'] .deadline-table th.deadline-column-seriesId,
+:root[data-theme='light'] .deadline-table th.deadline-column-type,
 :root[data-theme='light'] .deadline-table th.deadline-column-seriesName {
   background: #f1f5f9 !important;
   border-color: #e2e8f0;
@@ -5278,6 +5303,7 @@
 }
 :root[data-theme='light'] .deadline-table td.deadline-column-endTask,
 :root[data-theme='light'] .deadline-table td.deadline-column-seriesId,
+:root[data-theme='light'] .deadline-table td.deadline-column-type,
 :root[data-theme='light'] .deadline-table td.deadline-column-seriesName {
   background: #ffffff !important;
   border-color: #f1f5f9;
@@ -5289,6 +5315,7 @@
 }
 :root[data-theme='light'] .deadline-table tr:hover td.deadline-column-endTask,
 :root[data-theme='light'] .deadline-table tr:hover td.deadline-column-seriesId,
+:root[data-theme='light'] .deadline-table tr:hover td.deadline-column-type,
 :root[data-theme='light'] .deadline-table tr:hover td.deadline-column-seriesName {
   background: #f8fafc !important;
 }
@@ -5463,4 +5490,3 @@
 :root[data-theme='light'] .auth-brand strong {
   color: #0f172a;
 }
-

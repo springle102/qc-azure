@@ -9,9 +9,9 @@ const columns = [
   ['submittedAt', 'Ngày nộp'],
   ['fIld', 'Freelancer'],
   ['seriesId', 'ID bộ truyện'],
+  ['type', 'Mảng'],
   ['seriesName', 'Tên bộ truyện'],
   ['chapterNumber', 'Chapter'],
-  ['type', 'Mảng'],
   ['statusRaw', 'File'],
   ['urlSeries', 'URL bộ truyện'],
   ['status', 'Status', 'status-select'],
@@ -725,7 +725,7 @@ function renderValue(value, key, field, difficultyLevels, freelancers, qcs, item
   }
   if (value === null || value === undefined || value === '') return '—';
   if (key === 'seriesId') return <span className="series-id-badge">{value}</span>;
-  if (key === 'chapterNumber') return <span className="chapter-badge">Ch. {value}</span>;
+  if (key === 'chapterNumber') return <span className="chapter-badge">{value}</span>;
   if (key === 'urlSeries') return /^https?:\/\//i.test(String(value))
     ? <a className="table-link" href={value} target="_blank" rel="noreferrer">Mở link</a>
     : '—';
