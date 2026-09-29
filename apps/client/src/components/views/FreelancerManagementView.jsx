@@ -159,31 +159,37 @@ export function FreelancerManagementView({ freelancers = [], accounts = [], fiel
           <table className="custom-table freelancer-table">
             <thead>
               <tr>
-                {FREELANCER_FILTER_COLUMNS.map(({ key, label, sortKind }) => (
-                  <th key={key}>
-                    <div className="deadline-column-header">
-                      <span>{label}</span>
-                      <ColumnFilterButton
-                        label={label}
-                        values={columnFilterOptions[key] || []}
-                        activeValues={columnFilters[key]}
-                        sortKind={sortKind}
-                        activeSortDirection={columnSort?.key === key ? columnSort.direction : null}
-                        onApply={(selectedValues) => updateColumnFilter(key, selectedValues)}
-                        onSort={(direction) => updateColumnSort(key, direction)}
-                      />
-                    </div>
-                  </th>
+                {FREELANCER_FILTER_COLUMNS.map(({ key, label, sortKind }, index) => (
+                  <React.Fragment key={key}>
+                    {index === 1 && <th className="freelancer-avatar-cell">Avatar</th>}
+                    <th>
+                      <div className="deadline-column-header">
+                        <span>{label}</span>
+                        <ColumnFilterButton
+                          label={label}
+                          values={columnFilterOptions[key] || []}
+                          activeValues={columnFilters[key]}
+                          sortKind={sortKind}
+                          activeSortDirection={columnSort?.key === key ? columnSort.direction : null}
+                          onApply={(selectedValues) => updateColumnFilter(key, selectedValues)}
+                          onSort={(direction) => updateColumnSort(key, direction)}
+                        />
+                      </div>
+                    </th>
+                  </React.Fragment>
                 ))}
                 {canEdit && <th>Thao tác</th>}
               </tr>
             </thead>
             <tbody>
               {filteredFreelancers.length === 0 ? (
-                <tr><td colSpan={canEdit ? 8 : 7}><EmptyTable icon={<IconUsers size={24} />} text={isLoading ? 'Đang tải dữ liệu...' : 'Chưa có freelancer trong hệ thống.'} /></td></tr>
+                <tr><td colSpan={canEdit ? 9 : 8}><EmptyTable icon={<IconUsers size={24} />} text={isLoading ? 'Đang tải dữ liệu...' : 'Chưa có freelancer trong hệ thống.'} /></td></tr>
               ) : sortedFreelancers.map((freelancer) => (
                 <tr key={freelancer.fIld || freelancer.fId || freelancer.id}>
                   <td className="mono-cell">{freelancer.fId || freelancer.fIld || '—'}</td>
+                  <td className="freelancer-avatar-cell">
+                    <FreelancerAvatar freelancer={freelancer} />
+                  </td>
                   <td className="strong-cell">{freelancer.name || '—'}</td>
                   <td>{freelancer.email || '—'}</td>
                   <td><span className="field-badge">{getMemberFields(freelancer).join(', ') || '—'}</span></td>
@@ -243,6 +249,26 @@ export function FreelancerManagementView({ freelancers = [], accounts = [], fiel
 
 function EmptyTable({ icon, text }) {
   return <div className="empty-state table-empty">{icon}<strong>{text}</strong></div>;
+}
+
+function FreelancerAvatar({ freelancer = {} }) {
+  const [hasError, setHasError] = useState(false);
+  const avatar = freelancer.avatar || freelancer.accountAvatar || '';
+  const name = String(freelancer.name || freelancer.email || '?').trim();
+  const initial = name.charAt(0).toUpperCase() || '?';
+
+  if (avatar && !hasError) {
+    return (
+      <img
+        className="freelancer-avatar"
+        src={avatar}
+        alt={`Avatar của ${freelancer.name || 'freelancer'}`}
+        onError={() => setHasError(true)}
+      />
+    );
+  }
+
+  return <span className="freelancer-avatar freelancer-avatar-placeholder" title={freelancer.name || 'Chưa có avatar'}>{initial}</span>;
 }
 
 function getFreelancerFilterValue(freelancer = {}, key) {

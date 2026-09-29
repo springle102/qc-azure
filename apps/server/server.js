@@ -200,6 +200,7 @@ app.get('/api/freelancers', requireAuth, async (req, res) => {
       const account = accounts.find((item) => String(item.freelancerId ?? '') === String(freelancerId));
       return {
         ...freelancer,
+        avatar: account?.avatar || freelancer.avatar || '',
         accountId: account?.id ?? null,
         accountUsername: account?.username ?? null,
         accountRole: account?.role ?? null,
