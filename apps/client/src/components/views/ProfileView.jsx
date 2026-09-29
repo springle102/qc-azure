@@ -6,6 +6,7 @@ export function ProfileView({ currentUser = {}, onSaveProfile }) {
   const [email, setEmail] = useState(currentUser.email || '');
   const [avatar, setAvatar] = useState(currentUser.avatar || '');
   const [imageQR, setImageQR] = useState(currentUser.imageQR || '');
+  const [avatarError, setAvatarError] = useState('');
   const [qrError, setQrError] = useState('');
   const [isSavingQR, setIsSavingQR] = useState(false);
   const [newPassword, setNewPassword] = useState('');
@@ -20,7 +21,21 @@ export function ProfileView({ currentUser = {}, onSaveProfile }) {
 
   const handleAvatar = (event) => {
     const file = event.target.files?.[0];
-    if (file) setAvatar(URL.createObjectURL(file));
+    if (!file) return;
+    setAvatarError('');
+    if (!file.type.startsWith('image/')) {
+      setAvatarError('Vui lòng chọn một file hình ảnh.');
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      setAvatarError('Ảnh đại diện không được vượt quá 3 MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => setAvatar(String(reader.result || ''));
+    reader.onerror = () => setAvatarError('Không thể đọc file ảnh đại diện.');
+    reader.readAsDataURL(file);
   };
 
   const handleQRUpload = (event) => {
@@ -82,8 +97,10 @@ export function ProfileView({ currentUser = {}, onSaveProfile }) {
           </div>
           <label className="btn btn-secondary btn-sm profile-upload-button">
             <IconCamera size={16} /> Tải ảnh đại diện
-            <input type="file" accept="image/*" onChange={handleAvatar} hidden />
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={handleAvatar} hidden />
           </label>
+          {avatar && <button type="button" className="btn btn-outline btn-sm" onClick={() => { setAvatar(''); setAvatarError(''); }}>Xóa ảnh</button>}
+          {avatarError && <span className="profile-qr-error" role="alert">{avatarError}</span>}
           <span className="profile-role">{currentUser.role || '—'}</span>
         </section>
 

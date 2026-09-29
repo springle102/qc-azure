@@ -62,6 +62,8 @@ Mặc định server chạy tại `http://localhost:5000`.
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY` hoặc `SUPABASE_SECRET_KEY` (chỉ cần khai báo một; giữ key ở backend/Railway, không đưa vào client)
 - `SUPABASE_ERROR_SCREENSHOT_BUCKET` (mặc định `error-screenshots`; bucket public được tạo tự động để trình duyệt tải ảnh trực tiếp qua CDN)
+- `SUPABASE_AVATAR_BUCKET` (mặc định `avatars`; bucket public được tạo tự động để lưu ảnh đại diện)
+- `SUPABASE_QR_BUCKET` (mặc định `qr-codes`; bucket public được tạo tự động để lưu mã QR freelancer)
 - `SUPABASE_TABLE_TASKS` (mặc định `SeriesList`)
 - `SUPABASE_TABLE_FREELANCERS` (mặc định `Freelancer`)
 - `SUPABASE_TABLE_QC` (mặc định `QC`)
@@ -80,6 +82,10 @@ Mỗi dòng trong bảng `Fields` có thêm `guideUrl` và `resourceUrl`. Dashbo
 ## Screenshot trên Supabase Storage
 
 Khi đã khai báo `SUPABASE_URL` và `SUPABASE_SERVICE_ROLE_KEY`, screenshot mới sẽ được upload vào bucket `SUPABASE_ERROR_SCREENSHOT_BUCKET` và bảng `Errors` chỉ lưu URL ảnh. Nếu bucket chưa tồn tại, server tự tạo bucket public `error-screenshots` để trình duyệt tải ảnh trực tiếp qua CDN. Admin có thể bấm `Chuyển ảnh lên Storage` một lần trong màn hình Quản lý lỗi để migrate các ảnh Base64 cũ.
+
+Ảnh đại diện được upload vào bucket `SUPABASE_AVATAR_BUCKET` và bảng `Accounts` chỉ lưu public URL. Bucket `avatars` sẽ được tạo tự động nếu chưa tồn tại.
+
+Mã QR freelancer được upload vào bucket `SUPABASE_QR_BUCKET` và cột `Freelancer.imageQR` chỉ lưu public URL. Bucket `qr-codes` sẽ được tạo tự động nếu chưa tồn tại.
 
 ## Đồng bộ Google Sheet riêng tư
 

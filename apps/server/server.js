@@ -14,9 +14,17 @@ import {
   updateRowById
 } from './supabaseRepository.js';
 import {
+  getAvatarStoragePath,
   getErrorScreenshotStoragePath,
+  getQrStoragePath,
+  isAvatarStorageConfigured,
   isErrorScreenshotStorageConfigured,
+  isQrStorageConfigured,
+  removeAvatars,
   removeErrorScreenshots,
+  removeQrCodes,
+  uploadAvatar,
+  uploadQrCode,
   uploadErrorScreenshot
 } from './supabaseStorage.js';
 
@@ -27,6 +35,8 @@ const SESSION_TTL_MS = 1000 * 60 * 60 * 24;
 const GOOGLE_REQUEST_TIMEOUT_MS = 30_000;
 const SYNC_WRITE_CONCURRENCY = 8;
 const GOOGLE_DRIVE_FOLDER_CACHE_TTL_MS = 10 * 60 * 1000;
+const DEADLINE_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+const DEADLINE_TIME_ZONE_OFFSET = '+07:00';
 const DEADLINE_REGISTRATION_STABILITY_OPTIONS = ['Trong tháng', '2-3 tháng kế', 'cố định mỗi tháng'];
 
 const corsOptions = {
@@ -122,11 +132,12 @@ app.get('/api/health', (req, res) => {
 app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
   try {
     await syncGoogleSheetIfDue({ waitForCompletion: false });
-    const [tasks, deadlines, settings] = await Promise.all([
+    const [tasks, deadlineRows, settings] = await Promise.all([
       getCollection('tasks'),
       getCollection('deadlines'),
       getGeneralSettings()
     ]);
+    const deadlines = deadlineRows.map(normalizeDeadlineForResponse);
     const scopedTasks = filterRowsForUser(tasks, req.authUser);
     const scopedDeadlines = filterRowsForUser(deadlines, req.authUser);
     const trackedTasks = scopedDeadlines.length > 0 ? scopedDeadlines : scopedTasks;
@@ -957,7 +968,7 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber', requireAuth, async (req, re
 
     const updates = { ...(req.body || {}) };
     if (Object.prototype.hasOwnProperty.call(updates, 'endTask')) {
-      updates.endTask = normalizeDeadlineDate(updates.endTask, 'Hạn DL');
+      updates.endTask = normalizeDeadlineDueDate(updates.endTask, 'Hạn DL');
     }
     if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
       updates.status = validateTaskStatus(updates.status);
@@ -1188,6 +1199,11 @@ app.patch('/api/profile', requireAuth, async (req, res) => {
     if (!currentAccount) return res.status(404).json({ success: false, message: 'Không tìm thấy account hiện tại.' });
 
     const accountUpdates = {};
+    const hasAvatarUpdate = Object.prototype.hasOwnProperty.call(req.body || {}, 'avatar');
+    const previousAvatarPath = hasAvatarUpdate ? getAvatarStoragePath(currentAccount.avatar) : null;
+    let nextAvatarPath = null;
+    let previousQrPath = null;
+    let nextQrPath = null;
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'name')) {
       const displayName = String(req.body.name ?? '').trim();
       if (!displayName || displayName.length > 150) throw validationError('Họ và tên không được để trống và tối đa 150 ký tự.');
@@ -1198,6 +1214,10 @@ app.patch('/api/profile', requireAuth, async (req, res) => {
       if (email && email.length > 255) throw validationError('Email không hợp lệ.');
       accountUpdates.email = email;
     }
+    if (hasAvatarUpdate) {
+      accountUpdates.avatar = await materializeAvatar(req.body.avatar, currentAccount.id);
+      nextAvatarPath = getAvatarStoragePath(accountUpdates.avatar);
+    }
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'password')) {
       const password = String(req.body.password ?? '');
       if (password.length < 6) throw validationError('Password phải có ít nhất 6 ký tự.');
@@ -1207,8 +1227,15 @@ app.patch('/api/profile', requireAuth, async (req, res) => {
     }
 
     const account = Object.keys(accountUpdates).length > 0
-      ? await updateRowById('accounts', currentAccount.id, accountUpdates, ['displayName', 'email', 'passwordHash', 'passwordSalt'])
+      ? await updateRowById('accounts', currentAccount.id, accountUpdates, ['displayName', 'email', 'avatar', 'passwordHash', 'passwordSalt'])
       : currentAccount;
+    if (hasAvatarUpdate && previousAvatarPath && previousAvatarPath !== nextAvatarPath) {
+      try {
+        await removeAvatars([previousAvatarPath]);
+      } catch (error) {
+        console.error('Không thể dọn avatar cũ khỏi Supabase Storage:', error.message);
+      }
+    }
     if (Object.keys(accountUpdates).some((key) => ['displayName', 'email'].includes(key))) {
       await syncFreelancerFromAccount(account);
     }
@@ -1218,8 +1245,19 @@ app.patch('/api/profile', requireAuth, async (req, res) => {
       if (freelancerId === null || freelancerId === undefined || freelancerId === '') {
         throw validationError('Account hiện tại chưa được liên kết với hồ sơ freelancer.');
       }
-      const imageQR = normalizeImageDataUrl(req.body.imageQR);
+      const freelancers = await getCollection('freelancers');
+      const currentFreelancer = freelancers.find((freelancer) => String(freelancer.fIld ?? freelancer.fId ?? freelancer.id) === String(freelancerId));
+      previousQrPath = getQrStoragePath(currentFreelancer?.imageQR);
+      const imageQR = await materializeQrCode(req.body.imageQR, freelancerId);
+      nextQrPath = getQrStoragePath(imageQR);
       await updateRow('freelancers', { fIld: freelancerId }, { imageQR }, ['imageQR']);
+      if (previousQrPath && previousQrPath !== nextQrPath) {
+        try {
+          await removeQrCodes([previousQrPath]);
+        } catch (error) {
+          console.error('Không thể dọn mã QR cũ khỏi Supabase Storage:', error.message);
+        }
+      }
     }
 
     const linkedFreelancers = await getCollection('freelancers');
@@ -1324,10 +1362,51 @@ function normalizeOptionalUrl(value, label) {
 function normalizeImageDataUrl(value) {
   const rawValue = String(value ?? '').trim();
   if (!rawValue) return null;
-  if (rawValue.length > 4 * 1024 * 1024 || !/^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(rawValue)) {
+  if (rawValue.length > 5 * 1024 * 1024 || !/^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(rawValue)) {
     throw validationError('Mã QR phải là ảnh PNG, JPG, WEBP hoặc GIF hợp lệ và không quá 3 MB.');
   }
   return rawValue;
+}
+
+function normalizeAvatarDataUrl(value) {
+  const rawValue = String(value ?? '').trim();
+  if (!rawValue) return null;
+  if (rawValue.length > 5 * 1024 * 1024 || !/^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(rawValue)) {
+    throw validationError('Ảnh đại diện phải là ảnh PNG, JPG, WEBP hoặc GIF hợp lệ và không quá 3 MB.');
+  }
+  return rawValue;
+}
+
+async function materializeAvatar(value, ownerKey) {
+  const rawValue = String(value ?? '').trim();
+  if (!rawValue) return null;
+  if (getAvatarStoragePath(rawValue)) return rawValue;
+  if (!isAvatarStorageConfigured()) {
+    throw validationError('Chưa cấu hình SUPABASE_URL và SUPABASE_SERVICE_ROLE_KEY để lưu avatar.');
+  }
+
+  const normalizedValue = normalizeAvatarDataUrl(rawValue);
+  const image = parseErrorImageDataUrl(normalizedValue);
+  if (!image) throw validationError('Ảnh đại diện không hợp lệ.');
+  const extension = getErrorImageExtension(image.contentType);
+  const path = `accounts/${String(ownerKey).replace(/[^a-z0-9_-]/gi, '_')}/${crypto.randomUUID()}.${extension}`;
+  return uploadAvatar({ path, data: image.data, contentType: image.contentType });
+}
+
+async function materializeQrCode(value, ownerKey) {
+  const rawValue = String(value ?? '').trim();
+  if (!rawValue) return null;
+  if (getQrStoragePath(rawValue)) return rawValue;
+  if (!isQrStorageConfigured()) {
+    throw validationError('Chưa cấu hình SUPABASE_URL và SUPABASE_SERVICE_ROLE_KEY để lưu mã QR.');
+  }
+
+  const normalizedValue = normalizeImageDataUrl(rawValue);
+  const image = parseErrorImageDataUrl(normalizedValue);
+  if (!image) throw validationError('Mã QR không hợp lệ.');
+  const extension = getErrorImageExtension(image.contentType);
+  const path = `freelancers/${String(ownerKey).replace(/[^a-z0-9_-]/gi, '_')}/${crypto.randomUUID()}.${extension}`;
+  return uploadQrCode({ path, data: image.data, contentType: image.contentType });
 }
 
 const MAX_ERROR_SCREENSHOT_COUNT = 3;
@@ -2358,22 +2437,43 @@ function parseImportedBoolean(value) {
   return ['true', '1', 'yes', 'y', 'done', 'paid', 'đã thanh toán', 'đã duyệt'].includes(text);
 }
 
-function parseImportedDate(value, label, rowNumber) {
+function parseImportedDate(value, label, rowNumber, { endOfDay = false } = {}) {
   const text = String(value ?? '').trim();
   if (!text) return null;
   if (/^\d+(\.\d+)?$/.test(text)) {
     const serial = Number(text);
-    if (serial > 10_000 && serial < 100_000) return new Date(Date.UTC(1899, 11, 30) + serial * 86400000).toISOString();
+    if (serial > 10_000 && serial < 100_000) {
+      const serialDate = new Date(Date.UTC(1899, 11, 30) + serial * 86400000);
+      return endOfDay
+        ? normalizeDeadlineEndOfDayFromParts(serialDate.getUTCFullYear(), serialDate.getUTCMonth() + 1, serialDate.getUTCDate(), `Dòng ${rowNumber}: ${label}`)
+        : serialDate.toISOString();
+    }
   }
   const vietnameseDate = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:\s+(\d{1,2}):?(\d{2})?(?::?(\d{2}))?)?$/);
   const shortDate = text.match(/^(\d{1,2})[./-](\d{1,2})(?:\s+(\d{1,2}):?(\d{2})?(?::?(\d{2}))?)?$/);
+  if (endOfDay && vietnameseDate) {
+    return normalizeDeadlineEndOfDayFromParts(
+      Number(vietnameseDate[3]),
+      Number(vietnameseDate[2]),
+      Number(vietnameseDate[1]),
+      `Dòng ${rowNumber}: ${label}`
+    );
+  }
+  if (endOfDay && shortDate) {
+    return normalizeDeadlineEndOfDayFromParts(
+      new Date().getFullYear(),
+      Number(shortDate[2]),
+      Number(shortDate[1]),
+      `Dòng ${rowNumber}: ${label}`
+    );
+  }
   const parsed = vietnameseDate
     ? new Date(Number(vietnameseDate[3]), Number(vietnameseDate[2]) - 1, Number(vietnameseDate[1]), Number(vietnameseDate[4] || 0), Number(vietnameseDate[5] || 0), Number(vietnameseDate[6] || 0))
     : shortDate
       ? new Date(new Date().getFullYear(), Number(shortDate[2]) - 1, Number(shortDate[1]), Number(shortDate[3] || 0), Number(shortDate[4] || 0), Number(shortDate[5] || 0))
-    : new Date(text);
+      : new Date(text);
   if (Number.isNaN(parsed.getTime())) throw validationError(`Dòng ${rowNumber}: ${label} không hợp lệ.`);
-  return parsed.toISOString();
+  return endOfDay ? normalizeDeadlineDueDate(parsed.toISOString(), `Dòng ${rowNumber}: ${label}`) : parsed.toISOString();
 }
 
 function normalizeImportedStatus(value) {
@@ -2421,7 +2521,7 @@ function buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qc
   const importedPrice = parseImportedMoney(getSheetValue(row, headerIndex, 'price'), 'Price per chapter', rowNumber);
   const difficultyFromSheet = getSheetValue(row, headerIndex, 'difficulty');
   const difficulty = difficultyFromSheet || (importedPrice !== null ? 'Imported' : null);
-  const endTask = parseImportedDate(getSheetValue(row, headerIndex, 'endTask'), 'endTask', rowNumber);
+  const endTask = parseImportedDate(getSheetValue(row, headerIndex, 'endTask'), 'endTask', rowNumber, { endOfDay: true });
   const submittedAtFromSheet = parseImportedDate(getSheetValue(row, headerIndex, 'submittedAt'), 'submittedAt', rowNumber);
   const rawStatus = getSheetValue(row, headerIndex, 'statusRaw') || getSheetValue(row, headerIndex, 'status') || 'Đang thực hiện';
   const status = normalizeImportedStatus(getSheetValue(row, headerIndex, 'status') || rawStatus);
@@ -2528,10 +2628,20 @@ function findGoogleSheetRow(tab, seriesId, chapterNumber) {
   return null;
 }
 
-function formatGoogleSheetDate(value) {
+function formatGoogleSheetDate(value, { dateOnly = false } = {}) {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
+  if (dateOnly) {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: DEADLINE_TIME_ZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+    return `${values.day}/${values.month}/${values.year}`;
+  }
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = date.getFullYear();
@@ -2596,7 +2706,8 @@ function getGoogleSheetStatusValue(tab, rowNumber, row, columnIndex) {
 
 function getGoogleSheetCellValue(row, key, fieldOverride = null, asCheckbox = false, statusValue = null) {
   if (key === 'type' && fieldOverride) return fieldOverride;
-  if (key === 'endTask' || key === 'submittedAt') return formatGoogleSheetDate(row[key]);
+  if (key === 'endTask') return formatGoogleSheetDate(row[key], { dateOnly: true });
+  if (key === 'submittedAt') return formatGoogleSheetDate(row[key]);
   if (key === 'statusRaw' && asCheckbox) return isRawStatusChecked(row.statusRaw);
   if (key === 'status' && statusValue !== null) return statusValue;
   if (key === 'completionPercent') {
@@ -3682,7 +3793,8 @@ function isFreelancerTaskComplete(task) {
 }
 
 function getTaskDueTime(task) {
-  const value = task?.endTask || task?.deadline || task?.dueDate;
+  const normalizedTask = task?.endTask ? normalizeDeadlineForResponse(task) : task;
+  const value = normalizedTask?.endTask || normalizedTask?.deadline || normalizedTask?.dueDate;
   if (!value) return null;
   const timestamp = new Date(value).getTime();
   return Number.isNaN(timestamp) ? null : timestamp;
@@ -3707,14 +3819,24 @@ function getCalendarDateKey(value) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
+function normalizeDeadlineForResponse(deadline) {
+  if (!deadline?.endTask) return deadline;
+  try {
+    return { ...deadline, endTask: normalizeDeadlineDueDate(deadline.endTask, 'Hạn DL') };
+  } catch {
+    return deadline;
+  }
+}
+
 function decorateDeadlineTiming(deadline) {
-  const storedSeconds = Math.max(0, Number(deadline.workDurationSeconds || 0));
-  const liveSeconds = deadline.doingStartedAt && !deadline.submittedAt
-    ? Math.max(0, Math.floor((Date.now() - new Date(deadline.doingStartedAt).getTime()) / 1000))
+  const normalizedDeadline = normalizeDeadlineForResponse(deadline);
+  const storedSeconds = Math.max(0, Number(normalizedDeadline.workDurationSeconds || 0));
+  const liveSeconds = normalizedDeadline.doingStartedAt && !normalizedDeadline.submittedAt
+    ? Math.max(0, Math.floor((Date.now() - new Date(normalizedDeadline.doingStartedAt).getTime()) / 1000))
     : 0;
   const workDurationSeconds = storedSeconds + liveSeconds;
   return {
-    ...deadline,
+    ...normalizedDeadline,
     workDurationSeconds,
     workDurationHours: Number((workDurationSeconds / 3600).toFixed(2))
   };
@@ -3998,7 +4120,7 @@ function validateDeadlineCreatePayload(payload) {
   return {
     seriesId,
     chapterNumber,
-    endTask: normalizeDeadlineDate(payload.endTask, 'Hạn DL'),
+    endTask: normalizeDeadlineDueDate(payload.endTask, 'Hạn DL'),
     submittedAt: status === 'submitted' ? (submittedAt || new Date().toISOString()) : submittedAt,
     seriesName: nullableText(payload.seriesName),
     type,
@@ -4204,6 +4326,42 @@ function normalizeAccountFields(value, fallback, role) {
     throw validationError('Account Freelancer/QC phải chọn ít nhất một mảng đã cấu hình.');
   }
   return fields;
+}
+
+function normalizeDeadlineEndOfDayFromParts(year, month, day, label) {
+  const yearNumber = Number(year);
+  const monthNumber = Number(month);
+  const dayNumber = Number(day);
+  const dateText = `${String(yearNumber).padStart(4, '0')}-${String(monthNumber).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`;
+  const date = new Date(`${dateText}T23:59:00${DEADLINE_TIME_ZONE_OFFSET}`);
+  const isValidDate = Number.isFinite(date.getTime())
+    && date.getUTCFullYear() === yearNumber
+    && date.getUTCMonth() + 1 === monthNumber
+    && date.getUTCDate() === dayNumber;
+  if (!isValidDate) throw validationError(label + ' không hợp lệ.');
+  return date.toISOString();
+}
+
+function getVietnamCalendarDateParts(value, label) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw validationError(label + ' không hợp lệ.');
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: DEADLINE_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  return { year: values.year, month: values.month, day: values.day };
+}
+
+function normalizeDeadlineDueDate(value, label) {
+  if (value === null || value === undefined || value === '') return null;
+  const text = String(value).trim();
+  const dateOnly = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) return normalizeDeadlineEndOfDayFromParts(dateOnly[1], dateOnly[2], dateOnly[3], label);
+  const parts = getVietnamCalendarDateParts(value, label);
+  return normalizeDeadlineEndOfDayFromParts(parts.year, parts.month, parts.day, label);
 }
 
 function normalizeDeadlineDate(value, label) {
@@ -4426,6 +4584,7 @@ function toPublicAccount(account, freelancers = []) {
     fields,
     freelancerId: account.freelancerId ?? null,
     freelancerName: linkedFreelancer?.name || '',
+    avatar: account.avatar || '',
     imageQR: linkedFreelancer?.imageQR || '',
     isActive: account.isActive !== false,
     createdAt: account.createdAt

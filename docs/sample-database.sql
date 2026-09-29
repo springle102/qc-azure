@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS "Accounts" (
   "field" varchar(50),
   "fields" text[] NOT NULL DEFAULT ARRAY[]::text[],
   "freelancerId" integer,
+  "avatar" text,
   "isActive" boolean NOT NULL DEFAULT true,
   "createdAt" timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT "Accounts_freelancer_fkey"
@@ -108,6 +109,7 @@ CREATE TABLE IF NOT EXISTS "Accounts" (
 ALTER TABLE "Accounts" ADD COLUMN IF NOT EXISTS "freelancerId" integer;
 ALTER TABLE "Accounts" ADD COLUMN IF NOT EXISTS "field" varchar(50);
 ALTER TABLE "Accounts" ADD COLUMN IF NOT EXISTS "fields" text[];
+ALTER TABLE "Accounts" ADD COLUMN IF NOT EXISTS "avatar" text;
 UPDATE "Accounts"
 SET "fields" = CASE WHEN "field" IS NULL THEN ARRAY[]::text[] ELSE ARRAY["field"]::text[] END
 WHERE "fields" IS NULL;

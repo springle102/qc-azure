@@ -74,7 +74,9 @@ export function Sidebar({ currentView, onNavigate, currentUser, role = 'QC', onO
 
       <div className="sidebar-user-card qc-sidebar-user">
         <div className="qc-avatar-squircle" aria-hidden="true">
-          {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : (role ? role.charAt(0) : 'U')}
+          {currentUser?.avatar
+            ? <img src={currentUser.avatar} alt="" />
+            : (currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : (role ? role.charAt(0) : 'U'))}
         </div>
         <div className="qc-user-label">
           <strong className="qc-user-name">{currentUser?.name || currentUser?.username || 'Studio Member'}</strong>

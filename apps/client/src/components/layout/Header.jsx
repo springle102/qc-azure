@@ -62,7 +62,7 @@ export function Header({ currentUser, deadlines = [], errors = [], onNavigate, o
       </div>
 
       <div className="qc-header-actions">
-        {urgentCount > 0 && (
+        {currentUser?.role !== 'Freelancer' && urgentCount > 0 && (
           <div className="qc-header-ticker" title="Các chapter có hạn hôm nay cần hoàn thành / kiểm duyệt">
             <span className="qc-ticker-dot" />
             <span>Hôm nay: <strong>{urgentCount} chapter</strong> cần QC gấp</span>
@@ -132,7 +132,9 @@ export function Header({ currentUser, deadlines = [], errors = [], onNavigate, o
         </button>
 
         <button type="button" className="qc-header-profile" onClick={onOpenProfile}>
-          <span className="qc-header-avatar"><IconUser size={17} /></span>
+          <span className="qc-header-avatar">
+            {currentUser?.avatar ? <img src={currentUser.avatar} alt="" /> : <IconUser size={17} />}
+          </span>
           <span>
             <strong>{currentUser?.name || currentUser?.username || 'Account'}</strong>
             <small>{currentUser?.email || currentUser?.role || 'Tài khoản'}</small>
