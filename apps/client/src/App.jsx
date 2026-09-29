@@ -14,7 +14,7 @@ import { ErrorManagementView } from './components/views/ErrorManagementView';
 import { ProfileView } from './components/views/ProfileView';
 import { LoginView } from './components/views/LoginView';
 import { api } from './services/api';
-import { getSalaryMonth } from '../../shared/bonus.mjs';
+import { getSalaryMonth } from './utils/bonus.mjs';
 import './App.css';
 
 const EMPTY_DATA = {

@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { IconEye, IconFilter, IconRefresh, IconSearch, IconUsers, IconX } from '../common/Icons';
-import { getSalaryMonth, isSalaryMonth } from '../../../../shared/bonus.mjs';
+import { getSalaryMonth, isSalaryMonth } from '../../utils/bonus.mjs';
 
 export function SalaryManagementView({ currentUser = {}, salaries = [], fields = [], month = getSalaryMonth(), onMonthChange, isLoading, onRefresh }) {
   const [search, setSearch] = useState('');

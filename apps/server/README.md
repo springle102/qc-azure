@@ -8,7 +8,7 @@ Backend Node.js + Express cung cấp lớp API cho giao diện QC. Backend ưu t
 
 Trước khi triển khai phiên bản bonus mới, chạy `docs/migrations/20260929_monthly_bonus_policy.sql` trong Supabase SQL Editor. Migration chỉ thêm cột JSONB `BonusSettings.bonusPolicy`; không liên quan Supabase Storage. Nếu dùng tên bảng tùy chỉnh, đổi tên bảng trong migration tương ứng.
 
-Khi đóng gói backend, giữ thư mục `apps/shared` cạnh `apps/server`: API và frontend dùng chung `apps/shared/bonus.mjs` để tính bonus và xem thử nhất quán.
+Khi đóng gói backend, giữ file `apps/server/bonus.mjs` trong cùng service với `apps/server/server.js`. Frontend có bản module tương ứng trong `apps/client/src/utils/bonus.mjs`; điều này giúp Railway chạy được khi mỗi service dùng một Root Directory riêng.
 
 - Tab Giá tiền có hai công tắc độc lập: thưởng KPI một lần và thưởng từng chap **sau** mốc. Bật cả hai thì cộng dồn.
 - `GET /api/salaries?month=YYYY-MM` mặc định tháng hiện tại, chia kỳ theo `submittedAt` ở múi giờ `Asia/Ho_Chi_Minh`. Task thiếu Ngày nộp không được tự gán tháng; API trả `missingDateChapters` để hiển thị cảnh báo.

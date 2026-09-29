@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { calculateMonthlyBonus, getBonusVersions, getSalaryMonth, resolveBonusRule, validateBonusRule } from '../../../../shared/bonus.mjs';
+import { getBonusPreview, getBonusVersions, getSalaryMonth, resolveBonusRule, validateBonusRule } from '../../utils/bonus.mjs';
 import { api } from '../../services/api';
 import { showToast } from '../common/ToastContainer';
 
@@ -25,7 +25,7 @@ export function BonusSettingsPanel({ field, settings, isLoading, onRefresh }) {
   const partial = partialChapters.trim() ? partialChapters.split(',').map((value) => Number(value.trim())) : [];
   const canPreview = rule && previewCount !== '' && Number.isInteger(count) && count >= 0 && count <= 1000
     && partial.every((value) => Number.isInteger(value) && value >= 1 && value <= count);
-  const preview = canPreview ? calculateMonthlyBonus(Array.from({ length: count }, (_, index) => ({
+  const preview = canPreview ? getBonusPreview(Array.from({ length: count }, (_, index) => ({
     seriesId: 1, chapterNumber: String(index + 1), submittedAt: new Date(Date.UTC(2026, 0, 1) + index * 1000).toISOString(),
     completionPercent: partial.includes(index + 1) ? 90 : 100
   })), rule) : null;

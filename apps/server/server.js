@@ -3,7 +3,7 @@ import cors from 'cors';
 import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { inflateRawSync } from 'node:zlib';
-import { calculateMonthlyBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, saveBonusVersion, validateBonusRule } from '../shared/bonus.mjs';
+import { calculateMonthlyBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, saveBonusVersion, validateBonusRule } from './bonus.mjs';
 import {
   deleteRowById,
   deleteRowsByKeys,

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { calculateMonthlyBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, saveBonusVersion, validateBonusRule } from '../../shared/bonus.mjs';
+import { calculateMonthlyBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, saveBonusVersion, validateBonusRule } from '../bonus.mjs';
 
 const rule = { effectiveMonth: '2026-09', kpiEnabled: true, kpiThreshold: 20, kpiAmount: 200000,
   afterEnabled: true, afterThreshold: 20, afterAmount: 5000, qcDefaultPrice: 1000 };
