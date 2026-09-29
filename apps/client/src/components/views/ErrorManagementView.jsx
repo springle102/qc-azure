@@ -57,7 +57,7 @@ function serializeScreenshotImages(images) {
 
 const MAX_SCREENSHOT_FILE_SIZE = 3 * 1024 * 1024;
 
-function ScreenshotUpload({ value, onChange, disabled = false, compact = false, maxImages = 3 }) {
+function ScreenshotUpload({ value, onChange, onPreview, disabled = false, compact = false, maxImages = 3 }) {
   const [error, setError] = useState('');
   const images = getScreenshotImages(value).slice(0, maxImages);
 
@@ -124,7 +124,11 @@ function ScreenshotUpload({ value, onChange, disabled = false, compact = false, 
             <div className="error-screenshot-upload-previews">
               {images.map((image, index) => (
                 <div className="error-screenshot-upload-preview-item" key={`${image.slice(0, 32)}-${index}`}>
-                  <img className="error-screenshot-upload-preview" src={image} alt={`Screenshot lỗi ${index + 1}`} />
+                  {onPreview ? (
+                    <button type="button" className="error-screenshot-upload-preview-trigger" onClick={() => onPreview(images)} title="Xem chi tiết screenshot">
+                      <img className="error-screenshot-upload-preview" src={image} alt={`Xem chi tiết screenshot lỗi ${index + 1}`} />
+                    </button>
+                  ) : <img className="error-screenshot-upload-preview" src={image} alt={`Screenshot lỗi ${index + 1}`} />}
                   <button type="button" className="error-screenshot-remove-one" onClick={() => removeImage(index)} disabled={disabled} aria-label={`Xóa screenshot ${index + 1}`} title="Xóa ảnh">×</button>
                 </div>
               ))}
@@ -730,7 +734,7 @@ export function ErrorManagementView({
                       <td><input className="error-inline-input" value={inlineErrorRow.title} onChange={(event) => setInlineErrorRow((current) => ({ ...current, title: event.target.value }))} placeholder="Nhập Title" autoFocus /></td>
                       <td><input className="error-inline-input" value={inlineErrorRow.chapter} onChange={(event) => setInlineErrorRow((current) => ({ ...current, chapter: event.target.value }))} placeholder="Chapter" /></td>
                       <td><ErrorTypeControl value={inlineErrorRow.errorType} onChange={(value) => setInlineErrorRow((current) => ({ ...current, errorType: value }))} disabled={savingRowId === 'inline-new'} ariaLabel="Error Type cho hàng mới" /></td>
-                      <td className="error-screenshot-cell"><ScreenshotUpload compact value={inlineErrorRow.screenshot} onChange={(value) => setInlineErrorRow((current) => ({ ...current, screenshot: value }))} disabled={savingRowId === 'inline-new'} /></td>
+                      <td className="error-screenshot-cell"><ScreenshotUpload compact value={inlineErrorRow.screenshot} onChange={(value) => setInlineErrorRow((current) => ({ ...current, screenshot: value }))} onPreview={() => setSelectedScreenshot({ ...inlineErrorRow, field: activeField, title: inlineErrorRow.title || 'Lỗi mới' })} disabled={savingRowId === 'inline-new'} /></td>
                       <td><textarea className="error-inline-textarea" value={inlineErrorRow.error} onChange={(event) => setInlineErrorRow((current) => ({ ...current, error: event.target.value }))} placeholder="Nhập nội dung lỗi" /></td>
                       <td className="error-note-cell"><NoteEditor value={inlineErrorRow.note} onChange={(value) => setInlineErrorRow((current) => ({ ...current, note: value }))} disabled={savingRowId === 'inline-new'} /></td>
                       <td><select className="error-inline-select" value={inlineErrorRow.editorFreelancerId} onChange={(event) => setInlineErrorRow((current) => ({ ...current, editorFreelancerId: event.target.value }))} disabled={savingRowId === 'inline-new'}><option value="">Chọn freelancer</option>{editorOptions.map((freelancer) => <option value={getFreelancerId(freelancer)} key={getFreelancerId(freelancer)}>{freelancer.name || freelancer.email}</option>)}</select></td>
@@ -750,7 +754,7 @@ export function ErrorManagementView({
                           <ErrorTypeControl value={rowDraft.errorType} onChange={(value) => updateRowDraft(row, 'errorType', value)} disabled={isRowSaving} ariaLabel={`Error Type cho ${row.title}`} />
                         ) : <ErrorTypeBadge value={row.errorType} />}
                       </td>
-                      <td className="error-screenshot-cell">{canManage ? <ScreenshotUpload compact value={rowDraft.screenshot} onChange={(value) => updateRowDraft(row, 'screenshot', value)} disabled={isRowSaving} /> : getScreenshotImages(row.screenshot).length > 0 ? <button type="button" className="error-screenshot-preview-button" onClick={() => setSelectedScreenshot(row)} title="Xem chi tiết screenshot"><span className="error-screenshot-preview-grid">{getScreenshotImages(row.screenshot).map((image, index) => <img src={image} alt={`Screenshot ${index + 1} cho ${row.title}`} key={`${image.slice(0, 32)}-${index}`} />)}</span></button> : <span className="error-screenshot-empty">—</span>}</td>
+                      <td className="error-screenshot-cell">{canManage ? <ScreenshotUpload compact value={rowDraft.screenshot} onChange={(value) => updateRowDraft(row, 'screenshot', value)} onPreview={() => setSelectedScreenshot({ ...row, ...rowDraft })} disabled={isRowSaving} /> : getScreenshotImages(row.screenshot).length > 0 ? <button type="button" className="error-screenshot-preview-button" onClick={() => setSelectedScreenshot(row)} title="Xem chi tiết screenshot"><span className="error-screenshot-preview-grid">{getScreenshotImages(row.screenshot).map((image, index) => <img src={image} alt={`Screenshot ${index + 1} cho ${row.title}`} key={`${image.slice(0, 32)}-${index}`} />)}</span></button> : <span className="error-screenshot-empty">—</span>}</td>
                       <td className="error-description-cell">{canManage ? <textarea className="error-inline-textarea" value={rowDraft.error || ''} onChange={(event) => updateRowDraft(row, 'error', event.target.value)} disabled={isRowSaving} /> : row.error}</td>
                       <td className="error-note-cell">{canManage ? <NoteEditor value={rowDraft.note || ''} onChange={(value) => updateRowDraft(row, 'note', value)} disabled={isRowSaving} /> : <div className="error-note-readonly">{isImageValue(row.note) ? <img className="error-note-readonly-image" src={row.note} alt={`Note cho ${row.title}`} /> : (row.note || '—')}</div>}</td>
                       <td>{canManage ? <select className="error-inline-select" value={rowDraft.editorFreelancerId || ''} onChange={(event) => updateRowDraft(row, 'editorFreelancerId', event.target.value)} disabled={isRowSaving}><option value="">Chọn freelancer</option>{editorOptions.map((freelancer) => <option value={getFreelancerId(freelancer)} key={getFreelancerId(freelancer)}>{freelancer.name || freelancer.email}</option>)}</select> : <span className="error-editor-badge">{row.editor || 'Chưa gán'}</span>}</td>

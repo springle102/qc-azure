@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from 'react';
-import { IconEye, IconRefresh, IconSearch, IconUsers, IconX } from '../common/Icons';
+import { createPortal } from 'react-dom';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { IconEye, IconFilter, IconRefresh, IconSearch, IconUsers, IconX } from '../common/Icons';
 
 export function SalaryManagementView({ salaries = [], fields = [], isLoading, onRefresh }) {
   const [search, setSearch] = useState('');
   const [fieldFilter, setFieldFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [columnSort, setColumnSort] = useState(null);
   const [selectedQR, setSelectedQR] = useState(null);
   const members = useMemo(() => Array.isArray(salaries) ? salaries : [], [salaries]);
   const fieldOptions = useMemo(() => getFieldOptions(fields, members), [fields, members]);
@@ -31,11 +33,19 @@ export function SalaryManagementView({ salaries = [], fields = [], isLoading, on
 
       return matchesSearch && matchesField && matchesRole;
     });
-    return [...filtered].sort((left, right) => compareNumericValues(
+    const sorted = [...filtered];
+    if (columnSort) {
+      return sorted.sort((left, right) => compareSalaryRows(left, right, columnSort.key, columnSort.direction));
+    }
+    return sorted.sort((left, right) => compareNumericValues(
       left.fId ?? left.fIld ?? left.qcId ?? left.id,
       right.fId ?? right.fIld ?? right.qcId ?? right.id
     ));
-  }, [fieldFilter, members, roleFilter, search]);
+  }, [columnSort, fieldFilter, members, roleFilter, search]);
+
+  const updateColumnSort = (key, direction) => {
+    setColumnSort((current) => current?.key === key && current.direction === direction ? null : { key, direction });
+  };
 
   return (
     <div className="fade-in">
@@ -76,14 +86,14 @@ export function SalaryManagementView({ salaries = [], fields = [], isLoading, on
         </div>
 
         <div className="table-wrapper table-wrapper-flat">
-          <table className="custom-table salary-table">
+            <table className="custom-table salary-table">
             <thead>
               <tr>
-                <th>Id</th>
-                <th>Họ và tên</th>
-                <th>Mảng</th>
-                <th>Tổng lương</th>
-                <th>Bonus / Chuyển QC</th>
+                <th><div className="deadline-column-header"><span>Id</span><SalarySortButton label="Id" activeSortDirection={columnSort?.key === 'id' ? columnSort.direction : null} onSort={(direction) => updateColumnSort('id', direction)} /></div></th>
+                <th><div className="deadline-column-header"><span>Họ và tên</span><SalarySortButton label="Họ và tên" activeSortDirection={columnSort?.key === 'name' ? columnSort.direction : null} onSort={(direction) => updateColumnSort('name', direction)} /></div></th>
+                <th><div className="deadline-column-header"><span>Mảng</span><SalarySortButton label="Mảng" activeSortDirection={columnSort?.key === 'field' ? columnSort.direction : null} onSort={(direction) => updateColumnSort('field', direction)} /></div></th>
+                <th><div className="deadline-column-header"><span>Tổng lương</span><SalarySortButton label="Tổng lương" activeSortDirection={columnSort?.key === 'totalSalary' ? columnSort.direction : null} onSort={(direction) => updateColumnSort('totalSalary', direction)} /></div></th>
+                <th><div className="deadline-column-header"><span>Bonus / Chuyển QC</span><SalarySortButton label="Bonus / Chuyển QC" activeSortDirection={columnSort?.key === 'bonus' ? columnSort.direction : null} onSort={(direction) => updateColumnSort('bonus', direction)} /></div></th>
                 <th>Mã QR</th>
               </tr>
             </thead>
@@ -138,6 +148,80 @@ export function SalaryManagementView({ salaries = [], fields = [], isLoading, on
   );
 }
 
+function SalarySortButton({ label, activeSortDirection, onSort }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState(null);
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
+  const isActive = Boolean(activeSortDirection);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const updatePosition = () => {
+      const rect = buttonRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = 220;
+      setMenuPosition({
+        top: rect.bottom + 6,
+        left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))
+      });
+    };
+    const handleOutsidePointer = (event) => {
+      if (!buttonRef.current?.contains(event.target) && !menuRef.current?.contains(event.target)) setIsOpen(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+
+    updatePosition();
+    document.addEventListener('pointerdown', handleOutsidePointer);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointer);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [isOpen]);
+
+  const applySort = (direction) => {
+    onSort(activeSortDirection === direction ? null : direction);
+    setIsOpen(false);
+  };
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={'column-filter-button' + (isActive ? ' active' : '')}
+        onClick={(event) => {
+          event.stopPropagation();
+          setIsOpen((open) => !open);
+        }}
+        aria-label={`Sắp xếp cột ${label}`}
+        aria-expanded={isOpen}
+        title={`Sắp xếp cột ${label}`}
+      >
+        <IconFilter size={14} />
+      </button>
+      {isOpen && menuPosition && createPortal(
+        <div ref={menuRef} className="column-filter-menu salary-sort-menu" style={menuPosition} onClick={(event) => event.stopPropagation()}>
+          <div className="column-filter-menu-title">Sắp xếp {label}</div>
+          <div className="column-filter-sort">
+            <button type="button" className={'column-filter-sort-button' + (activeSortDirection === 'asc' ? ' active' : '')} onClick={() => applySort('asc')}>A → Z</button>
+            <button type="button" className={'column-filter-sort-button' + (activeSortDirection === 'desc' ? ' active' : '')} onClick={() => applySort('desc')}>Z → A</button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 function formatSalary(value) {
   if (value === null || value === undefined || value === '') return '—';
   const amount = Number(value);
@@ -169,6 +253,24 @@ function getRoleOptions(members) {
   const roles = new Set(['Freelancer', 'QC']);
   members.forEach((member) => roles.add(getMemberRole(member)));
   return [...roles].sort((left, right) => left === 'Freelancer' ? -1 : right === 'Freelancer' ? 1 : left.localeCompare(right, 'vi'));
+}
+
+function getSalarySortValue(member, key) {
+  if (key === 'id') return member.fId ?? member.fIld ?? member.qcId ?? member.id;
+  if (key === 'name') return member.name;
+  if (key === 'field') return getMemberFields(member).join(', ');
+  if (key === 'bonus') return member.isQc ? member.transferredAmount : member.bonus;
+  return member.totalSalary ?? member.salary ?? member.luong;
+}
+
+function compareSalaryRows(left, right, key, direction) {
+  const leftValue = getSalarySortValue(left, key);
+  const rightValue = getSalarySortValue(right, key);
+  const isNumeric = ['id', 'totalSalary', 'bonus'].includes(key);
+  const comparison = isNumeric
+    ? compareNumericValues(leftValue, rightValue)
+    : String(leftValue ?? '').localeCompare(String(rightValue ?? ''), 'vi', { numeric: true, sensitivity: 'base' });
+  return direction === 'desc' ? -comparison : comparison;
 }
 
 function compareNumericValues(leftValue, rightValue) {
