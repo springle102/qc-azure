@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom';
 import { IconEdit, IconPlus, IconRefresh, IconSearch, IconTasks, IconTrash, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
+import { BonusSettingsPanel } from './BonusSettingsPanel';
 
-const DEFAULT_BONUS_CONFIG = { taskThreshold: 20, bonusPerTask: 10000, qcDefaultPrice: 0 };
 const DEFAULT_LEVEL_COLOR = '#64748B';
 const DEFAULT_LEVEL_TEXT_COLOR = '#FFFFFF';
 
@@ -14,16 +14,8 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
   const [editingPrice, setEditingPrice] = useState(null);
   const [levelManagerField, setLevelManagerField] = useState(null);
   const [editingLevel, setEditingLevel] = useState(null);
-  const [bonusDrafts, setBonusDrafts] = useState({});
   const [isSaving, setIsSaving] = useState(false);
   const fieldNames = useMemo(() => fields.map((item) => item.name || item).filter(Boolean), [fields]);
-
-  const getActiveBonusConfig = (fieldName) => (
-    bonusDrafts[fieldName]
-      ?? bonusSettings?.byField?.[fieldName]
-      ?? bonusSettings?.default
-      ?? DEFAULT_BONUS_CONFIG
-  );
 
   const rows = useMemo(() => {
     const prices = new Map(difficultyPrices.map((item) => [priceKey(item.field, item.difficulty), item]));
@@ -161,41 +153,6 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
     }
   };
 
-  const updateBonusField = (fieldName, key, value) => {
-    setBonusDrafts((current) => ({
-      ...current,
-      [fieldName]: { ...getActiveBonusConfig(fieldName), [key]: value }
-    }));
-  };
-
-  const saveBonus = async (event, fieldName) => {
-    event.preventDefault();
-    const activeBonusConfig = getActiveBonusConfig(fieldName);
-    const taskThreshold = Number(activeBonusConfig.taskThreshold);
-    const bonusPerTask = Number(activeBonusConfig.bonusPerTask);
-    const qcDefaultPrice = Number(activeBonusConfig.qcDefaultPrice);
-    if (!Number.isInteger(taskThreshold) || taskThreshold < 0 || !Number.isFinite(bonusPerTask) || bonusPerTask < 0 || !Number.isFinite(qcDefaultPrice) || qcDefaultPrice < 0) {
-      showToast('Hãy nhập x là số nguyên không âm, y và giá mặc định QC là số tiền không âm.', 'error');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      await api.updateBonusSettings({ field: fieldName, taskThreshold, bonusPerTask, qcDefaultPrice });
-      setBonusDrafts((current) => {
-        const next = { ...current };
-        delete next[fieldName];
-        return next;
-      });
-      showToast(`Đã cập nhật cấu hình thưởng mảng ${fieldName}.`, 'success');
-      await onRefresh?.();
-    } catch (error) {
-      showToast(error.message || 'Không thể lưu cấu hình bonus.', 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   return (
     <div className="fade-in">
       <div className="page-header-row qc-page-heading">
@@ -214,39 +171,10 @@ export function PriceManagementView({ difficultyLevels = [], difficultyPrices = 
         </div>
       </div>
 
-      {fieldNames.map((fieldName) => {
-        const activeBonusConfig = getActiveBonusConfig(fieldName);
-        const fieldId = fieldName.toLowerCase().replace(/[^a-z0-9]+/gi, '-');
-        return (
-          <section className="glass-panel bonus-settings-panel" key={fieldName}>
-            <div className="bonus-settings-header">
-              <div>
-                <span className="qc-kicker">BONUS FREELANCER · {fieldName}</span>
-                <h3>Thưởng theo task đạt 100% — {fieldName}</h3>
-                <p className="form-help">Cấu hình riêng cho mảng {fieldName}: nếu freelancer có hơn x task đạt 100%, mỗi task vượt ngưỡng sẽ được cộng y tiền.</p>
-              </div>
-            </div>
-            <form className="bonus-settings-form" onSubmit={(event) => saveBonus(event, fieldName)}>
-              <div className="form-group">
-                <label className="form-label" htmlFor={`bonus-task-threshold-${fieldId}`}>Số task đạt 100% (x)</label>
-                <input id={`bonus-task-threshold-${fieldId}`} className="form-input" type="number" min="0" step="1" value={activeBonusConfig.taskThreshold} onChange={(event) => updateBonusField(fieldName, 'taskThreshold', event.target.value)} disabled={isSaving} />
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor={`bonus-per-task-${fieldId}`}>Bonus mỗi task vượt ngưỡng (y)</label>
-                <input id={`bonus-per-task-${fieldId}`} className="form-input" type="number" min="0" step="0.01" value={activeBonusConfig.bonusPerTask} onChange={(event) => updateBonusField(fieldName, 'bonusPerTask', event.target.value)} disabled={isSaving} />
-              </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor={`qc-default-price-${fieldId}`}>Giá mặc định cho QC / task</label>
-                <input id={`qc-default-price-${fieldId}`} className="form-input" type="number" min="0" step="0.01" value={activeBonusConfig.qcDefaultPrice ?? 0} onChange={(event) => updateBonusField(fieldName, 'qcDefaultPrice', event.target.value)} disabled={isSaving} />
-                <span className="form-help">Hiện tại: {formatPrice(activeBonusConfig.qcDefaultPrice)}. QC nhận thêm phần tiền tương ứng với % member chưa hoàn thành.</span>
-              </div>
-              <div className="bonus-settings-actions">
-                <button type="submit" className="btn btn-primary" disabled={isSaving}>{isSaving ? 'Đang lưu...' : `Lưu cấu hình ${fieldName}`}</button>
-              </div>
-            </form>
-          </section>
-        );
-      })}
+      {fieldNames.map((fieldName) => (
+        <BonusSettingsPanel key={fieldName} field={fieldName} settings={bonusSettings?.byField?.[fieldName] || bonusSettings?.default}
+          isLoading={isLoading} onRefresh={onRefresh} />
+      ))}
 
       <section className="difficulty-field-grid">
         {fieldNames.map((fieldName) => {

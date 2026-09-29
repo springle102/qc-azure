@@ -1,14 +1,17 @@
 import { createPortal } from 'react-dom';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { IconEye, IconFilter, IconRefresh, IconSearch, IconUsers, IconX } from '../common/Icons';
+import { getSalaryMonth, isSalaryMonth } from '../../../../shared/bonus.mjs';
 
-export function SalaryManagementView({ currentUser = {}, salaries = [], fields = [], isLoading, onRefresh }) {
+export function SalaryManagementView({ currentUser = {}, salaries = [], fields = [], month = getSalaryMonth(), onMonthChange, isLoading, onRefresh }) {
   const [search, setSearch] = useState('');
   const [fieldFilter, setFieldFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [columnSort, setColumnSort] = useState(null);
   const [selectedQR, setSelectedQR] = useState(null);
-  const members = useMemo(() => Array.isArray(salaries) ? salaries : [], [salaries]);
+  const [selectedBonus, setSelectedBonus] = useState(null);
+  const members = useMemo(() => Array.isArray(salaries) ? salaries.filter((row) => row.salaryMonth === month) : [], [salaries, month]);
+  const missingDateCount = members.reduce((count, row) => count + (row.missingDateChapters?.length || 0), 0);
   const canUseScopeFilters = currentUser?.role !== 'Freelancer';
   const fieldOptions = useMemo(() => getFieldOptions(fields, members), [fields, members]);
   const roleOptions = useMemo(() => getRoleOptions(members), [members]);
@@ -64,6 +67,7 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
         <div>
           <span className="qc-kicker">NHÂN SỰ</span>
           <h2 className="page-title">Lương</h2>
+          <p className="page-subtitle">Kỳ {month} · Theo Ngày nộp (giờ Việt Nam), các task đã tick Thanh toán.</p>
         </div>
         <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading}>
           <IconRefresh size={16} /> {isLoading ? 'Đang tải...' : 'Làm mới'}
@@ -72,6 +76,11 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
 
       <section className="glass-panel qc-table-panel">
         <div className="table-toolbar">
+          <label className="salary-month-filter">Tháng lương
+            <input className="form-input" type="month" value={month} max="9999-12" onChange={(event) => {
+              if (isSalaryMonth(event.target.value)) { setSelectedBonus(null); onMonthChange?.(event.target.value); }
+            }} />
+          </label>
           <div className="toolbar-search">
             <IconSearch size={17} />
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo ID, họ tên hoặc mảng" />
@@ -100,6 +109,7 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
           )}
         </div>
 
+        {missingDateCount > 0 && <p className="salary-date-warning" role="status">Có {missingDateCount} task đã tick Thanh toán nhưng thiếu Ngày nộp hợp lệ, chưa được tính vào kỳ lương nào. Mở chi tiết Bonus của freelancer để xem task cần bổ sung.</p>}
         <div className="table-wrapper table-wrapper-flat">
             <table className="custom-table salary-table">
             <thead>
@@ -128,7 +138,11 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
                   <td className="strong-cell">{freelancer.name || '—'}</td>
                   <td><span className="field-badge">{getMemberFields(freelancer).join(', ') || '—'}</span></td>
                   <td className="salary-cell">{formatSalary(freelancer.totalSalary ?? freelancer.salary ?? freelancer.luong)}</td>
-                  <td className="salary-cell">{freelancer.isQc ? formatSalary(freelancer.transferredAmount) : formatSalary(freelancer.bonus)}</td>
+                  <td className="salary-cell">{freelancer.isQc ? formatSalary(freelancer.transferredAmount) : (
+                    <button type="button" className="salary-bonus-button" onClick={() => setSelectedBonus(freelancer)} title="Xem cách tính bonus">
+                      {formatSalary(freelancer.bonus)} <IconEye size={15} />
+                    </button>
+                  )}</td>
                   <td>
                     {freelancer.imageQR || freelancer.imageQr || freelancer.qrUrl || freelancer.url ? (
                       <button type="button" className="btn btn-secondary btn-sm" onClick={() => setSelectedQR(freelancer)}>
@@ -151,6 +165,33 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
         </div>
       </section>
 
+      {selectedBonus && createPortal(
+        <div className="modal-overlay" onClick={() => setSelectedBonus(null)}>
+          <div className="modal-content modal-lg" role="dialog" aria-modal="true" aria-labelledby="salary-bonus-title" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h3 id="salary-bonus-title">Bonus {selectedBonus.name} · {month}</h3>
+              <button type="button" className="icon-button" aria-label="Đóng" onClick={() => setSelectedBonus(null)}><IconX size={18} /></button>
+            </div>
+            <div className="modal-body bonus-policy-form">
+              <p className="form-help">Thứ tự chap theo Ngày nộp; nếu trùng thời điểm, theo ID truyện rồi chapter. Chỉ đếm task Submitted/Done đã tick Thanh toán. Chap được thưởng phải hoàn thành đúng 100%.</p>
+              {(selectedBonus.bonusByField || []).map((summary) => <section className="bonus-policy-card" key={summary.field}>
+                <h4>{summary.field || 'Chưa có mảng'} · {summary.chapterCount} chap, {summary.fullCompletionCount} chap đạt 100%</h4>
+                <BonusGateDetails title="Thưởng KPI" gate={summary.kpi} />
+                <BonusGateDetails title="Thưởng sau mốc" gate={summary.after} />
+                <p>Sau mốc: {summary.after.rewardedCount} chap × {formatSalary(summary.after.amountPerChapter)} = {formatSalary(summary.after.amount)}</p>
+                <strong>Tổng bonus mảng: {formatSalary(summary.total)}</strong>
+              </section>)}
+              {!selectedBonus.bonusByField?.length && <p>Chưa có chap đủ điều kiện trong tháng này.</p>}
+              {selectedBonus.missingDateChapters?.length > 0 && <section className="bonus-policy-card">
+                <h4>Task thiếu Ngày nộp — chưa tính lương/bonus</h4>
+                <ul className="bonus-policy-history">{selectedBonus.missingDateChapters.map((chapter) => <li key={`${chapter.seriesId}:${chapter.chapterNumber}`}>{chapter.field} · ID {chapter.seriesId} · Chapter {chapter.chapterNumber}</li>)}</ul>
+              </section>}
+              <strong>Tổng bonus: {formatSalary(selectedBonus.bonus)}</strong>
+            </div>
+          </div>
+        </div>, document.body
+      )}
+
       {selectedQR && createPortal(
         <div className="modal-overlay" onClick={() => setSelectedQR(null)}>
           <div className="modal-content qr-preview-modal" onClick={(event) => event.stopPropagation()}>
@@ -170,6 +211,17 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
       )}
     </div>
   );
+}
+
+function BonusGateDetails({ title, gate }) {
+  if (!gate.enabled) return <p>{title}: đã tắt.</p>;
+  return <div>
+    <p>{title} · Mốc {gate.threshold} chap: {gate.unlocked ? 'Đã đạt' : 'Chưa đạt'} · {formatSalary(gate.amount)}</p>
+    {gate.missingCount > 0 && <p className="form-help">Còn thiếu {gate.missingCount} chap để đạt mốc.</p>}
+    {gate.blockedChapters.length > 0 && <details><summary>{gate.blockedChapters.length} chap trong mốc chưa đạt 100%</summary>
+      <ul className="bonus-policy-history">{gate.blockedChapters.map((chapter) => <li key={`${chapter.seriesId}:${chapter.chapterNumber}`}>ID {chapter.seriesId} · Chapter {chapter.chapterNumber}: {chapter.completionPercent ?? 'Chưa nhập'}%</li>)}</ul>
+    </details>}
+  </div>;
 }
 
 function SalarySortButton({ label, activeSortDirection, onSort }) {

@@ -2906,6 +2906,86 @@
   min-width: 720px;
 }
 
+.salary-month-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.salary-date-warning {
+  padding: 0 20px 16px;
+  color: var(--text-main);
+}
+
+.salary-bonus-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 4px;
+}
+
+.bonus-policy-form {
+  display: grid;
+  gap: 18px;
+}
+
+.bonus-policy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.bonus-policy-card {
+  min-width: 0;
+  border: 1px solid var(--border-bright);
+  border-radius: 12px;
+  padding: 18px;
+  background: var(--bg-surface);
+}
+
+.bonus-policy-card legend {
+  padding: 0 8px;
+  font-weight: 700;
+}
+
+.bonus-policy-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+
+.bonus-policy-form .form-group {
+  display: grid;
+  gap: 8px;
+}
+
+.bonus-policy-form input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.bonus-policy-form summary {
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.bonus-policy-history {
+  padding-left: 22px;
+}
+
+@media (max-width: 700px) {
+  .bonus-policy-grid { grid-template-columns: 1fr; }
+}
+
 .salary-table .salary-total-row > th,
 .salary-table .salary-total-row > td {
   border-top: 2px solid var(--border-bright);

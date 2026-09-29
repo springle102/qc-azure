@@ -187,7 +187,7 @@ export const api = {
     method: 'PATCH',
     body: JSON.stringify(settings)
   }),
-  getSalaries: () => request('/salaries'),
+  getSalaries: ({ month } = {}) => request(`/salaries${month ? `?month=${encodeURIComponent(month)}` : ''}`, { cache: 'no-store' }),
   resetAllData: () => request('/reset-all', { method: 'POST' }),
   updateProfile: (profile) => request('/profile', {
     method: 'PATCH',

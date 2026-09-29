@@ -361,6 +361,7 @@ CREATE TABLE IF NOT EXISTS "BonusSettings" (
 
 ALTER TABLE "BonusSettings" ADD COLUMN IF NOT EXISTS "field" varchar(50);
 ALTER TABLE "BonusSettings" ADD COLUMN IF NOT EXISTS "qcDefaultPrice" numeric(14, 2) NOT NULL DEFAULT 0;
+ALTER TABLE "BonusSettings" ADD COLUMN IF NOT EXISTS "bonusPolicy" jsonb NOT NULL DEFAULT '{"versions": []}'::jsonb;
 CREATE UNIQUE INDEX IF NOT EXISTS "BonusSettings_field_unique"
   ON "BonusSettings" ("field")
   WHERE "field" IS NOT NULL;

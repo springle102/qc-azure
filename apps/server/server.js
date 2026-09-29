@@ -3,6 +3,7 @@ import cors from 'cors';
 import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { inflateRawSync } from 'node:zlib';
+import { calculateMonthlyBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, saveBonusVersion, validateBonusRule } from '../shared/bonus.mjs';
 import {
   deleteRowById,
   deleteRowsByKeys,
@@ -772,6 +773,8 @@ app.delete('/api/errors/:id', requireManager, async (req, res) => {
 });
 app.get('/api/salaries', requireAuth, async (req, res) => {
   try {
+    const month = req.query.month ?? getSalaryMonth();
+    if (!isSalaryMonth(month)) throw validationError('Tháng lương phải có định dạng YYYY-MM.');
     await syncGoogleSheetIfDue({ waitForCompletion: false });
     const [freelancers, qcs, deadlines, prices, bonusSettings] = await Promise.all([
       getCollection('freelancers'),
@@ -803,18 +806,20 @@ app.get('/api/salaries', requireAuth, async (req, res) => {
       || deadline.paymentApproved === 1
       || String(deadline.paymentApproved).toLowerCase() === 'true'
     ));
-    const payableQCDebt = payableDeadlines.filter((deadline) => getTaskStatus(deadline) === 'done');
+    const monthlyDeadlines = payableDeadlines.filter((deadline) => getSalaryMonth(deadline.submittedAt) === month);
+    const undatedDeadlines = payableDeadlines.filter((deadline) => !getSalaryMonth(deadline.submittedAt));
+    const payableQCDebt = monthlyDeadlines.filter((deadline) => getTaskStatus(deadline) === 'done');
     res.json({
       success: true,
         data: scopedDeadlines.length === 0
         ? []
         : [
-            ...buildSalaryRows(scopedFreelancers, payableDeadlines, bonusSettings),
-            ...buildQCSalaryRows(scopedQcs, payableQCDebt, bonusSettings)
+            ...buildSalaryRows(scopedFreelancers, monthlyDeadlines, bonusSettings, month, undatedDeadlines),
+            ...buildQCSalaryRows(scopedQcs, payableQCDebt, bonusSettings, month)
           ]
     });
   } catch (error) {
-    res.status(502).json({ success: false, message: error.message });
+    res.status(error.statusCode || 502).json({ success: false, message: error.message });
   }
 });
 
@@ -1068,7 +1073,7 @@ app.delete('/api/deadlines/:seriesId/:chapterNumber', requireManager, async (req
 
 const difficultyLevelFields = ['field', 'difficulty', 'color', 'textColor'];
 const pricingFields = ['field', 'difficulty', 'price'];
-const bonusSettingsFields = ['field', 'taskThreshold', 'bonusPerTask', 'qcDefaultPrice'];
+const bonusSettingsFields = ['field', 'bonusPolicy'];
 
 app.post('/api/difficulty-levels', requireManager, async (req, res) => {
   try {
@@ -1180,10 +1185,12 @@ app.patch('/api/bonus-settings', requireManager, async (req, res) => {
     const currentRows = await selectRows('bonusSettings');
     const current = payload.field
       ? currentRows.find((row) => String(row.field || '') === String(payload.field))
-      : currentRows.find((row) => !row.field) || currentRows[0];
+      : currentRows.find((row) => !row.field);
+    const baseline = current || currentRows.find((row) => !row.field) || {};
+    const updates = { field: payload.field, bonusPolicy: saveBonusVersion(baseline, payload.rule) };
     const data = current
-      ? await updateRow('bonusSettings', { id: current.id }, payload, bonusSettingsFields)
-      : await insertRow('bonusSettings', { ...(!payload.field ? { id: 1 } : {}), ...payload }, ['id', ...bonusSettingsFields]);
+      ? await updateRow('bonusSettings', { id: current.id }, updates, bonusSettingsFields)
+      : await insertRow('bonusSettings', { id: Math.max(0, ...currentRows.map((row) => Number(row.id) || 0)) + 1, ...updates }, ['id', ...bonusSettingsFields]);
     res.json({ success: true, data });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
@@ -3986,7 +3993,7 @@ async function assertDifficultyLevelExists(field, difficulty) {
 
 async function getBonusSettings() {
   const rows = await getCollection('bonusSettings');
-  const defaultRow = rows.find((row) => !row.field) || rows[0] || {};
+  const defaultRow = rows.find((row) => !row.field) || {};
   const byField = Object.fromEntries(rows
     .filter((row) => row.field)
     .map((row) => [String(row.field), normalizeBonusSettingsRow(row)]));
@@ -4002,29 +4009,25 @@ function normalizeBonusSettingsRow(row = {}) {
     field: row.field || null,
     taskThreshold: Number(row.taskThreshold ?? 20),
     bonusPerTask: Number(row.bonusPerTask ?? 10000),
-    qcDefaultPrice: Number(row.qcDefaultPrice ?? 0)
+    qcDefaultPrice: Number(row.qcDefaultPrice ?? 0),
+    bonusPolicy: row.bonusPolicy || { versions: [] }
   };
 }
 
-function getBonusSettingsForField(settings, field) {
+function getBonusSettingsForField(settings, field, month = getSalaryMonth()) {
   const fieldName = String(field ?? '').trim();
   const fieldSettings = settings?.byField?.[fieldName]
     || (settings?.field ? settings : null)
     || settings?.default
     || settings
     || {};
-  const taskThreshold = Number(fieldSettings.taskThreshold);
-  const bonusPerTask = Number(fieldSettings.bonusPerTask);
-  const qcDefaultPrice = Number(fieldSettings.qcDefaultPrice);
   return {
     field: fieldName || fieldSettings.field || null,
-    taskThreshold: Number.isInteger(taskThreshold) && taskThreshold >= 0 ? taskThreshold : 20,
-    bonusPerTask: Number.isFinite(bonusPerTask) && bonusPerTask >= 0 ? bonusPerTask : 10000,
-    qcDefaultPrice: Number.isFinite(qcDefaultPrice) && qcDefaultPrice >= 0 ? qcDefaultPrice : 0
+    ...resolveBonusRule(fieldSettings, month)
   };
 }
 
-function buildSalaryRows(freelancers, deadlines, bonusSettings) {
+function buildSalaryRows(freelancers, deadlines, bonusSettings, month = getSalaryMonth(), undatedDeadlines = []) {
   return freelancers.map((freelancer) => {
     const freelancerId = freelancer.fIld ?? freelancer.fId ?? freelancer.id;
     const freelancerDeadlines = deadlines.filter((deadline) => (
@@ -4032,48 +4035,43 @@ function buildSalaryRows(freelancers, deadlines, bonusSettings) {
     ));
     const completedTaskCount = freelancerDeadlines.filter(isFreelancerTaskComplete).length;
     const earnedAmount = freelancerDeadlines.reduce((total, deadline) => total + getDeadlineEarning(deadline), 0);
-    const bonusByField = new Map();
+    const tasksByField = new Map();
     freelancerDeadlines.forEach((deadline) => {
-      const fieldSettings = getBonusSettingsForField(bonusSettings, deadline.type);
-      const key = fieldSettings.field || '__default__';
-      const current = bonusByField.get(key) || { completedTaskCount: 0, bonusTaskCount: 0, bonusPerTask: fieldSettings.bonusPerTask };
-      if (isFreelancerTaskComplete(deadline)) current.completedTaskCount += 1;
-      bonusByField.set(key, current);
+      const key = deadline.type || '';
+      if (!tasksByField.has(key)) tasksByField.set(key, []);
+      if (isFreelancerTaskComplete(deadline)) tasksByField.get(key).push(deadline);
     });
-    let bonus = 0;
-    let bonusTaskCount = 0;
-    let bonusThreshold = null;
-    bonusByField.forEach((summary, fieldName) => {
-      const fieldSettings = getBonusSettingsForField(bonusSettings, fieldName === '__default__' ? '' : fieldName);
-      summary.bonusTaskCount = Math.max(0, summary.completedTaskCount - fieldSettings.taskThreshold);
-      summary.bonusPerTask = fieldSettings.bonusPerTask;
-      bonusTaskCount += summary.bonusTaskCount;
-      bonus += summary.bonusTaskCount * summary.bonusPerTask;
-      if (bonusThreshold === null) bonusThreshold = fieldSettings.taskThreshold;
-    });
+    const bonusByField = [...tasksByField.entries()].map(([field, tasks]) => ({
+      field,
+      ...calculateMonthlyBonus(tasks, getBonusSettingsForField(bonusSettings, field, month))
+    }));
+    const bonus = bonusByField.reduce((sum, summary) => sum + Math.round(summary.total * 100), 0) / 100;
+    const bonusTaskCount = bonusByField.reduce((sum, summary) => sum + summary.after.rewardedCount, 0);
+    const missingDateChapters = undatedDeadlines.filter((deadline) => String(deadline.fIld ?? deadline.fId ?? deadline.freelancerId ?? '') === String(freelancerId))
+      .map((deadline) => ({ seriesId: deadline.seriesId, chapterNumber: deadline.chapterNumber, field: deadline.type }));
 
     return {
       ...freelancer,
       isQc: false,
+      salaryMonth: month,
+      missingDateChapters,
       earnedAmount: earnedAmount.toFixed(2),
       completedTaskCount,
       bonusTaskCount,
       bonus: bonus.toFixed(2),
       totalSalary: (earnedAmount + bonus).toFixed(2),
-      bonusThreshold,
-      bonusPerTask: null,
-      bonusByField: [...bonusByField.entries()].map(([field, summary]) => ({ field: field === '__default__' ? null : field, ...summary }))
+      bonusByField
     };
   });
 }
 
-function buildQCSalaryRows(qcs, deadlines, bonusSettings) {
+function buildQCSalaryRows(qcs, deadlines, bonusSettings, month = getSalaryMonth()) {
   return qcs.map((qc) => {
     const qcId = qc.qcId ?? qc.id;
     const qcDeadlines = deadlines.filter((deadline) => (
       String(deadline.qcId ?? '') === String(qcId)
     ));
-    const baseAmount = qcDeadlines.reduce((total, deadline) => total + getBonusSettingsForField(bonusSettings, deadline.type).qcDefaultPrice, 0);
+    const baseAmount = qcDeadlines.reduce((total, deadline) => total + getBonusSettingsForField(bonusSettings, deadline.type, month).qcDefaultPrice, 0);
     const transferredAmount = qcDeadlines.reduce((total, deadline) => total + getIncompleteCompletionTransfer(deadline), 0);
 
     return {
@@ -4083,6 +4081,7 @@ function buildQCSalaryRows(qcs, deadlines, bonusSettings) {
       name: qc.name || qc.displayName || qc.username || `QC ${qcId}`,
       fields: Array.isArray(qc.fields) && qc.fields.length > 0 ? qc.fields : (qc.field ? [qc.field] : []),
       isQc: true,
+      salaryMonth: month,
       taskCount: qcDeadlines.length,
       earnedAmount: baseAmount.toFixed(2),
       transferredAmount: transferredAmount.toFixed(2),
@@ -4389,30 +4388,8 @@ function normalizeDeadlineDate(value, label) {
 }
 
 function validateBonusSettingsPayload(payload) {
-  if (!payload || typeof payload !== 'object') throw validationError('Dữ liệu bonus không hợp lệ.');
-
-  const hasField = Object.prototype.hasOwnProperty.call(payload, 'field');
-  const field = hasField ? normalizeConfiguredFieldName(payload.field) : null;
-  const taskThreshold = Number(payload.taskThreshold);
-  const bonusPerTask = Number(payload.bonusPerTask);
-  const hasQcDefaultPrice = Object.prototype.hasOwnProperty.call(payload, 'qcDefaultPrice');
-  const qcDefaultPrice = hasQcDefaultPrice ? Number(payload.qcDefaultPrice) : null;
-  if (!Number.isInteger(taskThreshold) || taskThreshold < 0) {
-    throw validationError('Số task đạt 100% phải là số nguyên không âm.');
-  }
-  if (!Number.isFinite(bonusPerTask) || bonusPerTask < 0) {
-    throw validationError('Bonus mỗi task phải là số không âm.');
-  }
-  if (hasQcDefaultPrice && (!Number.isFinite(qcDefaultPrice) || qcDefaultPrice < 0)) {
-    throw validationError('Giá mặc định cho QC phải là số không âm.');
-  }
-
-  return {
-    ...(field ? { field } : {}),
-    taskThreshold,
-    bonusPerTask,
-    ...(hasQcDefaultPrice ? { qcDefaultPrice } : {})
-  };
+  const rule = validateBonusRule(payload);
+  return { field: normalizeConfiguredFieldName(payload.field), rule };
 }
 
 function validationError(message) {
