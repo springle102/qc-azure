@@ -2684,6 +2684,14 @@
 
 .deadline-registration-modal {
   max-width: 720px;
+  max-height: calc(100dvh - 48px);
+  margin: 0 auto;
+}
+
+.deadline-registration-modal-overlay {
+  align-items: flex-start;
+  padding-top: 24px;
+  padding-bottom: 24px;
 }
 
 .deadline-registration-form {
@@ -2896,6 +2904,13 @@
 
 .salary-table {
   min-width: 720px;
+}
+
+.salary-table .salary-total-row > th,
+.salary-table .salary-total-row > td {
+  border-top: 2px solid var(--border-bright);
+  background: var(--bg-surface);
+  font-weight: 700;
 }
 
 .salary-cell {

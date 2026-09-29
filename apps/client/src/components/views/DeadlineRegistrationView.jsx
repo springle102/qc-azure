@@ -253,7 +253,7 @@ export function DeadlineRegistrationView({
       </section>
 
       {editingRegistration && (
-        <div className="modal-overlay" onClick={closeEditor}>
+        <div className="modal-overlay deadline-registration-modal-overlay" onClick={closeEditor}>
           <form className="modal-content deadline-registration-modal" onSubmit={saveRegistration} onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
               <div>

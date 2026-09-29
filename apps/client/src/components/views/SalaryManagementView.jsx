@@ -44,6 +44,16 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
     ));
   }, [canUseScopeFilters, columnSort, fieldFilter, members, roleFilter, search]);
 
+  const salaryTotals = useMemo(() => filteredFreelancers.reduce((totals, member) => {
+    // totalSalary already includes bonus (or the transferred amount for QC).
+    const salary = Number(member.totalSalary ?? member.salary ?? member.luong);
+    const bonus = Number(member.isQc ? member.transferredAmount : member.bonus);
+    return {
+      salaryCents: totals.salaryCents + (Number.isFinite(salary) ? Math.round(salary * 100) : 0),
+      bonusCents: totals.bonusCents + (Number.isFinite(bonus) ? Math.round(bonus * 100) : 0)
+    };
+  }, { salaryCents: 0, bonusCents: 0 }), [filteredFreelancers]);
+
   const updateColumnSort = (key, direction) => {
     setColumnSort((current) => current?.key === key && current.direction === direction ? null : { key, direction });
   };
@@ -129,6 +139,14 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr className="salary-total-row">
+                <th scope="row" colSpan={3}>Tổng cộng (gồm bonus)</th>
+                <td className="salary-cell">{isLoading ? 'Đang tải...' : formatSalary(salaryTotals.salaryCents / 100)}</td>
+                <td className="salary-cell" title="Đã được tính trong tổng lương">{isLoading ? 'Đang tải...' : formatSalary(salaryTotals.bonusCents / 100)}</td>
+                <td />
+              </tr>
+            </tfoot>
           </table>
         </div>
       </section>

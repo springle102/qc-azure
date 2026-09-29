@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { IconCamera, IconLock, IconTrash, IconUpload, IconUser } from '../common/Icons';
 
 export function ProfileView({ currentUser = {}, onSaveProfile }) {
+  const isNameLocked = currentUser.role === 'Freelancer';
   const [name, setName] = useState(currentUser.name || '');
   const [email, setEmail] = useState(currentUser.email || '');
   const [avatar, setAvatar] = useState(currentUser.avatar || '');
@@ -69,7 +70,7 @@ export function ProfileView({ currentUser = {}, onSaveProfile }) {
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    onSaveProfile({ name, email, avatar });
+    onSaveProfile({ ...(!isNameLocked ? { name } : {}), email, avatar });
   };
 
   const handlePassword = (event) => {
@@ -107,8 +108,9 @@ export function ProfileView({ currentUser = {}, onSaveProfile }) {
         <section className="glass-panel profile-form-card">
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label className="form-label">Họ và tên</label>
-              <input className="form-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Nhập họ và tên" />
+              <label className="form-label" htmlFor="profile-name">Họ và tên</label>
+              <input id="profile-name" className="form-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Nhập họ và tên" disabled={isNameLocked} aria-describedby={isNameLocked ? 'profile-name-help' : undefined} />
+              {isNameLocked && <p id="profile-name-help" className="form-help">Liên hệ Admin hoặc QC để thay đổi họ và tên.</p>}
             </div>
             <div className="form-group">
               <label className="form-label">Email</label>

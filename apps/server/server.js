@@ -1192,6 +1192,9 @@ app.patch('/api/bonus-settings', requireManager, async (req, res) => {
 
 app.patch('/api/profile', requireAuth, async (req, res) => {
   try {
+    if (req.authUser.role === 'Freelancer' && Object.prototype.hasOwnProperty.call(req.body || {}, 'name')) {
+      return res.status(403).json({ success: false, message: 'Freelancer không được tự thay đổi họ và tên. Vui lòng liên hệ Admin hoặc QC.' });
+    }
     const accounts = await getCollection('accounts');
     const currentAccount = accounts.find((account) => String(account.id) === String(req.authUser.id));
     if (!currentAccount) return res.status(404).json({ success: false, message: 'Không tìm thấy account hiện tại.' });
