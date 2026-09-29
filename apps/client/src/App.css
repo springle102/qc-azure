@@ -2010,6 +2010,14 @@
   text-align: center;
 }
 
+.freelancer-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  vertical-align: middle;
+}
+
 .freelancer-avatar {
   display: inline-grid;
   place-items: center;
@@ -2027,6 +2035,18 @@
 
 .freelancer-avatar-placeholder {
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.2);
+}
+
+.freelancer-online-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--bg-card);
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.18), 0 0 8px rgba(34, 197, 94, 0.5);
 }
 
 .account-management-embedded {

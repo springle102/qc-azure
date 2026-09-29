@@ -33,6 +33,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const sessions = new Map();
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24;
+const PRESENCE_TTL_MS = 90 * 1000;
 const GOOGLE_REQUEST_TIMEOUT_MS = 30_000;
 const SYNC_WRITE_CONCURRENCY = 8;
 const GOOGLE_DRIVE_FOLDER_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -194,6 +195,7 @@ app.get('/api/freelancers', requireAuth, async (req, res) => {
       getCollection('freelancers'),
       getCollection('accounts')
     ]);
+    const onlineAccountIds = getOnlineAccountIds();
     const scopedFreelancers = filterFreelancerRowsForUser(freelancers, req.authUser);
     const data = scopedFreelancers.map((freelancer) => {
       const freelancerId = freelancer.fIld ?? freelancer.fId ?? freelancer.id;
@@ -201,6 +203,7 @@ app.get('/api/freelancers', requireAuth, async (req, res) => {
       return {
         ...freelancer,
         avatar: account?.avatar || freelancer.avatar || '',
+        isOnline: Boolean(account && onlineAccountIds.has(String(account.id))),
         accountId: account?.id ?? null,
         accountUsername: account?.username ?? null,
         accountRole: account?.role ?? null,
@@ -1290,7 +1293,8 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const token = crypto.randomBytes(32).toString('hex');
-    sessions.set(token, { user: toPublicAccount(account), expiresAt: Date.now() + SESSION_TTL_MS });
+    const now = Date.now();
+    sessions.set(token, { user: toPublicAccount(account), expiresAt: now + SESSION_TTL_MS, lastSeenAt: now });
     res.json({ success: true, data: { token, user: toPublicAccount(account) } });
   } catch (error) {
     res.status(502).json({ success: false, message: error.message });
@@ -1299,6 +1303,10 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', requireAuth, (req, res) => {
   res.json({ success: true, data: req.authUser });
+});
+
+app.post('/api/auth/heartbeat', requireAuth, (req, res) => {
+  res.json({ success: true, data: { online: true } });
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -4437,12 +4445,31 @@ function getBearerToken(req) {
 function getAuthUser(req) {
   const token = getBearerToken(req);
   const session = token ? sessions.get(token) : null;
-  if (!session || session.expiresAt < Date.now()) {
+  const now = Date.now();
+  if (!session || session.expiresAt < now) {
     if (token) sessions.delete(token);
     return null;
   }
-  session.expiresAt = Date.now() + SESSION_TTL_MS;
+  session.expiresAt = now + SESSION_TTL_MS;
+  session.lastSeenAt = now;
   return session.user;
+}
+
+function getOnlineAccountIds() {
+  const now = Date.now();
+  const onlineAccountIds = new Set();
+
+  for (const [token, session] of sessions.entries()) {
+    if (session.expiresAt < now) {
+      sessions.delete(token);
+      continue;
+    }
+    if (now - Number(session.lastSeenAt || 0) <= PRESENCE_TTL_MS && session.user?.id !== undefined && session.user?.id !== null) {
+      onlineAccountIds.add(String(session.user.id));
+    }
+  }
+
+  return onlineAccountIds;
 }
 
 function hasFreelancerAssignment(row) {

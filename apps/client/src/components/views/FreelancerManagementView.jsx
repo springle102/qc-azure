@@ -29,6 +29,12 @@ export function FreelancerManagementView({ freelancers = [], accounts = [], fiel
   const [columnFilters, setColumnFilters] = useState({});
   const [columnSort, setColumnSort] = useState(null);
 
+  useEffect(() => {
+    if (!onRefresh) return undefined;
+    const refreshPresence = window.setInterval(() => onRefresh(), 30_000);
+    return () => window.clearInterval(refreshPresence);
+  }, [onRefresh]);
+
   const columnFilterOptions = useMemo(() => Object.fromEntries(
     FREELANCER_FILTER_COLUMNS.map(({ key }) => {
       const values = key === 'fields'
@@ -259,16 +265,24 @@ function FreelancerAvatar({ freelancer = {} }) {
 
   if (avatar && !hasError) {
     return (
-      <img
-        className="freelancer-avatar"
-        src={avatar}
-        alt={`Avatar của ${freelancer.name || 'freelancer'}`}
-        onError={() => setHasError(true)}
-      />
+      <span className="freelancer-avatar-wrap">
+        <img
+          className="freelancer-avatar"
+          src={avatar}
+          alt={`Avatar của ${freelancer.name || 'freelancer'}`}
+          onError={() => setHasError(true)}
+        />
+        {freelancer.isOnline && <span className="freelancer-online-dot" title="Đang hoạt động" aria-label="Đang hoạt động" />}
+      </span>
     );
   }
 
-  return <span className="freelancer-avatar freelancer-avatar-placeholder" title={freelancer.name || 'Chưa có avatar'}>{initial}</span>;
+  return (
+    <span className="freelancer-avatar-wrap">
+      <span className="freelancer-avatar freelancer-avatar-placeholder" title={freelancer.name || 'Chưa có avatar'}>{initial}</span>
+      {freelancer.isOnline && <span className="freelancer-online-dot" title="Đang hoạt động" aria-label="Đang hoạt động" />}
+    </span>
+  );
 }
 
 function getFreelancerFilterValue(freelancer = {}, key) {

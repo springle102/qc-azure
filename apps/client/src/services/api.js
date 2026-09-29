@@ -78,6 +78,7 @@ export const api = {
     body: JSON.stringify(credentials)
   }),
   getCurrentUser: () => request('/auth/me'),
+  heartbeat: () => request('/auth/heartbeat', { method: 'POST' }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   getAccounts: () => request('/accounts'),
   createAccount: (account) => request('/accounts', {

@@ -113,6 +113,20 @@ export function App() {
       .finally(() => setIsAuthChecking(false));
   }, []);
 
+  useEffect(() => {
+    if (!profile) return undefined;
+
+    const sendHeartbeat = () => {
+      api.heartbeat().catch(() => {
+        // Presence is best-effort; the normal data requests still handle auth failures.
+      });
+    };
+
+    sendHeartbeat();
+    const heartbeatId = window.setInterval(sendHeartbeat, 30_000);
+    return () => window.clearInterval(heartbeatId);
+  }, [profile?.id]);
+
   const role = profile?.role;
 
   const loadData = useCallback(async ({ forceDriveRefresh = false } = {}) => {
