@@ -2915,7 +2915,7 @@ async function deleteDeadlinesFromGoogleSheet(rows) {
   });
 }
 
-function queueStatusSheetSync(row) {
+function queueDeadlineSheetSync(row, columns) {
   const key = `${row.seriesId}:${row.chapterNumber}`;
   const previous = pendingStatusSheetSyncs.get(key) || Promise.resolve();
   let current;
@@ -2925,7 +2925,7 @@ function queueStatusSheetSync(row) {
       let lastError;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
-          return await syncDeadlineWithGoogleSheet(row, { action: 'update', columns: ['status'] });
+          return await syncDeadlineWithGoogleSheet(row, { action: 'update', columns });
         } catch (error) {
           lastError = error;
           if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
@@ -2941,6 +2941,7 @@ function queueStatusSheetSync(row) {
       if (pendingStatusSheetSyncs.get(key) === current) pendingStatusSheetSyncs.delete(key);
     });
   pendingStatusSheetSyncs.set(key, current);
+  return current;
 }
 
 async function updateDeadlineAndGoogleSheet(keys, updates, allowedColumns) {
@@ -2948,10 +2949,16 @@ async function updateDeadlineAndGoogleSheet(keys, updates, allowedColumns) {
   const current = currentRows.find((item) => Object.entries(keys).every(([key, value]) => String(item[key]) === String(value)));
   if (!current) throw new Error('Không tìm thấy deadline cần cập nhật.');
   const data = await updateRow('deadlines', keys, updates, allowedColumns);
-  // Return the web/database result immediately. Only Status is sent to the
-  // existing matching Sheet row, and that Google API call runs in the
-  // background so it cannot delay the user's status change.
-  if (Object.prototype.hasOwnProperty.call(updates, 'status')) queueStatusSheetSync(data);
+  // Keep the Sheet in sync for values edited from the web. File is a
+  // checkbox column, so it must be written before the request completes;
+  // otherwise the next full sync can read the old checkbox and overwrite the
+  // value that was just saved in the database.
+  const sheetColumns = ['status', 'statusRaw'].filter((column) => (
+    Object.prototype.hasOwnProperty.call(updates, column)
+  ));
+  if (sheetColumns.length > 0) {
+    await queueDeadlineSheetSync(data, sheetColumns);
+  }
   return data;
 }
 
