@@ -10,18 +10,9 @@ export function Header({ currentUser, deadlines = [], errors = [], onNavigate, o
   const ThemeIcon = isDarkMode ? IconSun : IconMoon;
   const themeLabel = isDarkMode ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối';
 
-  const todayDateKey = useMemo(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }, []);
-
-  const urgentCount = useMemo(() => {
-    return (deadlines || []).filter((item) => {
-      const end = String(item.endTask || '').trim();
-      const status = String(item.status || '').toLowerCase();
-      return end.startsWith(todayDateKey) && !['submitted', 'done'].includes(status);
-    }).length;
-  }, [deadlines, todayDateKey]);
+  const reviewCount = useMemo(() => {
+    return (deadlines || []).filter((item) => normalizeHeaderStatus(item) === 'submitted').length;
+  }, [deadlines]);
 
   useEffect(() => {
     const handlePointerDown = (event) => {
@@ -62,10 +53,10 @@ export function Header({ currentUser, deadlines = [], errors = [], onNavigate, o
       </div>
 
       <div className="qc-header-actions">
-        {currentUser?.role !== 'Freelancer' && urgentCount > 0 && (
-          <div className="qc-header-ticker" title="Các chapter có hạn hôm nay cần hoàn thành / kiểm duyệt">
+        {currentUser?.role !== 'Freelancer' && reviewCount > 0 && (
+          <div className="qc-header-ticker" title="Các chapter đang chờ QC">
             <span className="qc-ticker-dot" />
-            <span>Hôm nay: <strong>{urgentCount} chapter</strong> cần QC gấp</span>
+            <span><strong>{reviewCount} chapter</strong> đang chờ QC</span>
           </div>
         )}
         <div ref={notificationRef} className="qc-notification-wrap">

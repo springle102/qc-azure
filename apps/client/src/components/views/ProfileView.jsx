@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { IconCamera, IconLock, IconTrash, IconUpload, IconUser } from '../common/Icons';
 import { extractQrImage } from '../../utils/qrImage.mjs';
 
@@ -12,6 +12,7 @@ export function ProfileView({ currentUser = {}, onSaveProfile }) {
   const [qrError, setQrError] = useState('');
   const [isProcessingQR, setIsProcessingQR] = useState(false);
   const [isSavingQR, setIsSavingQR] = useState(false);
+  const autoProcessedQrRef = useRef('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -21,6 +22,40 @@ export function ProfileView({ currentUser = {}, onSaveProfile }) {
     setAvatar(currentUser.avatar || '');
     setImageQR(currentUser.imageQR || '');
   }, [currentUser]);
+
+  useEffect(() => {
+    const source = String(currentUser.imageQR || '').trim();
+    const freelancerKey = String(currentUser.freelancerId || '').trim();
+    const migrationKey = `${freelancerKey}:${source}`;
+    if (!source || !freelancerKey || source.includes('/qr-cropped-') || autoProcessedQrRef.current === migrationKey) return undefined;
+
+    autoProcessedQrRef.current = migrationKey;
+    let cancelled = false;
+    const migrateLegacyQr = async () => {
+      setIsProcessingQR(true);
+      try {
+        const response = await fetch(source, { cache: 'no-store' });
+        if (!response.ok) throw new Error('Không thể tải ảnh QR cũ.');
+        const blob = await response.blob();
+        if (!blob.type.startsWith('image/')) throw new Error('Ảnh QR cũ không hợp lệ.');
+        const file = new File([blob], 'legacy-qr-image', { type: blob.type });
+        const extractedQr = await extractQrImage(file);
+        if (cancelled) return;
+        setImageQR(extractedQr);
+        const savedUser = await onSaveProfile({ imageQR: extractedQr }, { silent: true });
+        if (!savedUser && !cancelled) throw new Error('Không thể tự động lưu ảnh QR đã cắt.');
+      } catch (error) {
+        if (!cancelled) setQrError(error instanceof Error ? error.message : 'Không thể tự động cắt lại mã QR cũ.');
+      } finally {
+        if (!cancelled) setIsProcessingQR(false);
+      }
+    };
+
+    migrateLegacyQr();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser.freelancerId, currentUser.imageQR, onSaveProfile]);
 
   const handleAvatar = (event) => {
     const file = event.target.files?.[0];

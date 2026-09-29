@@ -321,7 +321,7 @@ export function App() {
     setIsSidebarOpen(false);
   };
 
-  const handleSaveProfile = useCallback(async (updates) => {
+  const handleSaveProfile = useCallback(async (updates, { silent = false } = {}) => {
     try {
       const savedUser = await api.updateProfile(updates);
       setProfile((current) => normalizeUser({
@@ -329,9 +329,11 @@ export function App() {
         ...savedUser,
         ...(Object.prototype.hasOwnProperty.call(updates, 'avatar') ? { avatar: updates.avatar } : {})
       }));
-      showToast('Đã lưu hồ sơ.', 'success');
+      if (!silent) showToast('Đã lưu hồ sơ.', 'success');
+      return savedUser;
     } catch {
       showToast('Không thể lưu thông tin hồ sơ.', 'error');
+      return null;
     }
   }, []);
 

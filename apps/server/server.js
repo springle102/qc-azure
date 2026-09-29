@@ -1548,7 +1548,7 @@ async function materializeQrCode(value, ownerKey) {
   const image = parseErrorImageDataUrl(normalizedValue);
   if (!image) throw validationError('Mã QR không hợp lệ.');
   const extension = getErrorImageExtension(image.contentType);
-  const path = `freelancers/${String(ownerKey).replace(/[^a-z0-9_-]/gi, '_')}/${crypto.randomUUID()}.${extension}`;
+  const path = `freelancers/${String(ownerKey).replace(/[^a-z0-9_-]/gi, '_')}/qr-cropped-${crypto.randomUUID()}.${extension}`;
   return uploadQrCode({ path, data: image.data, contentType: image.contentType });
 }
 
@@ -2763,21 +2763,45 @@ function getGoogleSheetTabSnapshot(tab, fields) {
   return { ...tab, headerRowIndex, headerIndex, fieldOverride, startRow, startColumn };
 }
 
+function getImportedDeadlineCompleteness(entry) {
+  if (!entry?.sourceRow || !entry.headerIndex) return 0;
+  return GOOGLE_SHEET_DEADLINE_COLUMNS.reduce((score, key) => {
+    if (key === 'type' && entry.fieldOverride) return score + 1;
+    const columnIndex = getGoogleSheetHeaderIndex(entry.headerIndex, key, entry.fieldOverride);
+    const value = columnIndex === undefined ? '' : entry.sourceRow[columnIndex];
+    return String(value ?? '').trim() ? score + 1 : score;
+  }, 0);
+}
+
 function findGoogleSheetRow(tab, seriesId, chapterNumber) {
+  let bestMatch = null;
+  let bestCompleteness = -1;
   for (let index = tab.headerRowIndex + 1; index < tab.values.length; index += 1) {
     const row = tab.values[index] || [];
     if (isDecorativeGoogleSheetRow(row, tab.headerIndex, tab.fieldOverride)) continue;
     const currentSeriesId = getSheetValue(row, tab.headerIndex, 'seriesId', tab.fieldOverride);
     const currentChapterNumber = getSheetValue(row, tab.headerIndex, 'chapterNumber');
     if (Number(currentSeriesId) === Number(seriesId) && String(currentChapterNumber).trim() === String(chapterNumber).trim()) {
-      return {
+      const completeness = getSheetRowCompleteness(row, tab.headerIndex, tab.fieldOverride);
+      if (completeness < bestCompleteness) continue;
+      bestCompleteness = completeness;
+      bestMatch = {
         row,
         rowIndex: index,
         rowNumber: tab.startRow + index + 1
       };
     }
   }
-  return null;
+  return bestMatch;
+}
+
+function getSheetRowCompleteness(row, headerIndex, fieldOverride = null) {
+  return GOOGLE_SHEET_DEADLINE_COLUMNS.reduce((score, key) => {
+    if (key === 'type' && fieldOverride) return score + 1;
+    const columnIndex = getGoogleSheetHeaderIndex(headerIndex, key, fieldOverride);
+    const value = columnIndex === undefined ? '' : row[columnIndex];
+    return String(value ?? '').trim() ? score + 1 : score;
+  }, 0);
 }
 
 function formatGoogleSheetDate(value, { dateOnly = false } = {}) {
@@ -3171,6 +3195,7 @@ async function syncGoogleSheet() {
               tab: tab.range,
               headerIndex,
               fieldOverride,
+              sourceRow: row,
               data: buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qcs, rowNumber, fieldOverride)
             });
           } catch (error) {
@@ -3186,7 +3211,10 @@ async function syncGoogleSheet() {
       const row = entry.data;
       const key = `${row.seriesId}:${row.chapterNumber}`;
       if (uniqueRowsByKey.has(key)) duplicateRows += 1;
-      uniqueRowsByKey.set(key, entry);
+      const currentEntry = uniqueRowsByKey.get(key);
+      if (!currentEntry || getImportedDeadlineCompleteness(entry) >= getImportedDeadlineCompleteness(currentEntry)) {
+        uniqueRowsByKey.set(key, entry);
+      }
     }
     let uniqueRows = [...uniqueRowsByKey.values()];
 
