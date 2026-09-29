@@ -1,23 +1,21 @@
 import React, { useState } from 'react';
-import { getBonusPreview, getBonusVersions, getSalaryMonth, resolveBonusRule, validateBonusRule } from '../../utils/bonus.mjs';
+import { getBonusPreview, resolveBonusRule, validateBonusRule } from '../../utils/bonus.mjs';
 import { api } from '../../services/api';
 import { showToast } from '../common/ToastContainer';
 
 const money = (value) => `${Number(value || 0).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} ₫`;
 
 export function BonusSettingsPanel({ field, settings, isLoading, onRefresh }) {
-  const [month, setMonth] = useState(getSalaryMonth());
   const [draft, setDraft] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [previewCount, setPreviewCount] = useState('25');
   const [partialChapters, setPartialChapters] = useState('');
-  const config = draft || resolveBonusRule(settings, month);
-  const versions = getBonusVersions(settings).filter((version) => version.effectiveMonth !== '0001-01');
+  const config = draft || resolveBonusRule(settings);
   const update = (key, value) => setDraft({ ...config, [key]: value });
   let rule;
   let validationMessage;
   try {
-    rule = validateBonusRule({ ...config, effectiveMonth: month });
+    rule = validateBonusRule(config);
   } catch (error) {
     validationMessage = error.message;
   }
@@ -38,7 +36,7 @@ export function BonusSettingsPanel({ field, settings, isLoading, onRefresh }) {
       await api.updateBonusSettings({ field, ...rule });
       await onRefresh?.();
       setDraft(null);
-      showToast(`Đã lưu bonus ${field}, áp dụng từ ${month}.`, 'success');
+      showToast(`Đã lưu bonus ${field}. Chỉ các chap đã tick Thanh toán được tính.`, 'success');
     } catch (error) {
       showToast(error.message || 'Không thể lưu cấu hình bonus.', 'error');
     } finally {
@@ -51,14 +49,9 @@ export function BonusSettingsPanel({ field, settings, isLoading, onRefresh }) {
       <div className="bonus-settings-header">
         <span className="qc-kicker">BONUS FREELANCER · {field}</span>
         <h3>Thưởng theo tháng — {field}</h3>
-        <p className="form-help">Hai cơ chế bật độc lập và cộng dồn. Toàn bộ chap đạt mốc phải hoàn thành đúng 100%.</p>
+        <p className="form-help">Hai cơ chế bật độc lập và cộng dồn. Chỉ các chap đã tick Thanh toán được tính; toàn bộ chap đạt mốc phải hoàn thành đúng 100%.</p>
       </div>
       <form className="bonus-policy-form" onSubmit={save}>
-        <label className="form-group">Áp dụng từ tháng
-          <input className="form-input" type="month" min={getSalaryMonth()} max="9999-12" value={month} required disabled={isSaving || isLoading}
-            onChange={(event) => { setMonth(event.target.value); setDraft(null); }} />
-          <span className="form-help">Thay thế cấu hình cùng tháng; giữ chính sách của các tháng trước. Cấu hình có hiệu lực đến lần thay đổi tiếp theo.</span>
-        </label>
         <div className="bonus-policy-grid">
           <fieldset className="bonus-policy-card" disabled={isSaving || isLoading}>
             <legend>Thưởng đạt KPI</legend>
@@ -83,7 +76,7 @@ export function BonusSettingsPanel({ field, settings, isLoading, onRefresh }) {
             <p className="form-help">{config.afterThreshold || '…'} chap đầu đều đạt 100% → thưởng {money(config.afterAmount)}/chap từ chap thứ {Number(config.afterThreshold || 0) + 1}. Chap sau mốc cũng phải đạt 100%.</p>
           </fieldset>
         </div>
-        <p className="form-help">Đếm riêng từng freelancer và mảng theo Ngày nộp (giờ Việt Nam), chỉ gồm task Submitted/Done đã tick Thanh toán. Không bỏ qua chap dưới 100% để thay bằng chap phía sau.</p>
+        <p className="form-help">Đếm riêng từng freelancer và mảng theo kỳ lương đang xem. Chỉ task Submitted/Done đã tick Thanh toán được đưa vào mốc bonus. Không bỏ qua chap dưới 100% để thay bằng chap phía sau.</p>
         <fieldset className="bonus-policy-card" disabled={isSaving || isLoading}>
           <legend>Tiền QC</legend>
           <label className="form-group">Giá mặc định QC / task (đồng)
@@ -107,11 +100,6 @@ export function BonusSettingsPanel({ field, settings, isLoading, onRefresh }) {
             <strong>Tổng bonus: {money(preview.total)}</strong>
           </div> : <p className="form-help">{validationMessage || 'Nhập số chap và danh sách thứ tự chap hợp lệ để xem thử.'}</p>}
         </details>
-        {versions.length > 0 && <details><summary>Lịch sử chính sách ({versions.length})</summary>
-          <ul className="bonus-policy-history">{versions.map((version) => <li key={version.effectiveMonth}>
-            Từ {version.effectiveMonth}: KPI {version.kpiEnabled ? `${version.kpiThreshold} chap → ${money(version.kpiAmount)}` : 'tắt'}; sau mốc {version.afterEnabled ? `${version.afterThreshold} chap → ${money(version.afterAmount)}/chap` : 'tắt'}; QC {money(version.qcDefaultPrice)}/task.
-          </li>)}</ul>
-        </details>}
         <div className="bonus-settings-actions"><button type="submit" className="btn btn-primary" disabled={isSaving || isLoading}>{isSaving ? 'Đang lưu...' : `Lưu bonus ${field}`}</button></div>
       </form>
     </section>

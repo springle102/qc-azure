@@ -24,15 +24,11 @@ export function getSalaryMonth(value = new Date()) {
   return `${parts.year}-${parts.month}`;
 }
 
-export function getBonusVersions(row = {}) {
-  return Array.isArray(row.bonusPolicy?.versions)
-    ? [...row.bonusPolicy.versions].sort((a, b) => a.effectiveMonth.localeCompare(b.effectiveMonth))
-    : [];
-}
-
-export function resolveBonusRule(row = {}, month = getSalaryMonth()) {
-  const version = getBonusVersions(row).filter((item) => item.effectiveMonth <= month).at(-1);
-  if (version) return { ...DEFAULT_BONUS_RULE, ...version };
+export function resolveBonusRule(row = {}) {
+  const storedRule = row.bonusPolicy && !Array.isArray(row.bonusPolicy.versions)
+    ? row.bonusPolicy
+    : Array.isArray(row.bonusPolicy?.versions) ? row.bonusPolicy.versions.at(-1) : null;
+  if (storedRule) return { ...DEFAULT_BONUS_RULE, ...storedRule };
   return {
     ...DEFAULT_BONUS_RULE,
     afterThreshold: Math.max(1, Number(row.taskThreshold ?? 20)),
@@ -41,13 +37,10 @@ export function resolveBonusRule(row = {}, month = getSalaryMonth()) {
   };
 }
 
-export function validateBonusRule(payload, currentMonth = getSalaryMonth()) {
+export function validateBonusRule(payload) {
   const fail = (message) => { throw Object.assign(new Error(message), { statusCode: 400 }); };
   if (!payload || typeof payload !== 'object') fail('Dữ liệu bonus không hợp lệ.');
-  if (!isSalaryMonth(payload.effectiveMonth) || payload.effectiveMonth < currentMonth) {
-    fail('Tháng áp dụng phải là tháng hiện tại hoặc tháng tương lai.');
-  }
-  const result = { effectiveMonth: payload.effectiveMonth };
+  const result = {};
   for (const key of ['kpiEnabled', 'afterEnabled']) {
     if (typeof payload[key] !== 'boolean') fail('Trạng thái bật/tắt cơ chế phải hợp lệ.');
     result[key] = payload[key];

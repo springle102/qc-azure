@@ -6,7 +6,7 @@ Backend Node.js + Express cung cấp lớp API cho giao diện QC. Backend ưu t
 
 ### Bonus theo tháng
 
-Trước khi triển khai phiên bản bonus mới, chạy `docs/migrations/20260929_monthly_bonus_policy.sql` trong Supabase SQL Editor. Migration chỉ thêm cột JSONB `BonusSettings.bonusPolicy`; không liên quan Supabase Storage. Nếu dùng tên bảng tùy chỉnh, đổi tên bảng trong migration tương ứng.
+Trước khi triển khai bonus mới, chạy `docs/migrations/20260929_monthly_bonus_policy.sql` trong Supabase SQL Editor. Migration chỉ thêm cột JSONB `BonusSettings.bonusPolicy`; không liên quan Supabase Storage. Nếu dùng tên bảng tùy chỉnh, đổi tên bảng trong migration tương ứng.
 
 Khi đóng gói backend, giữ file `apps/server/bonus.mjs` trong cùng service với `apps/server/server.js`. Frontend có bản module tương ứng trong `apps/client/src/utils/bonus.mjs`; điều này giúp Railway chạy được khi mỗi service dùng một Root Directory riêng.
 
@@ -14,8 +14,8 @@ Khi đóng gói backend, giữ file `apps/server/bonus.mjs` trong cùng service 
 - `GET /api/salaries?month=YYYY-MM` mặc định tháng hiện tại, chia kỳ theo `submittedAt` ở múi giờ `Asia/Ho_Chi_Minh`. Task thiếu Ngày nộp không được tự gán tháng; API trả `missingDateChapters` để hiển thị cảnh báo.
 - Lương cơ bản chỉ gồm task đã duyệt Thanh toán trong kỳ. Bonus chỉ đếm các task đó có trạng thái Submitted/Done, riêng từng freelancer và mảng. QC vẫn chỉ nhận lương task Done.
 - Xếp theo Ngày nộp, rồi ID truyện/chapter khi trùng thời điểm. Cả N chap đầu tiên phải có `completionPercent === 100`; không lọc bỏ chap chưa đạt rồi đếm bù. Sau mốc, chỉ chap đúng 100% được thưởng. KPI cộng một lần; thưởng sau mốc bắt đầu từ N+1.
-- Cấu hình lưu phiên bản theo tháng hiệu lực (chỉ tháng hiện tại/tương lai). Lưu cùng tháng thay thế phiên bản tháng đó; tháng trước dùng phiên bản trước. QC price cũng nằm trong phiên bản. Đây là lịch sử chính sách, không phải bảng lương đã chốt: chỉnh task vẫn tính lại lương.
-- Với dữ liệu cấu hình cũ, giữ `taskThreshold` (tối thiểu 1) và `bonusPerTask` làm mốc/số tiền của thưởng sau mốc; KPI mặc định tắt. Những giá trị cũ được chụp lại thành phiên bản nền khi lưu lần đầu. Quy tắc mới kiểm tra 100% và chia kỳ theo tháng cũng áp dụng khi xem dữ liệu cũ; ứng dụng trước đây chưa lưu bảng lương chốt hoặc lịch sử chính sách cũ.
+- Cấu hình là chính sách hiện hành của từng mảng, không có tháng hiệu lực. Lương vẫn có thể chọn kỳ tháng để xem, còn bonus chỉ tính các chap trong kỳ đã tick Thanh toán.
+- Với dữ liệu cấu hình cũ, giữ `taskThreshold` (tối thiểu 1) và `bonusPerTask` làm mốc/số tiền của thưởng sau mốc; KPI mặc định tắt. Quy tắc mới kiểm tra 100% và chỉ tính task đã tick Thanh toán.
 - Kiểm thử: `node --test apps/server/tests/monthlyBonus.test.mjs` từ thư mục gốc dự án.
 
 ```bash

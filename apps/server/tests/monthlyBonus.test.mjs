@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { calculateMonthlyBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, saveBonusVersion, validateBonusRule } from '../bonus.mjs';
+import { calculateMonthlyBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, validateBonusRule } from '../bonus.mjs';
 
-const rule = { effectiveMonth: '2026-09', kpiEnabled: true, kpiThreshold: 20, kpiAmount: 200000,
+const rule = { kpiEnabled: true, kpiThreshold: 20, kpiAmount: 200000,
   afterEnabled: true, afterThreshold: 20, afterAmount: 5000, qcDefaultPrice: 1000 };
 const chapters = (count) => Array.from({ length: count }, (_, index) => ({
   seriesId: 1, chapterNumber: String(index + 1), fIld: 7, qcId: 2, type: 'Japan',
@@ -78,26 +78,19 @@ test('monthly grouping uses Vietnam time and does not invent dates', () => {
   for (const value of ['2026-00', '2026-13', '26-09', ['2026-09'], '0000-01']) assert.equal(isSalaryMonth(value), false);
 });
 
-test('effective-month versions preserve previous policies and replace only the selected month', () => {
-  let row = { taskThreshold: 30, bonusPerTask: 8000, qcDefaultPrice: 1500 };
-  row = { ...row, bonusPolicy: saveBonusVersion(row, rule) };
-  row = { ...row, bonusPolicy: saveBonusVersion(row, { ...rule, effectiveMonth: '2026-11', kpiAmount: 400000 }) };
-  row = { ...row, bonusPolicy: saveBonusVersion(row, { ...rule, effectiveMonth: '2026-10', kpiAmount: 300000 }) };
-  assert.equal(resolveBonusRule(row, '2026-08').afterThreshold, 30);
-  assert.equal(resolveBonusRule(row, '2026-08').qcDefaultPrice, 1500);
-  assert.equal(resolveBonusRule(row, '2026-09').kpiAmount, 200000);
-  assert.equal(resolveBonusRule(row, '2026-10').kpiAmount, 300000);
-  assert.equal(resolveBonusRule(row, '2026-12').kpiAmount, 400000);
-  row.bonusPolicy = saveBonusVersion(row, { ...rule, effectiveMonth: '2026-10', kpiAmount: 350000 });
-  assert.equal(row.bonusPolicy.versions.length, 4);
-  assert.equal(resolveBonusRule(row, '2026-10').kpiAmount, 350000);
-  assert.equal(resolveBonusRule(row, '2026-09').kpiAmount, 200000);
+test('current policy is applied directly to paid chapters, with legacy amounts as fallback', () => {
+  const legacy = { taskThreshold: 30, bonusPerTask: 8000, qcDefaultPrice: 1500 };
+  assert.equal(resolveBonusRule(legacy).afterThreshold, 30);
+  assert.equal(resolveBonusRule(legacy).afterAmount, 8000);
+  assert.equal(resolveBonusRule(legacy).qcDefaultPrice, 1500);
+  const stored = { bonusPolicy: { ...rule, kpiAmount: 350000 } };
+  assert.equal(resolveBonusRule(stored).kpiAmount, 350000);
 });
 
 test('configuration rejects malformed booleans, dates, thresholds and amounts', () => {
   assert.equal(validateBonusRule(rule, '2026-09').kpiAmount, 200000);
   for (const patch of [
-    { effectiveMonth: '2026-08' }, { effectiveMonth: '2026-13' }, { afterThreshold: 0 }, { kpiThreshold: 1.5 },
+    { afterThreshold: 0 }, { kpiThreshold: 1.5 },
     { kpiEnabled: 'false' }, { kpiAmount: -1 }, { afterAmount: '' }, { afterAmount: null },
     { afterAmount: 0.00001 }, { afterAmount: true }, { qcDefaultPrice: Infinity }
   ]) assert.throws(() => validateBonusRule({ ...rule, ...patch }, '2026-09'), { statusCode: 400 });
@@ -175,14 +168,14 @@ test('only Submitted/Done chapters count toward bonus; QC gets Done only', async
   assert.equal(res.payload.data.find((row) => row.isQc).totalSalary, '19000.00');
 });
 
-test('bonus settings API persists both mechanisms and history across reloads', async () => {
+test('bonus settings API persists both mechanisms across reloads', async () => {
   let handler;
   const rows = [{ id: 1, field: null, taskThreshold: 30, bonusPerTask: 8000, qcDefaultPrice: 1500 }];
   const context = {
     app: { patch: (_path, _auth, callback) => { handler = callback; } }, requireManager: () => {},
     selectRows: async () => structuredClone(rows), getCollection: async () => structuredClone(rows),
     assertConfiguredFields: async () => {}, normalizeConfiguredFieldName: (value) => value,
-    validateBonusRule: (payload) => validateBonusRule(payload, '2026-09'), saveBonusVersion,
+    validateBonusRule,
     bonusSettingsFields: ['field', 'bonusPolicy'],
     insertRow: async (_table, data) => { rows.push(structuredClone(data)); return data; },
     updateRow: async (_table, keys, data) => {
@@ -203,15 +196,14 @@ test('bonus settings API persists both mechanisms and history across reloads', a
     return res;
   };
   assert.equal((await save({ field: 'Japan', ...rule })).code, 200);
-  assert.equal((await save({ field: 'Japan', ...rule, effectiveMonth: '2026-10', kpiAmount: 300000, afterEnabled: false })).code, 200);
+  assert.equal((await save({ field: 'Japan', ...rule, kpiAmount: 300000, afterEnabled: false })).code, 200);
   const loaded = await vm.runInContext('getBonusSettings()', context);
   assert.equal(rows.length, 2);
-  assert.equal(loaded.byField.Japan.bonusPolicy.versions.length, 3);
-  assert.equal(resolveBonusRule(loaded.byField.Japan, '2026-09').afterEnabled, true);
-  assert.equal(resolveBonusRule(loaded.byField.Japan, '2026-10').afterEnabled, false);
-  assert.equal(resolveBonusRule(loaded.byField.Japan, '2026-08').afterThreshold, 30);
-  assert.equal(resolveBonusRule(loaded.byField.Japan, '2026-08').afterAmount, 8000);
+  assert.equal(loaded.byField.Japan.bonusPolicy.afterEnabled, false);
+  assert.equal(resolveBonusRule(loaded.byField.Japan).kpiAmount, 300000);
+  assert.equal(resolveBonusRule(loaded.byField.Japan).afterThreshold, 20);
+  assert.equal(resolveBonusRule(loaded.byField.Japan).afterAmount, 5000);
   const previous = JSON.stringify(rows);
-  assert.equal((await save({ field: 'Japan', ...rule, effectiveMonth: '2026-08' })).code, 400);
+  assert.equal((await save({ field: 'Japan', ...rule, kpiAmount: -1 })).code, 400);
   assert.equal(JSON.stringify(rows), previous);
 });

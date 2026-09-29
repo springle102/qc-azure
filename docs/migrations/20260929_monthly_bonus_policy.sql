@@ -4,6 +4,6 @@ BEGIN;
 ALTER TABLE "BonusSettings"
   ADD COLUMN IF NOT EXISTS "bonusPolicy" jsonb NOT NULL DEFAULT '{"versions": []}'::jsonb;
 COMMENT ON COLUMN "BonusSettings"."bonusPolicy" IS
-  'Monthly effective versions: KPI lump sum and per-chapter bonus strictly after a fully completed milestone.';
+  'Current policy: KPI lump sum and per-chapter bonus strictly after a fully completed milestone. Only paid chapters are counted.';
 NOTIFY pgrst, 'reload schema';
 COMMIT;

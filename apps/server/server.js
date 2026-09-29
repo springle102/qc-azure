@@ -3,7 +3,7 @@ import cors from 'cors';
 import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { inflateRawSync } from 'node:zlib';
-import { calculateMonthlyBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, saveBonusVersion, validateBonusRule } from './bonus.mjs';
+import { calculateMonthlyBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, validateBonusRule } from './bonus.mjs';
 import {
   deleteRowById,
   deleteRowsByKeys,
@@ -1186,8 +1186,7 @@ app.patch('/api/bonus-settings', requireManager, async (req, res) => {
     const current = payload.field
       ? currentRows.find((row) => String(row.field || '') === String(payload.field))
       : currentRows.find((row) => !row.field);
-    const baseline = current || currentRows.find((row) => !row.field) || {};
-    const updates = { field: payload.field, bonusPolicy: saveBonusVersion(baseline, payload.rule) };
+    const updates = { field: payload.field, bonusPolicy: payload.rule };
     const data = current
       ? await updateRow('bonusSettings', { id: current.id }, updates, bonusSettingsFields)
       : await insertRow('bonusSettings', { id: Math.max(0, ...currentRows.map((row) => Number(row.id) || 0)) + 1, ...updates }, ['id', ...bonusSettingsFields]);
@@ -4014,7 +4013,7 @@ function normalizeBonusSettingsRow(row = {}) {
   };
 }
 
-function getBonusSettingsForField(settings, field, month = getSalaryMonth()) {
+function getBonusSettingsForField(settings, field) {
   const fieldName = String(field ?? '').trim();
   const fieldSettings = settings?.byField?.[fieldName]
     || (settings?.field ? settings : null)
@@ -4023,7 +4022,7 @@ function getBonusSettingsForField(settings, field, month = getSalaryMonth()) {
     || {};
   return {
     field: fieldName || fieldSettings.field || null,
-    ...resolveBonusRule(fieldSettings, month)
+    ...resolveBonusRule(fieldSettings)
   };
 }
 
@@ -4043,7 +4042,7 @@ function buildSalaryRows(freelancers, deadlines, bonusSettings, month = getSalar
     });
     const bonusByField = [...tasksByField.entries()].map(([field, tasks]) => ({
       field,
-      ...calculateMonthlyBonus(tasks, getBonusSettingsForField(bonusSettings, field, month))
+      ...calculateMonthlyBonus(tasks, getBonusSettingsForField(bonusSettings, field))
     }));
     const bonus = bonusByField.reduce((sum, summary) => sum + Math.round(summary.total * 100), 0) / 100;
     const bonusTaskCount = bonusByField.reduce((sum, summary) => sum + summary.after.rewardedCount, 0);
@@ -4071,7 +4070,7 @@ function buildQCSalaryRows(qcs, deadlines, bonusSettings, month = getSalaryMonth
     const qcDeadlines = deadlines.filter((deadline) => (
       String(deadline.qcId ?? '') === String(qcId)
     ));
-    const baseAmount = qcDeadlines.reduce((total, deadline) => total + getBonusSettingsForField(bonusSettings, deadline.type, month).qcDefaultPrice, 0);
+    const baseAmount = qcDeadlines.reduce((total, deadline) => total + getBonusSettingsForField(bonusSettings, deadline.type).qcDefaultPrice, 0);
     const transferredAmount = qcDeadlines.reduce((total, deadline) => total + getIncompleteCompletionTransfer(deadline), 0);
 
     return {
