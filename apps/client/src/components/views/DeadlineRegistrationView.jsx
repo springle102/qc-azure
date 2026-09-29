@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { IconEdit, IconPlus, IconRefresh, IconSearch, IconTasks, IconTrash, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
@@ -252,7 +253,7 @@ export function DeadlineRegistrationView({
         </div>
       </section>
 
-      {editingRegistration && (
+      {editingRegistration && createPortal(
         <div className="modal-overlay deadline-registration-modal-overlay" onClick={closeEditor}>
           <form className="modal-content deadline-registration-modal" onSubmit={saveRegistration} onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
@@ -312,7 +313,8 @@ export function DeadlineRegistrationView({
               <button type="submit" className="btn btn-primary" disabled={isSaving}>{isSaving ? 'Đang lưu...' : 'Lưu đăng ký'}</button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

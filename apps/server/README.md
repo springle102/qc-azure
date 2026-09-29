@@ -38,6 +38,9 @@ Mặc định server chạy tại `http://localhost:5000`.
 - `DELETE /api/deadline-registrations/:id`
 - `GET /api/qcs`
 - `POST /api/auth/login`
+- `POST /api/auth/forgot-password/request-otp` (nhập username để gửi OTP tới email của account)
+- `POST /api/auth/forgot-password/verify-otp` (xác nhận OTP)
+- `POST /api/auth/forgot-password/reset` (đặt mật khẩu mới)
 - `GET /api/auth/me`
 - `POST /api/auth/logout`
 - `GET /api/accounts` (Admin)
@@ -90,8 +93,20 @@ Mặc định server chạy tại `http://localhost:5000`.
 - `SUPABASE_TABLE_FIELDS` (mặc định `Fields`)
 - `SUPABASE_TABLE_GENERAL_SETTINGS` (mặc định `GeneralSettings`)
 - `GOOGLE_SERVICE_ACCOUNT_JSON` hoặc `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` hoặc `GOOGLE_SERVICE_ACCOUNT_FILE` (thông tin Google Service Account; không commit secret)
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` (cấu hình SMTP để gửi OTP quên mật khẩu; không commit secret)
+
+Luồng quên mật khẩu gửi OTP 6 số tới email đang lưu trong `Accounts`. OTP có hiệu lực 10 phút, tối đa 5 lần nhập; sau khi đặt mật khẩu mới, các phiên đăng nhập cũ của account sẽ bị thu hồi. Cần cấu hình SMTP trên backend/Railway trước khi dùng tính năng này.
 
 Mỗi dòng trong bảng `Fields` có thêm `guideUrl` và `resourceUrl`. Dashboard trả các link theo mảng; Freelancer chỉ nhận link của mảng được gán trong account.
+
+## Fix/Check trong Quản lý lỗi
+
+- Tick/bỏ tick trên web cập nhật đúng một ô checkbox có sẵn trong Sheet, sau đó mới lưu database. Request chỉ có `updateCells` với `fields: userEnteredValue`; không thêm hàng/cột, tạo checkbox hay ghi nội dung lỗi, ảnh, ghi chú và định dạng.
+- Khi tab Quản lý lỗi đang hiển thị, giao diện gọi `GET /api/errors/fix-check` mỗi 15 giây sau khi lần đọc trước hoàn tất để lấy tick/bỏ tick từ Sheet. Luồng này không xuất ảnh, không ghi Sheet và chỉ cập nhật Fix/Check trong database, theo quyền của người đăng nhập.
+- Cần Service Account có quyền Editor, cột Fix/Check duy nhất và ô có data validation loại checkbox. Hỗ trợ checkbox mặc định và giá trị checked/unchecked tùy chỉnh.
+- Trước khi ghi, kiểm tra workbook/tab (`?gid=` hoặc `#gid=`), số dòng, Title/Chapter/Error/Editor và ô checkbox. Nếu hàng bị đổi, di chuyển, trùng, ẩn, hoặc ô bị gộp/chứa công thức, hệ thống báo lỗi. Admin/QC cần bấm **Đồng bộ từ Sheet** để cập nhật liên kết; dữ liệu cũ chưa lưu `gid` cũng cần đồng bộ một lần.
+- Lỗi tạo riêng trên web chưa có dòng nguồn chỉ lưu trạng thái trên web, không tự thêm nội dung vào Sheet. Các lần nhập Sheet, đọc checkbox và sửa lỗi được xếp hàng trong cùng tiến trình backend để tránh ghi đè từ bản đọc cũ.
+- Kiểm thử: `node --test apps/server/tests/errorFixCheck.test.mjs` từ thư mục gốc.
 
 ## Screenshot trên Supabase Storage
 

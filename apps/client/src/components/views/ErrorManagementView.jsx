@@ -405,10 +405,40 @@ export function ErrorManagementView({
   const [isMigratingScreenshots, setIsMigratingScreenshots] = useState(false);
   const [savingRowId, setSavingRowId] = useState(null);
   const [selectedScreenshot, setSelectedScreenshot] = useState(null);
+  const [fixCheckSyncWarning, setFixCheckSyncWarning] = useState('');
+  const errorMutationVersion = useRef(0);
 
   useEffect(() => {
     setLocalErrors(errors);
   }, [errors]);
+
+  useEffect(() => {
+    if (isLoading || isSaving || savingRowId !== null) return undefined;
+    let cancelled = false;
+    let timer;
+    const refreshChecks = async () => {
+      const version = errorMutationVersion.current;
+      try {
+        if (document.visibilityState !== 'hidden') {
+          const result = await api.getErrorFixChecks();
+          if (cancelled || version !== errorMutationVersion.current) return;
+          const checks = new Map(result.rows.map((row) => [String(row.id), row.fixCheck]));
+          setLocalErrors((current) => current.map((row) => checks.has(String(row.id))
+            ? { ...row, fixCheck: checks.get(String(row.id)) } : row));
+          setFixCheckSyncWarning(result.warnings?.[0] || '');
+        }
+      } catch (error) {
+        if (!cancelled) setFixCheckSyncWarning(error.message || 'Không thể đồng bộ Fix/Check từ Sheet.');
+      } finally {
+        if (!cancelled) timer = window.setTimeout(refreshChecks, 15000);
+      }
+    };
+    refreshChecks();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [isLoading, isSaving, savingRowId, errors]);
 
   useEffect(() => {
     const fieldStillVisible = fields.some((field) => field.name === activeField);
@@ -585,10 +615,12 @@ export function ErrorManagementView({
   };
 
   const handleUpdate = async (row, updates) => {
+    errorMutationVersion.current += 1;
     setSavingRowId(row.id);
     try {
       const updated = await api.updateError(row.id, updates);
       updateLocalRow(updated);
+      if (Object.prototype.hasOwnProperty.call(updates, 'fixCheck')) setFixCheckSyncWarning('');
       return updated;
     } catch (error) {
       showToast(error.message || 'Không thể cập nhật lỗi.', 'error');
@@ -630,6 +662,8 @@ export function ErrorManagementView({
           <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading || isSaving}><IconRefresh size={16} /> {isLoading ? 'Đang tải...' : 'Làm mới'}</button>
         </div>
       </div>
+
+      {fixCheckSyncWarning && <p role="status">Fix/Check: {fixCheckSyncWarning}</p>}
 
       {canManage && currentUser.role === 'Admin' && (
         <section className="glass-panel error-sheet-config-panel">
@@ -755,7 +789,7 @@ export function ErrorManagementView({
                       <td className="error-description-cell">{canManage ? <textarea className="error-inline-textarea" value={rowDraft.error || ''} onChange={(event) => updateRowDraft(row, 'error', event.target.value)} disabled={isRowSaving} /> : row.error}</td>
                       <td className="error-note-cell">{canManage ? <NoteEditor value={rowDraft.note || ''} onChange={(value) => updateRowDraft(row, 'note', value)} disabled={isRowSaving} /> : <div className="error-note-readonly">{isImageValue(row.note) ? <img className="error-note-readonly-image" src={row.note} alt={`Note cho ${row.title}`} /> : (row.note || '—')}</div>}</td>
                       <td>{canManage ? <select className="error-inline-select" value={rowDraft.editorFreelancerId || ''} onChange={(event) => updateRowDraft(row, 'editorFreelancerId', event.target.value)} disabled={isRowSaving}><option value="">Chọn freelancer</option>{editorOptions.map((freelancer) => <option value={getFreelancerId(freelancer)} key={getFreelancerId(freelancer)}>{freelancer.name || freelancer.email}</option>)}</select> : <span className="error-editor-badge">{row.editor || 'Chưa gán'}</span>}</td>
-                      <td className="error-check-cell"><label className="error-check-control"><input type="checkbox" checked={Boolean(row.fixCheck)} onChange={(event) => handleCheck(row, event.target.checked)} disabled={isRowSaving} /><span>{row.fixCheck ? 'Đã xem' : 'Chưa xem'}</span></label></td>
+                      <td className="error-check-cell"><label className="error-check-control"><input type="checkbox" checked={Boolean(row.fixCheck)} onChange={(event) => handleCheck(row, event.target.checked)} disabled={isLoading || isSaving || savingRowId !== null} /><span>{row.fixCheck ? 'Đã xem' : 'Chưa xem'}</span></label></td>
                       {canManage && <td><div className="error-row-actions"><button type="button" className="btn btn-primary btn-sm" onClick={() => handleSaveRowDraft(row)} disabled={isRowSaving || !isRowDirty}><IconCheck size={14} /> Lưu</button><button type="button" className="btn btn-danger btn-sm" onClick={() => handleDelete(row)} disabled={isRowSaving}><IconTrash size={14} /> Xóa</button></div></td>}
                     </tr>;
                   })}

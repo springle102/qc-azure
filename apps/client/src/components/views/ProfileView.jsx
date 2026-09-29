@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { IconCamera, IconLock, IconTrash, IconUpload, IconUser } from '../common/Icons';
+import { extractQrImage } from '../../utils/qrImage.mjs';
 
 export function ProfileView({ currentUser = {}, onSaveProfile }) {
   const isNameLocked = currentUser.role === 'Freelancer';
@@ -9,6 +10,7 @@ export function ProfileView({ currentUser = {}, onSaveProfile }) {
   const [imageQR, setImageQR] = useState(currentUser.imageQR || '');
   const [avatarError, setAvatarError] = useState('');
   const [qrError, setQrError] = useState('');
+  const [isProcessingQR, setIsProcessingQR] = useState(false);
   const [isSavingQR, setIsSavingQR] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -39,9 +41,10 @@ export function ProfileView({ currentUser = {}, onSaveProfile }) {
     reader.readAsDataURL(file);
   };
 
-  const handleQRUpload = (event) => {
+  const handleQRUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    event.target.value = '';
     setQrError('');
     if (!file.type.startsWith('image/')) {
       setQrError('Vui lòng chọn một file hình ảnh.');
@@ -52,10 +55,16 @@ export function ProfileView({ currentUser = {}, onSaveProfile }) {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => setImageQR(String(reader.result || ''));
-    reader.onerror = () => setQrError('Không thể đọc file mã QR.');
-    reader.readAsDataURL(file);
+    setIsProcessingQR(true);
+    try {
+      const extractedQr = await extractQrImage(file);
+      setImageQR(extractedQr);
+    } catch (error) {
+      setImageQR('');
+      setQrError(error instanceof Error ? error.message : 'Không thể tách mã QR khỏi ảnh.');
+    } finally {
+      setIsProcessingQR(false);
+    }
   };
 
   const saveQR = async () => {
@@ -131,13 +140,13 @@ export function ProfileView({ currentUser = {}, onSaveProfile }) {
               </div>
               <div className="profile-qr-actions">
                 <p className="form-help">Mã QR này sẽ hiển thị trong bảng Lương của freelancer.</p>
-                <label className="btn btn-secondary btn-sm profile-upload-button">
-                  <IconUpload size={15} /> Chọn ảnh QR
-                  <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={handleQRUpload} hidden />
+                <label className={`btn btn-secondary btn-sm profile-upload-button${isProcessingQR ? ' disabled' : ''}`}>
+                  <IconUpload size={15} /> {isProcessingQR ? 'Đang tách QR...' : 'Chọn ảnh QR'}
+                  <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={handleQRUpload} disabled={isProcessingQR || isSavingQR} hidden />
                 </label>
-                {imageQR && <button type="button" className="btn btn-outline btn-sm" onClick={() => setImageQR('')} disabled={isSavingQR}><IconTrash size={14} /> Xóa ảnh</button>}
-                <button type="button" className="btn btn-primary btn-sm" onClick={saveQR} disabled={isSavingQR}>
-                  {isSavingQR ? 'Đang lưu...' : 'Lưu mã QR'}
+                {imageQR && <button type="button" className="btn btn-outline btn-sm" onClick={() => setImageQR('')} disabled={isProcessingQR || isSavingQR}><IconTrash size={14} /> Xóa ảnh</button>}
+                <button type="button" className="btn btn-primary btn-sm" onClick={saveQR} disabled={isProcessingQR || isSavingQR}>
+                  {isSavingQR ? 'Đang lưu...' : isProcessingQR ? 'Đang xử lý...' : 'Lưu mã QR'}
                 </button>
                 {qrError && <span className="profile-qr-error" role="alert">{qrError}</span>}
               </div>

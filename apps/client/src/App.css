@@ -2728,15 +2728,27 @@
 }
 
 .deadline-registration-modal {
+  display: flex;
+  flex-direction: column;
   max-width: 720px;
   max-height: calc(100dvh - 48px);
   margin: 0 auto;
+  overflow: hidden;
 }
 
 .deadline-registration-modal-overlay {
-  align-items: flex-start;
-  padding-top: 24px;
-  padding-bottom: 24px;
+  align-items: center;
+  padding: 24px;
+}
+
+.deadline-registration-modal .modal-header,
+.deadline-registration-modal .modal-footer {
+  flex: 0 0 auto;
+}
+
+.deadline-registration-modal .modal-body {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .deadline-registration-form {
@@ -3715,20 +3727,29 @@
 }
 
 .qr-preview-modal {
-  max-width: 420px;
+  width: min(720px, calc(100vw - 32px));
+  max-width: 720px;
+  max-height: calc(100dvh - 40px);
+  overflow: hidden;
 }
 
 .qr-preview-body {
   display: flex;
   align-items: center;
   flex-direction: column;
-  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
 }
 
 .qr-preview-body img {
-  max-width: 260px;
-  max-height: 260px;
-  border-radius: 8px;
+  display: block;
+  width: min(620px, calc(100vw - 96px));
+  max-width: 100%;
+  max-height: calc(100dvh - 150px);
+  aspect-ratio: 1;
+  padding: 16px;
+  border-radius: 12px;
   background: #fff;
   object-fit: contain;
 }

@@ -3,6 +3,7 @@ import cors from 'cors';
 import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { inflateRawSync } from 'node:zlib';
+import nodemailer from 'nodemailer';
 import { calculateMonthlyBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, validateBonusRule } from './bonus.mjs';
 import {
   deleteRowById,
@@ -33,6 +34,11 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const sessions = new Map();
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24;
+const PASSWORD_RESET_OTP_TTL_MS = 10 * 60 * 1000;
+const PASSWORD_RESET_OTP_MAX_ATTEMPTS = 5;
+const PASSWORD_RESET_REQUEST_COOLDOWN_MS = 60 * 1000;
+const passwordResetChallenges = new Map();
+let passwordResetTransporter = null;
 const PRESENCE_TTL_MS = 90 * 1000;
 const GOOGLE_REQUEST_TIMEOUT_MS = 30_000;
 const SYNC_WRITE_CONCURRENCY = 8;
@@ -707,10 +713,18 @@ app.post('/api/errors', requireManager, async (req, res) => {
 });
 app.post('/api/errors/sync', requireManager, async (req, res) => {
   try {
-    const result = await syncErrorsWithGoogleSheets(req.authUser);
+    const result = await withErrorSheetLock(() => syncErrorsWithGoogleSheets(req.authUser));
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: getSafeErrorMessage(error, 'Không thể đồng bộ bảng lỗi.') });
+  }
+});
+app.get('/api/errors/fix-check', requireAuth, async (req, res) => {
+  try {
+    const data = await withErrorSheetLock(() => refreshErrorFixChecks(req.authUser));
+    res.set('Cache-Control', 'no-store').json({ success: true, data });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: getSafeErrorMessage(error, 'Không thể đồng bộ Fix/Check từ Sheet.') });
   }
 });
 app.post('/api/errors/migrate-screenshots', requireAdmin, async (req, res) => {
@@ -726,29 +740,34 @@ app.patch('/api/errors/:id', requireAuth, async (req, res) => {
   if (!Number.isInteger(id)) return res.status(400).json({ success: false, message: 'ID lỗi không hợp lệ.' });
 
   try {
-    const rows = await getCollection('errors');
-    const current = rows.find((row) => Number(row.id) === id);
-    if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy lỗi cần cập nhật.' });
-    const updates = req.authUser.role === 'Freelancer'
-      ? validateFreelancerErrorUpdatePayload(req.body, current, req.authUser)
-      : await validateErrorUpdatePayload(req.body, req.authUser, current);
-    const previousScreenshot = current.screenshot;
-    if (Object.prototype.hasOwnProperty.call(updates, 'screenshot')) {
-      updates.screenshot = await materializeErrorScreenshot(updates.screenshot, id);
-    }
-    updates.updatedAt = new Date().toISOString();
-    const data = await updateRowById(
-      'errors',
-      id,
-      updates,
-      ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'updatedAt']
-    );
-    if (Object.prototype.hasOwnProperty.call(updates, 'screenshot')) {
-      const nextPaths = new Set(getStoragePathsFromErrorScreenshot(data.screenshot));
-      const obsoletePaths = getStoragePathsFromErrorScreenshot(previousScreenshot).filter((path) => !nextPaths.has(path));
-      if (obsoletePaths.length > 0) void removeErrorScreenshots(obsoletePaths).catch((error) => console.error('Không thể dọn screenshot cũ:', error.message));
-    }
-    res.json({ success: true, data });
+    await withErrorSheetLock(async () => {
+      const rows = await getCollection('errors');
+      const current = rows.find((row) => Number(row.id) === id);
+      if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy lỗi cần cập nhật.' });
+      const updates = req.authUser.role === 'Freelancer'
+        ? validateFreelancerErrorUpdatePayload(req.body, current, req.authUser)
+        : await validateErrorUpdatePayload(req.body, req.authUser, current);
+      const previousScreenshot = current.screenshot;
+      if (Object.prototype.hasOwnProperty.call(updates, 'screenshot')) {
+        updates.screenshot = await materializeErrorScreenshot(updates.screenshot, id);
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'fixCheck')) {
+        await writeErrorFixCheck(current, updates.fixCheck);
+      }
+      updates.updatedAt = new Date().toISOString();
+      const data = await updateRowById(
+        'errors',
+        id,
+        updates,
+        ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editor', 'editorFreelancerId', 'fixCheck', 'sourceRow', 'sourceUrl', 'updatedAt']
+      );
+      if (Object.prototype.hasOwnProperty.call(updates, 'screenshot')) {
+        const nextPaths = new Set(getStoragePathsFromErrorScreenshot(data.screenshot));
+        const obsoletePaths = getStoragePathsFromErrorScreenshot(previousScreenshot).filter((path) => !nextPaths.has(path));
+        if (obsoletePaths.length > 0) void removeErrorScreenshots(obsoletePaths).catch((error) => console.error('Không thể dọn screenshot cũ:', error.message));
+      }
+      res.json({ success: true, data });
+    });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
   }
@@ -1292,6 +1311,119 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ success: true, data: { token, user: toPublicAccount(account) } });
   } catch (error) {
     res.status(502).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/auth/forgot-password/request-otp', async (req, res) => {
+  try {
+    const username = String(req.body?.username ?? '').trim().toLowerCase();
+    if (!username) throw validationError('Vui lòng nhập username.');
+
+    const accounts = await getCollection('accounts');
+    const account = accounts.find((item) => (
+      String(item.username || '').trim().toLowerCase() === username
+      && item.isActive !== false
+    ));
+    const email = String(account?.email || '').trim();
+    if (!account || !email) {
+      return res.status(400).json({ success: false, message: 'Username không tồn tại hoặc chưa có email đăng ký.' });
+    }
+
+    cleanupPasswordResetChallenges();
+    const previousRequest = [...passwordResetChallenges.values()].find((challenge) => (
+      String(challenge.accountId) === String(account.id)
+      && challenge.createdAt + PASSWORD_RESET_REQUEST_COOLDOWN_MS > Date.now()
+    ));
+    if (previousRequest) {
+      return res.status(429).json({ success: false, message: 'Vui lòng đợi một phút trước khi yêu cầu mã OTP mới.' });
+    }
+
+    const otp = String(crypto.randomInt(100000, 1000000));
+    const challengeId = crypto.randomUUID();
+    passwordResetChallenges.set(challengeId, {
+      accountId: account.id,
+      email,
+      otpHash: hashPasswordResetOtp(otp),
+      attempts: 0,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + PASSWORD_RESET_OTP_TTL_MS
+    });
+
+    try {
+      await sendPasswordResetOtp(email, otp);
+    } catch (error) {
+      passwordResetChallenges.delete(challengeId);
+      throw error;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        challengeId,
+        maskedEmail: maskEmail(email),
+        expiresInSeconds: PASSWORD_RESET_OTP_TTL_MS / 1000
+      }
+    });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: getSafeErrorMessage(error, 'Không thể gửi mã OTP lúc này.') });
+  }
+});
+
+app.post('/api/auth/forgot-password/verify-otp', (req, res) => {
+  try {
+    const challengeId = String(req.body?.challengeId ?? '').trim();
+    const otp = String(req.body?.otp ?? '').trim();
+    if (!challengeId || !/^\d{6}$/.test(otp)) throw validationError('Mã OTP phải gồm 6 chữ số.');
+
+    const challenge = passwordResetChallenges.get(challengeId);
+    if (!challenge || challenge.expiresAt <= Date.now()) {
+      passwordResetChallenges.delete(challengeId);
+      return res.status(400).json({ success: false, message: 'Mã OTP đã hết hạn hoặc không hợp lệ.' });
+    }
+    if (challenge.verifiedAt) return res.status(400).json({ success: false, message: 'Mã OTP đã được xác nhận.' });
+    if (challenge.attempts >= PASSWORD_RESET_OTP_MAX_ATTEMPTS) {
+      passwordResetChallenges.delete(challengeId);
+      return res.status(400).json({ success: false, message: 'Bạn đã nhập sai OTP quá số lần cho phép.' });
+    }
+
+    challenge.attempts += 1;
+    if (!verifyPasswordResetOtp(otp, challenge.otpHash)) {
+      const remaining = PASSWORD_RESET_OTP_MAX_ATTEMPTS - challenge.attempts;
+      if (remaining <= 0) passwordResetChallenges.delete(challengeId);
+      return res.status(400).json({ success: false, message: remaining > 0 ? `Mã OTP không đúng. Còn ${remaining} lần thử.` : 'Bạn đã nhập sai OTP quá số lần cho phép.' });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    challenge.verifiedAt = Date.now();
+    challenge.resetToken = resetToken;
+    passwordResetChallenges.delete(challengeId);
+    passwordResetChallenges.set(resetToken, challenge);
+    res.json({ success: true, data: { resetToken, expiresInSeconds: PASSWORD_RESET_OTP_TTL_MS / 1000 } });
+  } catch (error) {
+    res.status(error.statusCode || 400).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/auth/forgot-password/reset', async (req, res) => {
+  try {
+    const resetToken = String(req.body?.resetToken ?? '').trim();
+    const password = String(req.body?.password ?? '');
+    if (!resetToken) throw validationError('Phiên đặt lại mật khẩu không hợp lệ.');
+    if (password.length < 6) throw validationError('Mật khẩu phải có ít nhất 6 ký tự.');
+
+    const challenge = passwordResetChallenges.get(resetToken);
+    if (!challenge?.verifiedAt || challenge.expiresAt <= Date.now()) {
+      passwordResetChallenges.delete(resetToken);
+      return res.status(400).json({ success: false, message: 'Phiên đặt lại mật khẩu đã hết hạn. Vui lòng yêu cầu OTP mới.' });
+    }
+
+    const { hash, salt } = hashPassword(password);
+    await updateRowById('accounts', challenge.accountId, { passwordHash: hash, passwordSalt: salt }, ['passwordHash', 'passwordSalt']);
+    invalidateAccountSessions(challenge.accountId);
+    passwordResetChallenges.delete(resetToken);
+    res.json({ success: true, data: { reset: true } });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: getSafeErrorMessage(error, 'Không thể đặt lại mật khẩu.') });
   }
 });
 
@@ -2212,7 +2344,7 @@ function parseGoogleSheetReference(sheetUrl) {
   if (!match) throw validationError('Không tìm thấy Spreadsheet ID trong link Google Sheet.');
   return {
     spreadsheetId: decodeURIComponent(match[1]),
-    gid: parsed.searchParams.get('gid')
+    gid: parsed.searchParams.get('gid') ?? new URLSearchParams(parsed.hash.slice(1)).get('gid')
   };
 }
 
@@ -2238,7 +2370,7 @@ async function readGoogleSheetValues(spreadsheetId, range) {
   const query = new URLSearchParams({
     includeGridData: 'true',
     ranges: range,
-    fields: 'sheets(data(startRow,rowMetadata(hiddenByFilter,hiddenByUser),rowData/values(formattedValue,userEnteredValue,effectiveValue,dataValidation(condition(type,values(userEnteredValue))))))'
+    fields: 'sheets(merges,data(startRow,rowMetadata(hiddenByFilter,hiddenByUser),rowData/values(formattedValue,userEnteredValue,effectiveValue,dataValidation(condition(type,values(userEnteredValue))))))'
   });
   const payload = await googleSheetsRequest(
     `spreadsheets/${encodeURIComponent(spreadsheetId)}?${query.toString()}`
@@ -2253,7 +2385,7 @@ async function readGoogleSheetValues(spreadsheetId, range) {
       ))
       .filter((index) => index !== null)
   );
-  return { values, cellData, hiddenRows, startRow: Number(data.startRow || 0) };
+  return { values, cellData, hiddenRows, merges: payload.sheets?.[0]?.merges || [], startRow: Number(data.startRow || 0) };
 }
 
 function parseGoogleSheetA1Range(range) {
@@ -3229,6 +3361,136 @@ const errorSheetHeaderAliases = {
   fixCheck: ['fixcheck', 'fix', 'check', 'fixed', 'checked', 'done', 'da xem']
 };
 
+// Serialize imports, checkbox reads and edits so an older import cannot
+// overwrite a checkbox after a successful web edit in this server process.
+let errorSheetOperation = Promise.resolve();
+function withErrorSheetLock(operation) {
+  const result = errorSheetOperation.then(operation);
+  errorSheetOperation = result.catch(() => undefined);
+  return result;
+}
+
+function readErrorCheckbox(cell, fallback = '') {
+  const condition = cell?.dataValidation?.condition;
+  const value = cell?.effectiveValue ?? cell?.userEnteredValue ?? {};
+  const actual = value.boolValue ?? value.stringValue ?? value.numberValue ?? fallback;
+  if (condition?.type === 'BOOLEAN' && condition.values?.length) {
+    return String(actual) === String(condition.values[0].userEnteredValue);
+  }
+  return parseImportedBoolean(actual);
+}
+
+function getErrorCheckboxValue(cell, checked) {
+  const condition = cell?.dataValidation?.condition;
+  if (condition?.type !== 'BOOLEAN' || cell?.userEnteredValue?.formulaValue) {
+    throw validationError('Ô Fix/Check trên Sheet phải là checkbox có sẵn và không chứa công thức. Chưa ghi thay đổi.');
+  }
+  const values = condition.values || [];
+  if (values.length > 2) throw validationError('Cấu hình checkbox Fix/Check không hợp lệ.');
+  if (values.length === 0) return { boolValue: checked };
+  // Respect custom checked/unchecked values without parsing them as formulas.
+  return { stringValue: String(values[checked ? 0 : 1]?.userEnteredValue ?? '') };
+}
+
+function requireErrorSheetColumn(sheet, key) {
+  const aliases = new Set(errorSheetHeaderAliases[key].map(normalizeSheetHeader));
+  const matches = (sheet.values[sheet.headerRowIndex] || [])
+    .map((header, index) => aliases.has(normalizeSheetHeader(header)) ? index : -1)
+    .filter((index) => index >= 0);
+  if (matches.length !== 1) throw validationError(`Cột ${key === 'fixCheck' ? 'Fix/Check' : key} bị thiếu hoặc trùng trên Sheet. Chưa ghi thay đổi.`);
+  return matches[0];
+}
+
+function findErrorCheckboxTarget(sheet, current, freelancers) {
+  const source = current.sourceUrl ? parseGoogleSheetReference(current.sourceUrl) : null;
+  if (!source || source.spreadsheetId !== sheet.spreadsheetId || source.gid === null || String(source.gid) !== String(sheet.sheetId)) {
+    throw validationError('Liên kết hàng lỗi không khớp tab Sheet đã cấu hình. Hãy đồng bộ từ Sheet trước khi tick.');
+  }
+  const columns = Object.fromEntries(['title', 'chapter', 'error', 'editor', 'fixCheck']
+    .map((key) => [key, requireErrorSheetColumn(sheet, key)]));
+  const matches = [];
+  for (let index = sheet.headerRowIndex + 1; index < sheet.values.length; index += 1) {
+    const row = sheet.values[index] || [];
+    if (!['title', 'chapter', 'error'].every((key) => String(row[columns[key]] ?? '').trim() === String(current[key] ?? '').trim())) continue;
+    const editor = resolveErrorEditor(row[columns.editor], freelancers);
+    const sameEditor = current.editorFreelancerId != null
+      ? String(editor.id) === String(current.editorFreelancerId)
+      : editor.name === String(current.editor ?? '').trim();
+    if (sameEditor) matches.push(index);
+  }
+  const index = matches[0];
+  const rowIndex = sheet.rangeMeta.startRow + index;
+  if (matches.length !== 1 || rowIndex + 1 !== Number(current.sourceRow) || sheet.hiddenRows?.has(index)) {
+    throw validationError('Hàng lỗi đã thay đổi, bị ẩn hoặc bị trùng trên Sheet. Hãy đồng bộ từ Sheet trước khi tick.');
+  }
+  const columnIndex = sheet.rangeMeta.startColumn + columns.fixCheck;
+  if (sheet.merges?.some((range) => rowIndex >= (range.startRowIndex ?? 0) && rowIndex < (range.endRowIndex ?? Infinity)
+    && columnIndex >= (range.startColumnIndex ?? 0) && columnIndex < (range.endColumnIndex ?? Infinity))) {
+    throw validationError('Ô Fix/Check đang được gộp trên Sheet. Chưa ghi thay đổi.');
+  }
+  const cell = sheet.cellData[index]?.[columns.fixCheck];
+  getErrorCheckboxValue(cell, false); // Validate existing checkbox before either direction of sync.
+  return { rowIndex, columnIndex, cell };
+}
+
+async function writeErrorFixCheck(current, checked) {
+  // App-only errors have no destination. Never append or manufacture a row.
+  if (!current.sourceRow) return {};
+  const settings = await getGeneralSettings();
+  const sheetUrl = getConfiguredErrorSheetUrl(settings.errorSheetUrls, current.field);
+  if (!sheetUrl) throw validationError('Chưa cấu hình Sheet cho hàng lỗi này. Chưa ghi thay đổi.');
+  const [sheet, freelancers] = await Promise.all([
+    readErrorGoogleSheet(current.field, sheetUrl, { includeImages: false }),
+    getCollection('freelancers')
+  ]);
+  const { rowIndex, columnIndex, cell } = findErrorCheckboxTarget(sheet, current, freelancers);
+  await googleSheetsRequest(`spreadsheets/${encodeURIComponent(sheet.spreadsheetId)}:batchUpdate`, {
+    method: 'POST',
+    body: {
+      requests: [{ updateCells: {
+        range: { sheetId: sheet.sheetId, startRowIndex: rowIndex, endRowIndex: rowIndex + 1, startColumnIndex: columnIndex, endColumnIndex: columnIndex + 1 },
+        rows: [{ values: [{ userEnteredValue: getErrorCheckboxValue(cell, checked) }] }],
+        fields: 'userEnteredValue'
+      } }]
+    }
+  });
+  return {};
+}
+
+async function refreshErrorFixChecks(user) {
+  const [settings, allRows, freelancers] = await Promise.all([
+    getGeneralSettings(), getCollection('errors'), getCollection('freelancers')
+  ]);
+  const rows = filterErrorRowsForUser(allRows, user);
+  const fields = [...new Set(rows.filter((row) => row.sourceRow).map((row) => row.field))];
+  const warnings = [];
+  const sheets = new Map();
+  await Promise.all(fields.map(async (field) => {
+    const url = getConfiguredErrorSheetUrl(settings.errorSheetUrls, field);
+    if (!url) return;
+    try {
+      sheets.set(field, await readErrorGoogleSheet(field, url, { includeImages: false }));
+    } catch (error) {
+      warnings.push(getSafeErrorMessage(error, 'Không thể đọc Fix/Check từ Sheet.'));
+    }
+  }));
+  await runWithConcurrency(rows, async (row) => {
+    const sheet = sheets.get(row.field);
+    if (!row.sourceRow || !sheet) return;
+    try {
+      const { cell } = findErrorCheckboxTarget(sheet, row, freelancers);
+      const fixCheck = readErrorCheckbox(cell);
+      if (fixCheck !== row.fixCheck) {
+        await updateRowById('errors', row.id, { fixCheck, updatedAt: new Date().toISOString() }, ['fixCheck', 'updatedAt']);
+        row.fixCheck = fixCheck;
+      }
+    } catch (error) {
+      warnings.push(getSafeErrorMessage(error, 'Không thể đồng bộ Fix/Check.'));
+    }
+  });
+  return { rows: rows.map(({ id, fixCheck }) => ({ id, fixCheck })), warnings: [...new Set(warnings)].slice(0, 3) };
+}
+
 function getErrorSheetHeaderIndex(headerIndex, key) {
   return (errorSheetHeaderAliases[key] || [])
     .map((alias) => headerIndex.get(normalizeSheetHeader(alias)))
@@ -3472,7 +3734,7 @@ async function readGoogleSheetImageCells(spreadsheetId, sheetId, sheetTitle) {
   }
 }
 
-async function readErrorGoogleSheet(field, sheetUrl) {
+async function readErrorGoogleSheet(field, sheetUrl, { includeImages = true } = {}) {
   const { spreadsheetId, gid } = parseGoogleSheetReference(sheetUrl);
   const metadata = await getGoogleSheetMetadata(spreadsheetId);
   const sheets = metadata.sheets || [];
@@ -3489,7 +3751,7 @@ async function readErrorGoogleSheet(field, sheetUrl) {
   const headers = valuesResult.values[headerRowIndex].map(normalizeSheetHeader);
   let imageCells = new Map();
   let imageReadError = '';
-  if (getErrorSheetHeaderIndex(new Map(headers.map((header, index) => [header, index])), 'screenshot') !== undefined) {
+  if (includeImages && getErrorSheetHeaderIndex(new Map(headers.map((header, index) => [header, index])), 'screenshot') !== undefined) {
     try {
       imageCells = await readGoogleSheetImageCells(spreadsheetId, selectedSheet.properties.sheetId, selectedSheet.properties.title);
     } catch (error) {
@@ -3501,7 +3763,7 @@ async function readErrorGoogleSheet(field, sheetUrl) {
   }
   return {
     field,
-    sourceUrl: sheetUrl,
+    sourceUrl: `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/edit?gid=${selectedSheet.properties.sheetId}`,
     spreadsheetId,
     sheetId: selectedSheet.properties.sheetId,
     sheetTitle: selectedSheet.properties.title,
@@ -3547,7 +3809,7 @@ function buildImportedError(row, headerIndex, freelancers, sourceRow, field, sou
     note: normalizeErrorScreenshot(noteValue) || nullableText(noteValue),
     editor: editor.name || null,
     editorFreelancerId: editor.id,
-    fixCheck: parseImportedBoolean(getErrorSheetValue(row, headerIndex, 'fixCheck', cellDataRow)),
+    fixCheck: readErrorCheckbox(cellDataRow[getErrorSheetHeaderIndex(headerIndex, 'fixCheck')], getErrorSheetValue(row, headerIndex, 'fixCheck', cellDataRow)),
     sourceRow,
     sourceUrl,
     updatedAt: new Date().toISOString()
@@ -3566,8 +3828,8 @@ function hasErrorSheetChanges(current, imported) {
 }
 
 async function syncErrorsWithGoogleSheets(user) {
-  // Error sheets are read-only sources of truth. This sync may only import
-  // sheet rows into the app database; it must never write back to Google Sheets.
+  // Full sync only imports. The separate Fix/Check path is the sole writer
+  // for error sheets and may update one existing checkbox value only.
   const settings = await getGeneralSettings();
   const configuredUrls = normalizeErrorSheetUrls(settings.errorSheetUrls);
   const mappings = Object.entries(configuredUrls)
@@ -3648,6 +3910,9 @@ async function syncErrorsWithGoogleSheets(user) {
       }
       if (getErrorSheetHeaderIndex(sheet.headerIndex, 'screenshot') === undefined && current?.screenshot) {
         imported.screenshot = current.screenshot;
+      }
+      if (getErrorSheetHeaderIndex(sheet.headerIndex, 'fixCheck') === undefined && current) {
+        imported.fixCheck = current.fixCheck;
       }
       importedRows.push({ imported, current });
     }
@@ -4093,6 +4358,7 @@ async function validateErrorPayload(payload, user) {
 
 async function validateErrorUpdatePayload(payload, user, current) {
   if (!payload || typeof payload !== 'object') throw validationError('Dữ liệu cập nhật lỗi không hợp lệ.');
+  assertManagerCanManageField(user, current.field);
   const updates = {};
   const nextField = Object.prototype.hasOwnProperty.call(payload, 'field')
     ? normalizeConfiguredFieldName(payload.field)
@@ -4355,6 +4621,72 @@ function getOnlineAccountIds() {
   }
 
   return onlineAccountIds;
+}
+
+function cleanupPasswordResetChallenges() {
+  const now = Date.now();
+  for (const [key, challenge] of passwordResetChallenges.entries()) {
+    if (challenge.expiresAt <= now) passwordResetChallenges.delete(key);
+  }
+}
+
+function hashPasswordResetOtp(otp) {
+  return crypto.createHash('sha256').update(String(otp)).digest('hex');
+}
+
+function verifyPasswordResetOtp(otp, expectedHash) {
+  const actual = Buffer.from(hashPasswordResetOtp(otp), 'hex');
+  const expected = Buffer.from(String(expectedHash || ''), 'hex');
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+}
+
+function maskEmail(email) {
+  const [localPart, domain = ''] = String(email).split('@');
+  if (!localPart || !domain) return 'email đã đăng ký';
+  const visibleStart = localPart.slice(0, 1);
+  const visibleEnd = localPart.length > 2 ? localPart.slice(-1) : '';
+  return `${visibleStart}${'*'.repeat(Math.max(2, localPart.length - visibleStart.length - visibleEnd.length))}${visibleEnd}@${domain}`;
+}
+
+function getPasswordResetTransporter() {
+  if (passwordResetTransporter) return passwordResetTransporter;
+  const host = String(process.env.SMTP_HOST || '').trim();
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = String(process.env.SMTP_USER || '').trim();
+  const password = String(process.env.SMTP_PASSWORD || '');
+  const from = String(process.env.SMTP_FROM || user).trim();
+  if (!host || !from) {
+    const error = new Error('Chưa cấu hình SMTP_HOST và SMTP_FROM để gửi mã OTP.');
+    error.statusCode = 503;
+    throw error;
+  }
+  if (!Number.isInteger(port) || port <= 0) {
+    const error = new Error('SMTP_PORT không hợp lệ.');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const transportOptions = {
+    host,
+    port,
+    secure: String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' || port === 465
+  };
+  if (user || password) transportOptions.auth = { user, pass: password };
+  passwordResetTransporter = nodemailer.createTransport(transportOptions);
+  return passwordResetTransporter;
+}
+
+async function sendPasswordResetOtp(email, otp) {
+  const from = String(process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  const transporter = getPasswordResetTransporter();
+  const safeOtp = String(otp);
+  await transporter.sendMail({
+    from,
+    to: email,
+    subject: 'Mã OTP đặt lại mật khẩu - WZ System',
+    text: `Mã OTP đặt lại mật khẩu của bạn là ${safeOtp}. Mã có hiệu lực trong 10 phút và chỉ sử dụng một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này.`,
+    html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033"><h2>Đặt lại mật khẩu WZ System</h2><p>Mã OTP của bạn là:</p><p style="font-size:28px;font-weight:700;letter-spacing:8px;color:#2563eb">${safeOtp}</p><p>Mã có hiệu lực trong 10 phút và chỉ sử dụng một lần.</p><p>Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này.</p></div>`
+  });
 }
 
 function hasFreelancerAssignment(row) {

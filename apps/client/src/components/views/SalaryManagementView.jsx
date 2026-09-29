@@ -203,7 +203,6 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
             </div>
             <div className="modal-body qr-preview-body">
               <img src={selectedQR.imageQR || selectedQR.imageQr || selectedQR.qrUrl || selectedQR.url} alt="Mã QR" />
-              <span>{selectedQR.name || 'Chưa có tên'}</span>
             </div>
           </div>
         </div>,

@@ -77,6 +77,18 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(credentials)
   }),
+  requestPasswordResetOtp: (username) => request('/auth/forgot-password/request-otp', {
+    method: 'POST',
+    body: JSON.stringify({ username })
+  }),
+  verifyPasswordResetOtp: ({ challengeId, otp }) => request('/auth/forgot-password/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify({ challengeId, otp })
+  }),
+  resetPassword: ({ resetToken, password }) => request('/auth/forgot-password/reset', {
+    method: 'POST',
+    body: JSON.stringify({ resetToken, password })
+  }),
   getCurrentUser: () => request('/auth/me'),
   heartbeat: () => request('/auth/heartbeat', { method: 'POST' }),
   logout: () => request('/auth/logout', { method: 'POST' }),
@@ -148,6 +160,7 @@ export const api = {
   }),
   syncGoogleSheet: () => request('/google-sheet/sync', { method: 'POST', timeoutMs: 120000 }),
   getErrors: () => request('/errors'),
+  getErrorFixChecks: () => request('/errors/fix-check', { cache: 'no-store', timeoutMs: 120000 }),
   migrateErrorScreenshots: () => request('/errors/migrate-screenshots', { method: 'POST', timeoutMs: 120000 }),
   createError: (error) => request('/errors', {
     method: 'POST',
@@ -155,6 +168,7 @@ export const api = {
   }),
   updateError: (id, error) => request(`/errors/${id}`, {
     method: 'PATCH',
+    timeoutMs: 120000,
     body: JSON.stringify(error)
   }),
   deleteError: (id) => request(`/errors/${id}`, { method: 'DELETE' }),
