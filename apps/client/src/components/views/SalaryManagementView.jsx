@@ -128,7 +128,7 @@ export function SalaryManagementView({ salaries = [], fields = [], isLoading, on
         </div>
       </section>
 
-      {selectedQR && (
+      {selectedQR && createPortal(
         <div className="modal-overlay" onClick={() => setSelectedQR(null)}>
           <div className="modal-content qr-preview-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal-header">
@@ -142,7 +142,8 @@ export function SalaryManagementView({ salaries = [], fields = [], isLoading, on
               <span>{selectedQR.name || 'Chưa có tên'}</span>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -458,8 +458,20 @@
 .qc-header-avatar img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
   border-radius: inherit;
+}
+
+.qc-avatar-squircle img {
+  object-fit: cover;
+}
+
+.qc-header-avatar {
+  overflow: hidden;
+}
+
+.qc-header-avatar img {
+  object-fit: contain;
+  background: var(--bg-card);
 }
 
 .qc-user-label {
