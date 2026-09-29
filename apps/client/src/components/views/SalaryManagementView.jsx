@@ -2,13 +2,14 @@ import { createPortal } from 'react-dom';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { IconEye, IconFilter, IconRefresh, IconSearch, IconUsers, IconX } from '../common/Icons';
 
-export function SalaryManagementView({ salaries = [], fields = [], isLoading, onRefresh }) {
+export function SalaryManagementView({ currentUser = {}, salaries = [], fields = [], isLoading, onRefresh }) {
   const [search, setSearch] = useState('');
   const [fieldFilter, setFieldFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [columnSort, setColumnSort] = useState(null);
   const [selectedQR, setSelectedQR] = useState(null);
   const members = useMemo(() => Array.isArray(salaries) ? salaries : [], [salaries]);
+  const canUseScopeFilters = currentUser?.role !== 'Freelancer';
   const fieldOptions = useMemo(() => getFieldOptions(fields, members), [fields, members]);
   const roleOptions = useMemo(() => getRoleOptions(members), [members]);
 
@@ -26,10 +27,10 @@ export function SalaryManagementView({ salaries = [], fields = [], isLoading, on
         freelancer.earnedAmount,
         freelancer.bonus
       ].some((value) => String(value ?? '').toLowerCase().includes(query));
-      const matchesField = !fieldFilter || memberFields.some((field) => (
+      const matchesField = !canUseScopeFilters || !fieldFilter || memberFields.some((field) => (
         String(field).trim().toLowerCase() === fieldFilter.trim().toLowerCase()
       ));
-      const matchesRole = !roleFilter || memberRole === roleFilter;
+      const matchesRole = !canUseScopeFilters || !roleFilter || memberRole === roleFilter;
 
       return matchesSearch && matchesField && matchesRole;
     });
@@ -41,7 +42,7 @@ export function SalaryManagementView({ salaries = [], fields = [], isLoading, on
       left.fId ?? left.fIld ?? left.qcId ?? left.id,
       right.fId ?? right.fIld ?? right.qcId ?? right.id
     ));
-  }, [columnSort, fieldFilter, members, roleFilter, search]);
+  }, [canUseScopeFilters, columnSort, fieldFilter, members, roleFilter, search]);
 
   const updateColumnSort = (key, direction) => {
     setColumnSort((current) => current?.key === key && current.direction === direction ? null : { key, direction });
@@ -65,24 +66,28 @@ export function SalaryManagementView({ salaries = [], fields = [], isLoading, on
             <IconSearch size={17} />
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo ID, họ tên hoặc mảng" />
           </div>
-          <select
-            className="form-select toolbar-filter"
-            value={fieldFilter}
-            onChange={(event) => setFieldFilter(event.target.value)}
-            aria-label="Lọc theo mảng"
-          >
-            <option value="">Tất cả mảng</option>
-            {fieldOptions.map((field) => <option value={field} key={field}>{field}</option>)}
-          </select>
-          <select
-            className="form-select toolbar-filter"
-            value={roleFilter}
-            onChange={(event) => setRoleFilter(event.target.value)}
-            aria-label="Lọc theo role"
-          >
-            <option value="">Tất cả role</option>
-            {roleOptions.map((role) => <option value={role} key={role}>{role}</option>)}
-          </select>
+          {canUseScopeFilters && (
+            <>
+              <select
+                className="form-select toolbar-filter"
+                value={fieldFilter}
+                onChange={(event) => setFieldFilter(event.target.value)}
+                aria-label="Lọc theo mảng"
+              >
+                <option value="">Tất cả mảng</option>
+                {fieldOptions.map((field) => <option value={field} key={field}>{field}</option>)}
+              </select>
+              <select
+                className="form-select toolbar-filter"
+                value={roleFilter}
+                onChange={(event) => setRoleFilter(event.target.value)}
+                aria-label="Lọc theo role"
+              >
+                <option value="">Tất cả role</option>
+                {roleOptions.map((role) => <option value={role} key={role}>{role}</option>)}
+              </select>
+            </>
+          )}
         </div>
 
         <div className="table-wrapper table-wrapper-flat">

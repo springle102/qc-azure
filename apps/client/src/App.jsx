@@ -331,7 +331,7 @@ export function App() {
       case 'deadlineRegistrations':
         return <DeadlineRegistrationView {...commonProps} registrations={data.deadlineRegistrations} freelancers={data.freelancers} currentUser={profile} onCreate={handleCreateDeadlineRegistration} onUpdate={handleUpdateDeadlineRegistration} onDelete={handleDeleteDeadlineRegistration} />;
       case 'salary':
-        return <SalaryManagementView {...commonProps} freelancers={data.freelancers} salaries={data.salaries} fields={data.fields} bonusSettings={data.bonusSettings} restrictToSalaryRows={profile.role === 'QC'} />;
+        return <SalaryManagementView {...commonProps} currentUser={profile} freelancers={data.freelancers} salaries={data.salaries} fields={data.fields} bonusSettings={data.bonusSettings} restrictToSalaryRows={profile.role === 'QC'} />;
       case 'pricing':
         return <PriceManagementView {...commonProps} difficultyLevels={data.difficultyLevels} difficultyPrices={data.difficultyPrices} fields={data.fields} bonusSettings={data.bonusSettings} />;
       case 'settings':
