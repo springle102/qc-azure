@@ -3247,6 +3247,7 @@ async function syncGoogleSheet() {
     const settings = await getGeneralSettings();
     const sheetUrl = normalizeGoogleSheetUrl(settings.googleSheetUrl);
     if (!sheetUrl) throw validationError('Chưa cấu hình link Google Sheet trong Cấu hình chung.');
+    const { spreadsheetId } = parseGoogleSheetReference(sheetUrl);
     const sheetReadResult = await readGoogleSheetTabs({ ...settings, googleSheetUrl: sheetUrl });
     const rawTabs = sheetReadResult.tabs;
     const missingTabs = sheetReadResult.missingTabs || [];
