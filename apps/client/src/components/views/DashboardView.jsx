@@ -75,7 +75,7 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], free
   const recentChaptersByRole = useMemo(() => {
     const records = deadlines.length ? deadlines : tasks;
     const recent = [...records]
-      .sort((a, b) => getTaskSortTimestamp(b) - getTaskSortTimestamp(a));
+      .sort((a, b) => getTaskReceivedTimestamp(b) - getTaskReceivedTimestamp(a));
 
     return {
       qc: recent.filter(isSubmitted).slice(0, 5),
@@ -311,9 +311,9 @@ function RecentChaptersPanel({ title, chapters, freelancers = [], onNavigate, sh
             <div className="recent-chapter-row" key={`${chapter.seriesId || chapter.id || 'chapter'}-${chapter.chapterNumber || index}`}>
               <div>
                 <strong>{chapter.seriesName || chapter.series || 'Chưa đặt tên bộ truyện'}</strong>
-                <span>ID bộ truyện: {chapter.seriesId ?? '—'} · Chapter {chapter.chapterNumber ?? chapter.chapter ?? '—'} · {showAssignmentDetails ? `Set hạn DL: ${formatDeadlineSetTime(chapter)}` : `Hạn ${formatDate(chapter.endTask || chapter.deadline)}`}</span>
+                <span>ID bộ truyện: {chapter.seriesId ?? '—'} · Chapter {chapter.chapterNumber ?? chapter.chapter ?? '—'} · {showAssignmentDetails ? `Thời gian giao: ${formatReceivedTime(chapter)}` : `Hạn ${formatDate(chapter.endTask || chapter.deadline)}`}</span>
                 {showAssignmentDetails && (
-                  <span>Freelancer: {getFreelancerName(chapter, freelancers)} · Giao/cập nhật: {getTaskActivityTimestamp(chapter) ? formatActivityDateTime(new Date(getTaskActivityTimestamp(chapter))) : 'Chưa có mốc thời gian'}</span>
+                  <span>Freelancer: {getFreelancerName(chapter, freelancers)}</span>
                 )}
               </div>
               {showQcStatus ? <span className="data-status pending">Chờ QC</span> : showDeadlineStatus ? <DeadlineStatusBadge item={chapter} /> : showAssignmentDetails ? <AssignedTaskStatusBadge item={chapter} /> : null}
@@ -365,21 +365,17 @@ function getFreelancerName(item, freelancers) {
   return freelancer?.name || freelancer?.displayName || item?.freelancerName || (freelancerId ? `FLID ${freelancerId}` : 'Chưa giao');
 }
 
-function getTaskActivityTimestamp(item) {
-  const timestamps = [item?.assignedAt, item?.updatedAt, item?.submittedAt, item?.doingStartedAt, item?.createdAt]
+function getTaskReceivedTimestamp(item) {
+  const timestamps = [item?.receivedAt, item?.createdAt, item?.assignedAt]
     .map((value) => new Date(value || 0).getTime())
     .filter(Number.isFinite);
   return Math.max(0, ...timestamps);
 }
 
-function getTaskSortTimestamp(item) {
-  return getTaskActivityTimestamp(item) || new Date(item?.endTask || item?.deadline || 0).getTime() || 0;
-}
-
-function formatDeadlineSetTime(item) {
-  if (!item?.deadlineSetAt) return 'Chưa ghi nhận';
-  const timestamp = new Date(item.deadlineSetAt);
-  return Number.isNaN(timestamp.getTime()) ? 'Chưa ghi nhận' : formatActivityDateTime(timestamp);
+function formatReceivedTime(item) {
+  const receivedTimestamp = getTaskReceivedTimestamp(item);
+  if (!receivedTimestamp) return 'Chưa ghi nhận';
+  return formatActivityDateTime(new Date(receivedTimestamp));
 }
 
 function formatActivityDateTime(value) {

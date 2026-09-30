@@ -272,7 +272,7 @@ CREATE TABLE IF NOT EXISTS "SeriesList" (
   "feedback" text,
   "task" varchar(100),
   "endTask" timestamptz,
-  "deadlineSetAt" timestamptz,
+  "receivedAt" timestamptz,
   "submittedAt" timestamptz,
   "late" text NOT NULL DEFAULT '≤0h',
   "paymentApproved" boolean NOT NULL DEFAULT false,
@@ -293,7 +293,7 @@ ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "doingStartedAt" timestamptz;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "workDurationSeconds" integer;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "submittedAt" timestamptz;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "assignedAt" timestamptz;
-ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "deadlineSetAt" timestamptz;
+ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "receivedAt" timestamptz;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "assignedAdminId" bigint;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "late" text;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "paymentApproved" boolean;
@@ -315,9 +315,8 @@ SET "assignedAt" = COALESCE("submittedAt", "doingStartedAt", "endTask", now())
 WHERE "fIld" IS NOT NULL
   AND "assignedAt" IS NULL;
 UPDATE "SeriesList"
-SET "deadlineSetAt" = COALESCE("assignedAt", "submittedAt", "doingStartedAt", "endTask", now())
-WHERE "deadlineSetAt" IS NULL
-  AND "endTask" IS NOT NULL;
+SET "receivedAt" = COALESCE("submittedAt", "doingStartedAt", "endTask", now())
+WHERE "receivedAt" IS NULL;
 
 DO $$
 BEGIN
@@ -489,7 +488,7 @@ WHERE "field" IN ('Latin', 'Japan', 'QC');
 
 CREATE INDEX IF NOT EXISTS "SeriesList_freelancer_idx" ON "SeriesList" ("fIld");
 CREATE INDEX IF NOT EXISTS "SeriesList_assigned_at_idx" ON "SeriesList" ("assignedAt" DESC);
-CREATE INDEX IF NOT EXISTS "SeriesList_deadline_set_at_idx" ON "SeriesList" ("deadlineSetAt" DESC);
+CREATE INDEX IF NOT EXISTS "SeriesList_received_at_idx" ON "SeriesList" ("receivedAt" DESC);
 CREATE INDEX IF NOT EXISTS "SeriesList_qc_idx" ON "SeriesList" ("qcId");
 CREATE INDEX IF NOT EXISTS "DifficultyPricing_field_idx" ON "DifficultyPricing" ("field");
 
