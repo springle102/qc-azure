@@ -4,6 +4,34 @@ const QR_DETECTION_MAX_SIZE = 1600;
 const QR_OUTPUT_SIZE = 900;
 const QR_PADDING = 54;
 const QR_THRESHOLD_ATTEMPTS = [96, 128, 160, 192, 224];
+const savedQrCache = new Map();
+
+// Share in-flight work across previews and React StrictMode effect restarts.
+// Failed requests are evicted so opening the preview again can retry.
+export function extractSavedQrImage(source) {
+  const url = String(source || '').trim();
+  if (!url) return Promise.reject(new Error('Chưa có ảnh mã QR.'));
+  if (savedQrCache.has(url)) return savedQrCache.get(url);
+  const pending = (async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+      if (!response.ok) throw new Error('Không thể tải ảnh mã QR.');
+      const blob = await response.blob();
+      if (blob.type && !blob.type.startsWith('image/')) throw new Error('Ảnh mã QR không hợp lệ.');
+      return await extractQrImage(blob);
+    } finally {
+      clearTimeout(timeout);
+    }
+  })();
+  savedQrCache.set(url, pending);
+  if (savedQrCache.size > 16) savedQrCache.delete(savedQrCache.keys().next().value);
+  pending.catch(() => {
+    if (savedQrCache.get(url) === pending) savedQrCache.delete(url);
+  });
+  return pending;
+}
 
 export async function extractQrImage(file) {
   const source = await loadImageSource(file);

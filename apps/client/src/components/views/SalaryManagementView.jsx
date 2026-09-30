@@ -2,6 +2,7 @@ import { createPortal } from 'react-dom';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { IconEye, IconFilter, IconRefresh, IconSearch, IconUsers, IconX } from '../common/Icons';
 import { getSalaryMonth, isSalaryMonth } from '../../utils/bonus.mjs';
+import { SavedQrPreview } from '../common/SavedQrPreview';
 
 export function SalaryManagementView({ currentUser = {}, salaries = [], fields = [], month = getSalaryMonth(), onMonthChange, isLoading, onRefresh }) {
   const [search, setSearch] = useState('');
@@ -201,7 +202,7 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
               </button>
             </div>
             <div className="modal-body qr-preview-body">
-              <img src={selectedQR.imageQR || selectedQR.imageQr || selectedQR.qrUrl || selectedQR.url} alt="Mã QR" />
+              <SavedQrPreview source={selectedQR.imageQR || selectedQR.imageQr || selectedQR.qrUrl || selectedQR.url} />
             </div>
           </div>
         </div>,

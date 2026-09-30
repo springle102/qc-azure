@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { IconCamera, IconLock, IconTrash, IconUpload, IconUser } from '../common/Icons';
-import { extractQrImage } from '../../utils/qrImage.mjs';
+import { extractQrImage, extractSavedQrImage } from '../../utils/qrImage.mjs';
 
 export function ProfileView({ currentUser = {}, onSaveProfile }) {
   const isNameLocked = currentUser.role === 'Freelancer';
@@ -12,7 +12,6 @@ export function ProfileView({ currentUser = {}, onSaveProfile }) {
   const [qrError, setQrError] = useState('');
   const [isProcessingQR, setIsProcessingQR] = useState(false);
   const [isSavingQR, setIsSavingQR] = useState(false);
-  const autoProcessedQrRef = useRef('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -26,20 +25,15 @@ export function ProfileView({ currentUser = {}, onSaveProfile }) {
   useEffect(() => {
     const source = String(currentUser.imageQR || '').trim();
     const freelancerKey = String(currentUser.freelancerId || '').trim();
-    const migrationKey = `${freelancerKey}:${source}`;
-    if (!source || !freelancerKey || source.includes('/qr-cropped-v2-') || autoProcessedQrRef.current === migrationKey) return undefined;
-
-    autoProcessedQrRef.current = migrationKey;
+    if (!source || !freelancerKey || source.includes('/qr-cropped-v2-')) {
+      setIsProcessingQR(false);
+      return undefined;
+    }
     let cancelled = false;
     const migrateLegacyQr = async () => {
       setIsProcessingQR(true);
       try {
-        const response = await fetch(source, { cache: 'no-store' });
-        if (!response.ok) throw new Error('Không thể tải ảnh QR cũ.');
-        const blob = await response.blob();
-        if (!blob.type.startsWith('image/')) throw new Error('Ảnh QR cũ không hợp lệ.');
-        const file = new File([blob], 'legacy-qr-image', { type: blob.type });
-        const extractedQr = await extractQrImage(file);
+        const extractedQr = await extractSavedQrImage(source);
         if (cancelled) return;
         setImageQR(extractedQr);
         const savedUser = await onSaveProfile({ imageQR: extractedQr }, { silent: true });
