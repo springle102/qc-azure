@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { IconAlertTriangle, IconBell, IconCheckCircle, IconChevronRight, IconClock, IconMenu, IconMoon, IconSun, IconUser } from '../common/Icons';
 
-export function Header({ currentUser, deadlines = [], errors = [], onNavigate, onOpenProfile, onToggleSidebar, isDarkMode = true, onToggleTheme }) {
+export function Header({ currentUser, deadlines = [], errors = [], onNavigate, onOpenProfile, onToggleSidebar, onOpenNotifications, isDarkMode = true, onToggleTheme }) {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [readNotificationIds, setReadNotificationIds] = useState([]);
   const notificationRef = useRef(null);
@@ -43,7 +43,15 @@ export function Header({ currentUser, deadlines = [], errors = [], onNavigate, o
   return (
     <header className="app-header qc-header">
       <div className="header-left">
-        <button type="button" onClick={onToggleSidebar} className="header-btn qc-mobile-menu" title="Mở menu">
+        <button
+          type="button"
+          onClick={() => {
+            setIsNotificationsOpen(false);
+            onToggleSidebar?.();
+          }}
+          className="header-btn qc-mobile-menu"
+          title="Mở menu"
+        >
           <IconMenu size={20} />
         </button>
         <div>
@@ -63,7 +71,10 @@ export function Header({ currentUser, deadlines = [], errors = [], onNavigate, o
           <button
             type="button"
             className={`qc-notification-button ${isNotificationsOpen ? 'is-open' : ''}`}
-            onClick={() => setIsNotificationsOpen((open) => !open)}
+            onClick={() => {
+              if (!isNotificationsOpen) onOpenNotifications?.();
+              setIsNotificationsOpen((open) => !open);
+            }}
             aria-label="Mở thông báo"
             aria-expanded={isNotificationsOpen}
             aria-haspopup="true"

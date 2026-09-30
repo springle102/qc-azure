@@ -2371,7 +2371,7 @@ async function readGoogleSheetValues(spreadsheetId, range) {
   const query = new URLSearchParams({
     includeGridData: 'true',
     ranges: range,
-    fields: 'sheets(merges,data(startRow,rowMetadata(hiddenByFilter,hiddenByUser),rowData/values(formattedValue,userEnteredValue,effectiveValue,dataValidation(condition(type,values(userEnteredValue))))))'
+    fields: 'sheets(merges,data(startRow,rowMetadata(hiddenByFilter,hiddenByUser),rowData/values(formattedValue,userEnteredValue,effectiveValue,dataValidation(condition(type,values(userEnteredValue)),showCustomUi))))'
   });
   const payload = await googleSheetsRequest(
     `spreadsheets/${encodeURIComponent(spreadsheetId)}?${query.toString()}`
@@ -2852,21 +2852,84 @@ function normalizeStatusOption(value) {
   return '';
 }
 
-function getGoogleSheetStatusOptions(tab, columnIndex) {
-  return tab.cellData
+function getGoogleSheetStatusCondition(tab, columnIndex, rowNumber = null) {
+  const rowIndex = rowNumber === null || rowNumber === undefined
+    ? -1
+    : rowNumber - tab.startRow - 1;
+  const rowCondition = rowIndex >= 0
+    ? tab.cellData?.[rowIndex]?.[columnIndex]?.dataValidation?.condition
+    : null;
+  return rowCondition || tab.cellData
     ?.map((row) => row?.[columnIndex]?.dataValidation?.condition)
-    .filter((condition) => condition?.type === 'ONE_OF_LIST')
+    .find(Boolean) || null;
+}
+
+function getGoogleSheetConditionValue(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value).trim();
+  return String(value.userEnteredValue ?? value.stringValue ?? value.numberValue ?? '').trim();
+}
+
+function getGoogleSheetStatusOptions(tab, columnIndex, rowNumber = null) {
+  const conditions = [];
+  const rowIndex = rowNumber === null || rowNumber === undefined
+    ? -1
+    : rowNumber - tab.startRow - 1;
+  const rowCondition = rowIndex >= 0
+    ? tab.cellData?.[rowIndex]?.[columnIndex]?.dataValidation?.condition
+    : null;
+  if (rowCondition) conditions.push(rowCondition);
+  (tab.cellData || []).forEach((row) => {
+    const condition = row?.[columnIndex]?.dataValidation?.condition;
+    if (condition) conditions.push(condition);
+  });
+
+  const options = [];
+  conditions.forEach((condition) => {
+    if (condition.type !== 'ONE_OF_LIST') return;
+    (condition.values || []).forEach((value) => {
+      const option = getGoogleSheetConditionValue(value);
+      if (option && !options.includes(option)) options.push(option);
+    });
+  });
+
+  // ONE_OF_RANGE dropdowns are resolved once before a write and stored by
+  // hydrateGoogleSheetStatusOptions. Keep the cell-level list above so a
+  // row-specific dropdown always takes precedence over a column fallback.
+  const hydratedOptions = tab.statusOptionsByColumn?.get?.(columnIndex)
+    || tab.statusOptionsByColumn?.get?.(String(columnIndex))
+    || [];
+  hydratedOptions.forEach((option) => {
+    if (option && !options.includes(option)) options.push(option);
+  });
+  return options;
+}
+
+async function hydrateGoogleSheetStatusOptions(spreadsheetId, tab) {
+  const columnIndex = getGoogleSheetHeaderIndex(tab.headerIndex, 'status', tab.fieldOverride);
+  if (columnIndex === undefined) return tab;
+  const conditions = (tab.cellData || [])
+    .map((row) => row?.[columnIndex]?.dataValidation?.condition)
+    .filter((condition) => condition?.type === 'ONE_OF_RANGE');
+  const rangeReferences = [...new Set(conditions
     .flatMap((condition) => condition.values || [])
-    .map((value) => String(value?.userEnteredValue ?? '').trim())
-    .filter(Boolean)
-    .filter((value, index, values) => values.indexOf(value) === index) || [];
+    .map((value) => getGoogleSheetConditionValue(value).replace(/^=/, '').trim())
+    .filter(Boolean))];
+  const values = await Promise.all(rangeReferences.map(async (range) => {
+    const source = await readGoogleSheetValues(spreadsheetId, range);
+    return source.values.flat().map((value) => String(value ?? '').trim()).filter(Boolean);
+  }));
+  const options = values.flat();
+  if (!tab.statusOptionsByColumn) tab.statusOptionsByColumn = new Map();
+  tab.statusOptionsByColumn.set(columnIndex, [...new Set(options)]);
+  return tab;
 }
 
 function getGoogleSheetStatusValue(tab, rowNumber, row, columnIndex) {
   const status = normalizeStatusOption(row.status);
   if (!status) return row.status || '';
 
-  const configuredOptions = getGoogleSheetStatusOptions(tab, columnIndex);
+  const configuredOptions = getGoogleSheetStatusOptions(tab, columnIndex, rowNumber);
   const matchingOption = configuredOptions.find((option) => normalizeStatusOption(option) === status);
   if (matchingOption) return matchingOption;
 
@@ -2874,9 +2937,11 @@ function getGoogleSheetStatusValue(tab, rowNumber, row, columnIndex) {
     ? -1
     : rowNumber - tab.startRow - 1;
   const currentValue = rowIndex >= 0 ? tab.values[rowIndex]?.[columnIndex] : '';
-  if (/^[A-Z]/.test(String(currentValue || ''))) {
-    return status.charAt(0).toUpperCase() + status.slice(1);
+  const condition = getGoogleSheetStatusCondition(tab, columnIndex, rowNumber);
+  if (condition?.type === 'ONE_OF_LIST' || condition?.type === 'ONE_OF_RANGE') {
+    throw new Error(`Không tìm thấy option "${status}" trong dropdown Status của ô ${tab.sheetTitle || 'Google Sheet'}!${googleSheetIndexToColumn(tab.startColumn + columnIndex)}${rowNumber || ''}.`);
   }
+  if (/^[A-Z]/.test(String(currentValue || ''))) return status.charAt(0).toUpperCase() + status.slice(1);
   return status;
 }
 
@@ -2929,6 +2994,24 @@ async function writeGoogleSheetCells(spreadsheetId, tab, rowNumber, row, columns
     method: 'POST',
     body: { valueInputOption: 'USER_ENTERED', data }
   });
+}
+
+function getGoogleSheetStatusRepair(tab, rowNumber, row, sourceRow) {
+  const columnIndex = getGoogleSheetHeaderIndex(tab.headerIndex, 'status', tab.fieldOverride);
+  if (columnIndex === undefined || !normalizeStatusOption(row?.status)) return null;
+  const condition = getGoogleSheetStatusCondition(tab, columnIndex, rowNumber);
+  if (!['ONE_OF_LIST', 'ONE_OF_RANGE'].includes(condition?.type)) return null;
+  const currentValue = String(sourceRow?.[columnIndex] ?? '').trim();
+  const expectedValue = getGoogleSheetStatusValue(tab, rowNumber, row, columnIndex);
+  if (!expectedValue || expectedValue === currentValue) return null;
+  return { columnIndex, currentValue, expectedValue };
+}
+
+async function repairGoogleSheetStatusCell(spreadsheetId, tab, rowNumber, row, sourceRow) {
+  const repair = getGoogleSheetStatusRepair(tab, rowNumber, row, sourceRow);
+  if (!repair) return false;
+  await writeGoogleSheetCells(spreadsheetId, tab, rowNumber, row, ['status']);
+  return true;
 }
 
 async function appendGoogleSheetRow(spreadsheetId, tab, row) {
@@ -2995,11 +3078,21 @@ async function syncDeadlineWithGoogleSheet(row, { action = 'append', columns = n
     throw new Error(`Không thể đồng bộ hai chiều vì thiếu tab Google Sheet: ${sheetReadResult.missingTabs.map(({ field, missingTab }) => `${field} → "${missingTab}"`).join(', ')}.`);
   }
   const tabs = sheetReadResult.tabs.map((tab) => getGoogleSheetTabSnapshot(tab, fields));
+  // Read the source values for dropdowns backed by another range before any
+  // web-originated status write. Writing an arbitrary lowercase status into a
+  // validated cell makes Sheets keep the arrow but treat the value as invalid
+  // plain text instead of selecting the existing dropdown option.
+  await Promise.all(tabs.map((tab) => hydrateGoogleSheetStatusOptions(spreadsheetId, tab)));
   const targetTab = getGoogleSheetTargetTab(tabs, row.type);
-  const existing = tabs
+  // For an update, the configured tab for this row's field is authoritative.
+  // Searching every tab can select a duplicate series/chapter from another
+  // field and would then write the status into the wrong row.
+  const existing = (targetTab ? [targetTab] : tabs)
     .map((tab) => ({ tab, match: findGoogleSheetRow(tab, row.seriesId, row.chapterNumber) }))
-    .filter(({ match }) => match)
-    .at(-1);
+    .find(({ match }) => match);
+  const existingAnywhere = tabs
+    .map((tab) => ({ tab, match: findGoogleSheetRow(tab, row.seriesId, row.chapterNumber) }))
+    .find(({ match }) => match);
 
   if (action === 'update') {
     // Updating an existing web row may update the matching Sheet row only.
@@ -3020,7 +3113,7 @@ async function syncDeadlineWithGoogleSheet(row, { action = 'append', columns = n
     return { deleted: Boolean(existing) };
   }
 
-  if (existing) {
+  if (existingAnywhere) {
     throw new Error(`Deadline ${row.seriesId}-${row.chapterNumber} đã tồn tại trên Google Sheet, không tạo thêm dòng trùng.`);
   }
 
@@ -3155,7 +3248,7 @@ async function syncGoogleSheet() {
     const sheetUrl = normalizeGoogleSheetUrl(settings.googleSheetUrl);
     if (!sheetUrl) throw validationError('Chưa cấu hình link Google Sheet trong Cấu hình chung.');
     const sheetReadResult = await readGoogleSheetTabs({ ...settings, googleSheetUrl: sheetUrl });
-    const tabs = sheetReadResult.tabs;
+    const rawTabs = sheetReadResult.tabs;
     const missingTabs = sheetReadResult.missingTabs || [];
     const [fields, prices, freelancers, qcs, currentRows] = await Promise.all([
       getConfiguredFields(),
@@ -3169,6 +3262,8 @@ async function syncGoogleSheet() {
     if (missingRows.length) {
       throw new Error(`Không thể đồng bộ hai chiều vì thiếu tab Google Sheet cho dữ liệu đang có: ${missingTabs.map(({ field, missingTab }) => `${field} → "${missingTab}"`).join(', ')}.`);
     }
+    const tabs = rawTabs.map((tab) => getGoogleSheetTabSnapshot(tab, fields));
+    await Promise.all(tabs.map((tab) => hydrateGoogleSheetStatusOptions(spreadsheetId, tab)));
     const mappedRows = [];
     const skippedRows = [];
     const invalidRows = [];
@@ -3183,7 +3278,7 @@ async function syncGoogleSheet() {
       tab.values
         .map((row, index) => ({ row, index }))
         .filter(({ index }) => index > headerRowIndex && !tab.hiddenRows?.has(index))
-        .map(({ row, index }) => ({ row, rowNumber: index + 1 }))
+          .map(({ row, index }) => ({ row, rowNumber: tab.startRow + index + 1 }))
         .filter(({ row }) => !isDecorativeGoogleSheetRow(row, headerIndex, fieldOverride))
         .forEach(({ row, rowNumber }) => {
           if (isIncompleteGoogleSheetRow(row, headerIndex, fieldOverride)) {
@@ -3192,7 +3287,8 @@ async function syncGoogleSheet() {
           }
           try {
             mappedRows.push({
-              tab: tab.range,
+              tab,
+              sheetRowNumber: rowNumber,
               headerIndex,
               fieldOverride,
               sourceRow: row,
@@ -3240,7 +3336,7 @@ async function syncGoogleSheet() {
     ));
     const driveLinkResult = await enrichRowsWithGoogleDriveLinks(rowsWithPreservedUrls, rowsToLookup, settings.googleDriveFolders);
     uniqueRows = driveLinkResult.rows;
-    const writeResults = await runWithConcurrency(uniqueRows, async ({ data: row, headerIndex, fieldOverride }) => {
+    const writeResults = await runWithConcurrency(uniqueRows, async ({ data: row, headerIndex, fieldOverride, tab, sheetRowNumber, sourceRow }) => {
       const key = `${row.seriesId}:${row.chapterNumber}`;
       const current = currentRowsByKey.get(key);
       const importedTiming = current && row.status
@@ -3262,10 +3358,19 @@ async function syncGoogleSheet() {
         'workDurationSeconds',
         'submittedAt'
       ])].filter((column) => Object.prototype.hasOwnProperty.call(synchronizedRow, column));
+      const repairStatus = async () => {
+        try {
+          return { statusRepaired: await repairGoogleSheetStatusCell(spreadsheetId, tab, sheetRowNumber, synchronizedRow, sourceRow) };
+        } catch (error) {
+          return { statusRepairError: error.message };
+        }
+      };
       if (current) {
-        if (!hasDeadlineSheetChanges(current, synchronizedRow, writeColumns)) return 'unchanged';
+        if (!hasDeadlineSheetChanges(current, synchronizedRow, writeColumns)) {
+          return { result: 'unchanged', ...(await repairStatus()) };
+        }
         await updateRow('deadlines', { seriesId: row.seriesId, chapterNumber: row.chapterNumber }, synchronizedRow, writeColumns);
-        return 'updated';
+        return { result: 'updated', ...(await repairStatus()) };
       }
       const initialTiming = {
         doingStartedAt: synchronizedRow.doingStartedAt ?? (synchronizedRow.status === 'doing' ? new Date().toISOString() : null),
@@ -3276,10 +3381,14 @@ async function syncGoogleSheet() {
       await insertRow('deadlines', {
         ...insertRowData
       }, ['seriesId', 'chapterNumber', ...writeColumns, 'doingStartedAt', 'workDurationSeconds', 'submittedAt']);
-      return 'inserted';
+      return { result: 'inserted', ...(await repairStatus()) };
     });
-    const inserted = writeResults.filter((result) => result === 'inserted').length;
-    const updated = writeResults.filter((result) => result === 'updated').length;
+    const inserted = writeResults.filter(({ result }) => result === 'inserted').length;
+    const updated = writeResults.filter(({ result }) => result === 'updated').length;
+    const repairedStatuses = writeResults.filter(({ statusRepaired }) => statusRepaired).length;
+    const statusRepairErrors = writeResults
+      .map(({ statusRepairError }) => statusRepairError)
+      .filter(Boolean);
 
     // Reconcile deletions against valid imported ID + Chapter keys, even when
     // other rows were skipped because their identifiers are incomplete.
@@ -3310,6 +3419,12 @@ async function syncGoogleSheet() {
     const syncWarnings = [];
     if (deleted) {
       syncWarnings.push(`Đã xóa ${deleted} dòng không còn trên Google Sheet.`);
+    }
+    if (repairedStatuses) {
+      syncWarnings.push(`Đã tự sửa ${repairedStatuses} ô Status về đúng option dropdown trên Google Sheet.`);
+    }
+    if (statusRepairErrors.length) {
+      syncWarnings.push(`Chưa tự sửa được ${statusRepairErrors.length} ô Status: ${statusRepairErrors.slice(0, 3).join('; ')}.`);
     }
     // Rows without a complete synchronization key are treated as acceptable
     // Sheet rows and are simply ignored for deadline reconciliation. Duplicate
@@ -3342,7 +3457,7 @@ async function syncGoogleSheet() {
         googleSheetLastSyncError: syncWarnings.join(' ')
       }, ['googleSheetLastSyncedAt', 'googleSheetLastSyncCount', 'googleSheetLastSyncError']);
     }
-    return { inserted, updated, deleted, total: uniqueRows.length, sheetRows: uniqueRows.length, skipped: skippedRows.length + invalidRows.length, invalid: invalidRows.length, duplicates: duplicateRows, hidden: hiddenRows, driveLinked: driveLinkResult.linked, driveMissing: driveLinkResult.missing, driveError: driveLinkResult.error ? getSafeErrorMessage(driveLinkResult.error, 'Không thể tự gắn link Google Drive.') : '', skippedRows: [...skippedRows, ...invalidRows].slice(0, 20), syncedAt };
+    return { inserted, updated, deleted, repairedStatuses, statusRepairErrors, total: uniqueRows.length, sheetRows: uniqueRows.length, skipped: skippedRows.length + invalidRows.length, invalid: invalidRows.length, duplicates: duplicateRows, hidden: hiddenRows, driveLinked: driveLinkResult.linked, driveMissing: driveLinkResult.missing, driveError: driveLinkResult.error ? getSafeErrorMessage(driveLinkResult.error, 'Không thể tự gắn link Google Drive.') : '', skippedRows: [...skippedRows, ...invalidRows].slice(0, 20), syncedAt };
   })().catch(async (error) => {
     try {
       const currentSettings = (await getCollection('generalSettings'))[0];

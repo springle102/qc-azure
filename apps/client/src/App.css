@@ -5663,6 +5663,147 @@
   background: #f1f5f9;
 }
 
+/* Mobile workspace chrome */
+@media (max-width: 1024px) {
+  .qc-app-shell {
+    --qc-mobile-header-height: 78px;
+  }
+
+  .qc-app-shell .main-wrapper {
+    min-width: 0;
+    overflow-x: clip;
+  }
+
+  .qc-app-shell .app-header.qc-header {
+    min-width: 0;
+    min-height: var(--qc-mobile-header-height);
+    height: var(--qc-mobile-header-height);
+    padding: 0 16px;
+    gap: 12px;
+    overflow: visible;
+    position: sticky;
+    z-index: 200;
+  }
+
+  .qc-app-shell .qc-header .header-left {
+    min-width: 0;
+    flex: 1 1 auto;
+    gap: 10px;
+  }
+
+  .qc-app-shell .qc-header .header-left > div {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .qc-app-shell .qc-header-actions {
+    min-width: 0;
+    flex: 0 0 auto;
+    gap: 8px;
+  }
+
+  .qc-app-shell .qc-header-ticker {
+    display: none;
+  }
+
+  .qc-app-shell .qc-header-eyebrow,
+  .qc-app-shell .qc-header-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .qc-app-shell .app-sidebar {
+    top: var(--qc-mobile-header-height, 78px);
+    left: -300px;
+    width: min(286px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    height: calc(100dvh - var(--qc-mobile-header-height, 78px));
+    border-right: 1px solid var(--border-subtle);
+    border-radius: 0 20px 0 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    z-index: 150;
+  }
+
+  .qc-app-shell .app-sidebar.open {
+    left: 0;
+  }
+
+  .qc-app-shell .qc-notification-panel {
+    position: fixed;
+    top: calc(var(--qc-mobile-header-height, 78px) + 8px);
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh - var(--qc-mobile-header-height, 78px) - 20px);
+    border-radius: 16px;
+    z-index: 320;
+  }
+
+  .qc-app-shell .qc-notification-list {
+    max-height: calc(100dvh - var(--qc-mobile-header-height, 78px) - 150px);
+  }
+}
+
+@media (max-width: 680px) {
+  .qc-app-shell {
+    --qc-mobile-header-height: 72px;
+  }
+
+  .qc-app-shell .app-header.qc-header {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .qc-app-shell .qc-header .header-left {
+    gap: 8px;
+  }
+
+  .qc-app-shell .qc-mobile-menu,
+  .qc-app-shell .qc-notification-button,
+  .qc-app-shell .qc-theme-button,
+  .qc-app-shell .qc-header-profile {
+    flex: 0 0 40px;
+  }
+
+  .qc-app-shell .qc-header-actions {
+    gap: 6px;
+  }
+
+  .qc-app-shell .qc-header-eyebrow {
+    font-size: 8px;
+    letter-spacing: 0.8px;
+  }
+
+  .qc-app-shell .qc-header-title {
+    font-size: 15px;
+  }
+
+  .qc-app-shell .qc-header-profile {
+    width: 40px;
+    height: 40px;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 12px;
+  }
+
+  .qc-app-shell .qc-header-profile > span:last-child {
+    display: none;
+  }
+
+  .qc-app-shell .app-sidebar {
+    border-radius: 0 18px 0 0;
+  }
+
+  .qc-app-shell .qc-notification-panel {
+    right: 10px;
+    left: 10px;
+    border-radius: 14px;
+  }
+}
+
 /* Other Views in Light Mode */
 :root[data-theme='light'] .general-checklist-row,
 :root[data-theme='light'] .general-field-row,

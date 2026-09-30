@@ -172,13 +172,14 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
       });
       const result = await api.syncGoogleSheet();
       const deletedMessage = result.deleted ? ' Đã xóa ' + result.deleted + ' dòng không còn trên Sheet.' : '';
+      const repairedStatusMessage = result.repairedStatuses ? ' Đã tự sửa ' + result.repairedStatuses + ' ô Status về đúng dropdown.' : '';
       const hiddenMessage = result.hidden ? ' Bỏ qua ' + result.hidden + ' dòng đang ẩn.' : '';
       const driveLinkedMessage = result.driveLinked ? ' Đã tự gắn ' + result.driveLinked + ' link folder Google Drive.' : '';
       const driveMissingMessage = result.driveMissing ? ' Không tìm thấy folder cho ' + result.driveMissing + ' ID bộ truyện.' : '';
       const driveErrorMessage = result.driveError
         ? ' Lỗi gắn link Drive: ' + getUserFacingErrorMessage(result.driveError, 'Không thể tự gắn link Google Drive.')
         : '';
-      showToast('Đã đồng bộ ' + (result.sheetRows ?? result.total) + ' dòng từ Sheet (' + result.inserted + ' mới, ' + result.updated + ' cập nhật).' + deletedMessage + hiddenMessage + driveLinkedMessage + driveMissingMessage + driveErrorMessage, 'success');
+      showToast('Đã đồng bộ ' + (result.sheetRows ?? result.total) + ' dòng từ Sheet (' + result.inserted + ' mới, ' + result.updated + ' cập nhật).' + repairedStatusMessage + deletedMessage + hiddenMessage + driveLinkedMessage + driveMissingMessage + driveErrorMessage, 'success');
       await onRefresh?.();
     } catch (error) {
       showToast(error.message || 'Không thể đồng bộ Google Sheet.', 'error');

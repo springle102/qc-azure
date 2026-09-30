@@ -415,6 +415,7 @@ export function App() {
           onNavigate={handleNavigate}
           onOpenProfile={() => handleNavigate('profile')}
           onToggleSidebar={() => setIsSidebarOpen((open) => !open)}
+          onOpenNotifications={() => setIsSidebarOpen(false)}
           isDarkMode={theme === 'dark'}
           onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
         />
