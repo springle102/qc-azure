@@ -84,7 +84,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
   const visibleColumns = useMemo(() => readOnly ? columns.filter(([key]) => key !== 'edit') : columns, [readOnly]);
 
   const freelancerOptions = useMemo(() => peopleOptions(freelancers, 'fIld', 'fId'), [freelancers]);
-  const qcOptions = useMemo(() => peopleOptions(qcs, 'qcId'), [qcs]);
+  const qcOptions = useMemo(() => peopleOptions(qcs, 'qcId', undefined, true), [qcs]);
   const options = useMemo(() => ({
     series: unique(deadlines.map((item) => item.seriesId)),
     freelancers: freelancerOptions,
@@ -471,13 +471,23 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
   );
 }
 
-function peopleOptions(rows, primaryId, fallbackId) {
+function peopleOptions(rows, primaryId, fallbackId, dedupeByName = false) {
+  const seenIds = new Set();
+  const seenNames = new Set();
   return rows
     .map((row) => ({
       id: row[primaryId] ?? (fallbackId ? row[fallbackId] : undefined) ?? row.id,
       name: row.name || 'Chưa có tên'
     }))
     .filter((person) => person.id !== null && person.id !== undefined && person.id !== '')
+    .filter((person) => {
+      const idKey = String(person.id);
+      const nameKey = String(person.name).trim().toLocaleLowerCase('vi-VN');
+      if (seenIds.has(idKey) || (dedupeByName && seenNames.has(nameKey))) return false;
+      seenIds.add(idKey);
+      seenNames.add(nameKey);
+      return true;
+    })
     .sort((left, right) => String(left.name).localeCompare(String(right.name), 'vi'));
 }
 

@@ -904,7 +904,7 @@ app.post('/api/deadlines', requireManager, async (req, res) => {
       : null;
     const data = await insertDeadlineAndGoogleSheet(
       payload,
-      ['seriesId', 'chapterNumber', 'endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'assignedAt', 'assignedAdminId', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'completionPercent']
+      ['seriesId', 'chapterNumber', 'endTask', 'deadlineSetAt', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'assignedAt', 'assignedAdminId', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'completionPercent']
     );
     res.status(201).json({ success: true, data: decorateDeadlineTiming(data) });
   } catch (error) {
@@ -990,6 +990,11 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber', requireAuth, async (req, re
     const updates = { ...(req.body || {}) };
     if (Object.prototype.hasOwnProperty.call(updates, 'endTask')) {
       updates.endTask = normalizeDeadlineDueDate(updates.endTask, 'Hạn DL');
+      const currentEndTaskTime = current.endTask ? new Date(current.endTask).getTime() : null;
+      const nextEndTaskTime = updates.endTask ? new Date(updates.endTask).getTime() : null;
+      if (currentEndTaskTime !== nextEndTaskTime) {
+        updates.deadlineSetAt = nextEndTaskTime === null ? null : new Date().toISOString();
+      }
     }
     if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
       updates.status = validateTaskStatus(updates.status);
@@ -1062,7 +1067,7 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber', requireAuth, async (req, re
     const data = await updateDeadlineAndGoogleSheet(
       { seriesId, chapterNumber },
       updates,
-      ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'assignedAt', 'assignedAdminId', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'paymentApproved', 'completionPercent']
+      ['endTask', 'deadlineSetAt', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'assignedAt', 'assignedAdminId', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'paymentApproved', 'completionPercent']
     );
     res.json({ success: true, data: decorateDeadlineTiming(data) });
   } catch (error) {
@@ -3321,7 +3326,7 @@ async function syncGoogleSheet() {
     }
     let uniqueRows = [...uniqueRowsByKey.values()];
 
-    const allowedColumns = ['endTask', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'assignedAt', 'assignedAdminId', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'completionPercent', 'paymentApproved'];
+    const allowedColumns = ['endTask', 'deadlineSetAt', 'submittedAt', 'seriesName', 'type', 'statusRaw', 'status', 'doingStartedAt', 'workDurationSeconds', 'urlSeries', 'fIld', 'assignedAt', 'assignedAdminId', 'qcId', 'difficulty', 'price', 'receivePrice', 'feedback', 'late', 'completionPercent', 'paymentApproved'];
     const currentRowsByKey = new Map(currentRows.map((item) => [
       `${Number(item.seriesId)}:${String(item.chapterNumber ?? '').trim()}`,
       item
@@ -3352,11 +3357,17 @@ async function syncGoogleSheet() {
       const hasFreelancerColumn = getGoogleSheetHeaderIndex(headerIndex, 'fIld', fieldOverride) !== undefined;
       const assignmentChanged = Boolean(current) && hasFreelancerColumn
         && String(current.fIld ?? '') !== String(row.fIld ?? '');
+      const hasDeadlineColumn = getGoogleSheetHeaderIndex(headerIndex, 'endTask', fieldOverride) !== undefined;
+      const deadlineChanged = Boolean(current) && hasDeadlineColumn
+        && normalizeSyncValue(current.endTask, 'endTask') !== normalizeSyncValue(row.endTask, 'endTask');
       const synchronizedRow = {
         ...row,
         ...importedTiming,
         ...(assignmentChanged
           ? { assignedAt: hasFreelancerAssignment(row) ? new Date().toISOString() : null }
+          : {}),
+        ...(deadlineChanged
+          ? { deadlineSetAt: row.endTask ? new Date().toISOString() : null }
           : {})
       };
       const rowAllowedColumns = allowedColumns.filter((column) => {
@@ -3375,6 +3386,7 @@ async function syncGoogleSheet() {
         'submittedAt'
       ])].filter((column) => Object.prototype.hasOwnProperty.call(synchronizedRow, column));
       if (Object.prototype.hasOwnProperty.call(synchronizedRow, 'assignedAt')) writeColumns.push('assignedAt');
+      if (Object.prototype.hasOwnProperty.call(synchronizedRow, 'deadlineSetAt')) writeColumns.push('deadlineSetAt');
       const repairStatus = async () => {
         try {
           return { statusRepaired: await repairGoogleSheetStatusCell(spreadsheetId, tab, sheetRowNumber, synchronizedRow, sourceRow) };
@@ -3397,11 +3409,12 @@ async function syncGoogleSheet() {
       const insertRowData = {
         ...synchronizedRow,
         ...initialTiming,
-        assignedAt: synchronizedRow.assignedAt ?? (hasFreelancerAssignment(synchronizedRow) ? new Date().toISOString() : null)
+        assignedAt: synchronizedRow.assignedAt ?? (hasFreelancerAssignment(synchronizedRow) ? new Date().toISOString() : null),
+        deadlineSetAt: synchronizedRow.deadlineSetAt ?? (synchronizedRow.endTask ? new Date().toISOString() : null)
       };
       await insertRow('deadlines', {
         ...insertRowData
-      }, ['seriesId', 'chapterNumber', ...writeColumns, 'assignedAt', 'doingStartedAt', 'workDurationSeconds', 'submittedAt']);
+      }, ['seriesId', 'chapterNumber', ...writeColumns, 'assignedAt', 'deadlineSetAt', 'doingStartedAt', 'workDurationSeconds', 'submittedAt']);
       return { result: 'inserted', ...(await repairStatus()) };
     });
     const inserted = writeResults.filter(({ result }) => result === 'inserted').length;
@@ -4456,11 +4469,13 @@ function validateDeadlineCreatePayload(payload) {
   const status = validateTaskStatus(payload.status);
   const submittedAt = normalizeDeadlineDate(payload.submittedAt, 'Ngày nộp');
   const freelancerId = nullableInteger(payload.fIld, 'Freelancer');
+  const endTask = normalizeDeadlineDueDate(payload.endTask, 'Hạn DL');
 
   return {
     seriesId,
     chapterNumber,
-    endTask: normalizeDeadlineDueDate(payload.endTask, 'Hạn DL'),
+    endTask,
+    deadlineSetAt: endTask ? new Date().toISOString() : null,
     submittedAt: status === 'submitted' ? (submittedAt || new Date().toISOString()) : submittedAt,
     seriesName: nullableText(payload.seriesName),
     type,

@@ -311,9 +311,9 @@ function RecentChaptersPanel({ title, chapters, freelancers = [], onNavigate, sh
             <div className="recent-chapter-row" key={`${chapter.seriesId || chapter.id || 'chapter'}-${chapter.chapterNumber || index}`}>
               <div>
                 <strong>{chapter.seriesName || chapter.series || 'Chưa đặt tên bộ truyện'}</strong>
-                <span>ID bộ truyện: {chapter.seriesId ?? '—'} · Chapter {chapter.chapterNumber ?? chapter.chapter ?? '—'} · Hạn {formatDate(chapter.endTask || chapter.deadline)}</span>
+                <span>ID bộ truyện: {chapter.seriesId ?? '—'} · Chapter {chapter.chapterNumber ?? chapter.chapter ?? '—'} · {showAssignmentDetails ? `Set hạn DL: ${formatDeadlineSetTime(chapter)}` : `Hạn ${formatDate(chapter.endTask || chapter.deadline)}`}</span>
                 {showAssignmentDetails && (
-                  <span>Freelancer: {getFreelancerName(chapter, freelancers)} · Giao/cập nhật: {getTaskActivityTimestamp(chapter) ? formatDateTime(new Date(getTaskActivityTimestamp(chapter))) : 'Chưa có mốc thời gian'}</span>
+                  <span>Freelancer: {getFreelancerName(chapter, freelancers)} · Giao/cập nhật: {getTaskActivityTimestamp(chapter) ? formatActivityDateTime(new Date(getTaskActivityTimestamp(chapter))) : 'Chưa có mốc thời gian'}</span>
                 )}
               </div>
               {showQcStatus ? <span className="data-status pending">Chờ QC</span> : showDeadlineStatus ? <DeadlineStatusBadge item={chapter} /> : showAssignmentDetails ? <AssignedTaskStatusBadge item={chapter} /> : null}
@@ -374,6 +374,22 @@ function getTaskActivityTimestamp(item) {
 
 function getTaskSortTimestamp(item) {
   return getTaskActivityTimestamp(item) || new Date(item?.endTask || item?.deadline || 0).getTime() || 0;
+}
+
+function formatDeadlineSetTime(item) {
+  if (!item?.deadlineSetAt) return 'Chưa ghi nhận';
+  const timestamp = new Date(item.deadlineSetAt);
+  return Number.isNaN(timestamp.getTime()) ? 'Chưa ghi nhận' : formatActivityDateTime(timestamp);
+}
+
+function formatActivityDateTime(value) {
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(value);
 }
 
 function getDueDate(item) {
