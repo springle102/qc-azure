@@ -8,7 +8,7 @@ ALTER TABLE public."SeriesList"
 -- closest available timestamp as a one-time baseline; new rows use the exact
 -- time they are inserted or synchronized.
 UPDATE public."SeriesList"
-SET "receivedAt" = COALESCE("submittedAt", "doingStartedAt", "endTask", now())
+SET "receivedAt" = now()
 WHERE "receivedAt" IS NULL;
 
 CREATE INDEX IF NOT EXISTS "SeriesList_received_at_idx"

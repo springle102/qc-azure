@@ -315,7 +315,7 @@ SET "assignedAt" = COALESCE("submittedAt", "doingStartedAt", "endTask", now())
 WHERE "fIld" IS NOT NULL
   AND "assignedAt" IS NULL;
 UPDATE "SeriesList"
-SET "receivedAt" = COALESCE("submittedAt", "doingStartedAt", "endTask", now())
+SET "receivedAt" = now()
 WHERE "receivedAt" IS NULL;
 
 DO $$
