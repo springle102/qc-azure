@@ -60,27 +60,3 @@ export function validateBonusRule(payload) {
   }
   return result;
 }
-
-export function getBonusPreview(tasks, rule) {
-  const ordered = [...tasks].sort((a, b) => (
-    new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime()
-    || String(a.seriesId).localeCompare(String(b.seriesId), 'en', { numeric: true })
-    || String(a.chapterNumber).localeCompare(String(b.chapterNumber), 'en', { numeric: true })
-  ));
-  const evaluate = (enabled, threshold) => {
-    const blockedChapters = ordered.slice(0, threshold).filter((task) => Number(task.completionPercent) !== 100).map((task) => ({
-      seriesId: task.seriesId, chapterNumber: task.chapterNumber, completionPercent: task.completionPercent
-    }));
-    return { enabled, threshold, missingCount: Math.max(0, threshold - ordered.length), blockedChapters,
-      unlocked: enabled && ordered.length >= threshold && blockedChapters.length === 0 };
-  };
-  const kpi = evaluate(rule.kpiEnabled, rule.kpiThreshold);
-  const after = evaluate(rule.afterEnabled, rule.afterThreshold);
-  const rewardedCount = after.unlocked ? ordered.slice(rule.afterThreshold).filter((task) => Number(task.completionPercent) === 100).length : 0;
-  const kpiCents = kpi.unlocked ? Math.round(rule.kpiAmount * 100) : 0;
-  const afterCents = rewardedCount * Math.round(rule.afterAmount * 100);
-  return { chapterCount: ordered.length, fullCompletionCount: ordered.filter((task) => Number(task.completionPercent) === 100).length,
-    kpi: { ...kpi, amount: kpiCents / 100 },
-    after: { ...after, rewardedCount, amountPerChapter: rule.afterAmount, amount: afterCents / 100 },
-    total: (kpiCents + afterCents) / 100 };
-}

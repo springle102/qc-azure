@@ -1548,7 +1548,7 @@ async function materializeQrCode(value, ownerKey) {
   const image = parseErrorImageDataUrl(normalizedValue);
   if (!image) throw validationError('Mã QR không hợp lệ.');
   const extension = getErrorImageExtension(image.contentType);
-  const path = `freelancers/${String(ownerKey).replace(/[^a-z0-9_-]/gi, '_')}/qr-cropped-${crypto.randomUUID()}.${extension}`;
+  const path = `freelancers/${String(ownerKey).replace(/[^a-z0-9_-]/gi, '_')}/qr-cropped-v2-${crypto.randomUUID()}.${extension}`;
   return uploadQrCode({ path, data: image.data, contentType: image.contentType });
 }
 

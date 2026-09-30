@@ -173,7 +173,6 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
               <button type="button" className="icon-button" aria-label="Đóng" onClick={() => setSelectedBonus(null)}><IconX size={18} /></button>
             </div>
             <div className="modal-body bonus-policy-form">
-              <p className="form-help">Thứ tự chap theo Ngày nộp; nếu trùng thời điểm, theo ID truyện rồi chapter. Chỉ đếm task Submitted/Done đã tick Thanh toán. Chap được thưởng phải hoàn thành đúng 100%.</p>
               {(selectedBonus.bonusByField || []).map((summary) => <section className="bonus-policy-card" key={summary.field}>
                 <h4>{summary.field || 'Chưa có mảng'} · {summary.chapterCount} chap, {summary.fullCompletionCount} chap đạt 100%</h4>
                 <BonusGateDetails title="Thưởng KPI" gate={summary.kpi} />

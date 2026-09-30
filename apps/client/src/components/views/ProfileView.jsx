@@ -27,7 +27,7 @@ export function ProfileView({ currentUser = {}, onSaveProfile }) {
     const source = String(currentUser.imageQR || '').trim();
     const freelancerKey = String(currentUser.freelancerId || '').trim();
     const migrationKey = `${freelancerKey}:${source}`;
-    if (!source || !freelancerKey || source.includes('/qr-cropped-') || autoProcessedQrRef.current === migrationKey) return undefined;
+    if (!source || !freelancerKey || source.includes('/qr-cropped-v2-') || autoProcessedQrRef.current === migrationKey) return undefined;
 
     autoProcessedQrRef.current = migrationKey;
     let cancelled = false;
