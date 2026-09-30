@@ -366,10 +366,10 @@ function getFreelancerName(item, freelancers) {
 }
 
 function getTaskReceivedTimestamp(item) {
-  const timestamps = [item?.receivedAt, item?.createdAt, item?.assignedAt]
-    .map((value) => new Date(value || 0).getTime())
-    .filter(Number.isFinite);
-  return Math.max(0, ...timestamps);
+  // Legacy assignedAt values may contain deadlines, not the system entry time.
+  if (!item?.receivedAt) return 0;
+  const timestamp = new Date(item.receivedAt).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function formatReceivedTime(item) {
