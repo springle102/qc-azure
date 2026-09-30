@@ -262,6 +262,62 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.qc-sidebar-role-switcher {
+  display: grid;
+  gap: 7px;
+  margin: 0 6px 16px;
+  padding: 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.36);
+}
+
+.qc-sidebar-role-switcher > span {
+  color: var(--text-sub);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.qc-sidebar-role-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.qc-sidebar-role-buttons button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 5px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.qc-sidebar-role-buttons button:hover,
+.qc-sidebar-role-buttons button.is-active {
+  border-color: rgba(129, 140, 248, 0.65);
+  color: #fff;
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+}
+
+:root[data-theme='light'] .qc-sidebar-role-switcher {
+  background: #f8fafc;
+}
+
+:root[data-theme='light'] .qc-sidebar-role-buttons button {
+  color: #64748b;
+}
+
+:root[data-theme='light'] .qc-sidebar-role-buttons button:hover,
+:root[data-theme='light'] .qc-sidebar-role-buttons button.is-active {
+  color: #fff;
+}
+
 :root[data-theme='light'] .qc-sidebar-brand {
   border-color: #e2e8f0;
 }

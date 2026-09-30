@@ -40,6 +40,8 @@ const ROLE_VIEWS = {
   Freelancer: ['dashboard', 'profile', 'salary', 'deadlineRegistrations', 'deadlines', 'errors']
 };
 
+const ROLE_ORDER = ['Admin', 'QC', 'Freelancer'];
+
 const VIEW_RESOURCES = {
   dashboard: ['dashboard', 'tasks', 'deadlines', 'errors'],
   freelancers: ['freelancers', 'accounts', 'fields', 'errors'],
@@ -72,6 +74,11 @@ function normalizeUser(user) {
   };
 }
 
+function getAvailableRoles(user) {
+  const roles = Array.isArray(user?.roles) && user.roles.length > 0 ? user.roles : [user?.role];
+  return ROLE_ORDER.filter((role) => roles.includes(role));
+}
+
 function canAccessView(role, view) {
   return (ROLE_VIEWS[role] || ROLE_VIEWS.Freelancer).includes(view);
 }
@@ -83,6 +90,7 @@ function getResourcesForView(view) {
 export function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [salaryMonth, setSalaryMonth] = useState(getSalaryMonth);
+  const [activeRole, setActiveRole] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState(EMPTY_DATA);
@@ -108,7 +116,12 @@ export function App() {
     }
 
     api.getCurrentUser()
-      .then((user) => setProfile(normalizeUser(user)))
+      .then((user) => {
+        const normalizedUser = normalizeUser(user);
+        setProfile(normalizedUser);
+        setActiveRole(normalizedUser.role);
+        api.setActiveRole(normalizedUser.role);
+      })
       .catch(() => api.clearSession())
       .finally(() => setIsAuthChecking(false));
   }, []);
@@ -127,13 +140,17 @@ export function App() {
     return () => window.clearInterval(heartbeatId);
   }, [profile?.id]);
 
-  const role = profile?.role;
+  const availableRoles = useMemo(() => getAvailableRoles(profile), [profile]);
+  const role = availableRoles.includes(activeRole) ? activeRole : profile?.role;
+  const activeProfile = useMemo(() => profile ? { ...profile, role } : null, [profile, role]);
 
   const loadData = useCallback(async ({ forceDriveRefresh = false } = {}) => {
     if (!role) {
       setIsLoading(false);
       return;
     }
+
+    api.setActiveRole(role);
 
     const resources = getResourcesForView(currentView);
     const requestId = ++loadRequestId.current;
@@ -292,18 +309,31 @@ export function App() {
   }, []);
 
   const handleNavigate = useCallback((view) => {
-    if (!canAccessView(profile?.role, view)) {
+    if (!canAccessView(role, view)) {
       showToast('Bạn không có quyền truy cập mục này.', 'error');
       return;
     }
     setCurrentView(view);
     setIsSidebarOpen(false);
-  }, [profile?.role]);
+  }, [role]);
+
+  const handleRoleChange = useCallback((nextRole) => {
+    if (!availableRoles.includes(nextRole) || nextRole === role) return;
+    api.setActiveRole(nextRole);
+    setActiveRole(nextRole);
+    setCurrentView('dashboard');
+    setData(EMPTY_DATA);
+    setIsSidebarOpen(false);
+  }, [availableRoles, role]);
 
   const handleLogin = async (credentials) => {
     const session = await api.login(credentials);
     api.setSession(session);
-    setProfile(normalizeUser(session.user));
+    const normalizedUser = normalizeUser(session.user);
+    const nextRole = getAvailableRoles(normalizedUser)[0] || normalizedUser.role;
+    api.setActiveRole(nextRole);
+    setActiveRole(nextRole);
+    setProfile(normalizedUser);
     setCurrentView('dashboard');
     setData(EMPTY_DATA);
   };
@@ -315,6 +345,7 @@ export function App() {
       // The local session is still cleared when the API is unavailable.
     }
     api.clearSession();
+    setActiveRole('');
     setProfile(null);
     setData(EMPTY_DATA);
     setCurrentView('dashboard');
@@ -345,21 +376,21 @@ export function App() {
 
     switch (currentView) {
       case 'freelancers':
-        return <FreelancerManagementView {...commonProps} freelancers={data.freelancers} accounts={data.accounts} fields={data.fields} canManageAccounts={profile.role === 'Admin'} canEdit={profile.role !== 'Freelancer'} />;
+        return <FreelancerManagementView {...commonProps} freelancers={data.freelancers} accounts={data.accounts} fields={data.fields} canManageAccounts={activeProfile.role === 'Admin'} canEdit={activeProfile.role !== 'Freelancer'} />;
       case 'deadlineRegistrations':
-        return <DeadlineRegistrationView {...commonProps} registrations={data.deadlineRegistrations} freelancers={data.freelancers} currentUser={profile} onCreate={handleCreateDeadlineRegistration} onUpdate={handleUpdateDeadlineRegistration} onDelete={handleDeleteDeadlineRegistration} />;
+        return <DeadlineRegistrationView {...commonProps} registrations={data.deadlineRegistrations} freelancers={data.freelancers} currentUser={activeProfile} onCreate={handleCreateDeadlineRegistration} onUpdate={handleUpdateDeadlineRegistration} onDelete={handleDeleteDeadlineRegistration} />;
       case 'salary':
-        return <SalaryManagementView {...commonProps} currentUser={profile} salaries={data.salaries} fields={data.fields} month={salaryMonth} onMonthChange={setSalaryMonth} />;
+        return <SalaryManagementView {...commonProps} currentUser={activeProfile} salaries={data.salaries} fields={data.fields} month={salaryMonth} onMonthChange={setSalaryMonth} />;
       case 'pricing':
         return <PriceManagementView {...commonProps} difficultyLevels={data.difficultyLevels} difficultyPrices={data.difficultyPrices} fields={data.fields} bonusSettings={data.bonusSettings} />;
       case 'settings':
         return <GeneralSettingsView {...commonProps} fields={data.fields} generalSettings={data.generalSettings} />;
       case 'errors':
-        return <ErrorManagementView {...commonProps} errors={data.errors} fields={data.fields} freelancers={data.freelancers} generalSettings={data.generalSettings} currentUser={profile} onUpdate={handleUpdateError} onCreate={handleCreateError} onDelete={handleDeleteError} />;
+        return <ErrorManagementView {...commonProps} errors={data.errors} fields={data.fields} freelancers={data.freelancers} generalSettings={data.generalSettings} currentUser={activeProfile} onUpdate={handleUpdateError} onCreate={handleCreateError} onDelete={handleDeleteError} />;
       case 'deadlines':
-        return <DeadlineManagementView {...commonProps} deadlines={data.deadlines} freelancers={data.freelancers} qcs={data.qcs} fields={data.fields} difficultyLevels={data.difficultyLevels} difficultyPrices={data.difficultyPrices} currentUser={profile} onUpdate={handleUpdateDeadline} onCreate={handleCreateDeadline} onDelete={handleDeleteDeadline} readOnly={profile.role === 'Freelancer'} title={profile.role === 'Freelancer' ? 'Deadline của tôi' : 'Quản lý deadline'} />;
+        return <DeadlineManagementView {...commonProps} deadlines={data.deadlines} freelancers={data.freelancers} qcs={data.qcs} fields={data.fields} difficultyLevels={data.difficultyLevels} difficultyPrices={data.difficultyPrices} currentUser={activeProfile} onUpdate={handleUpdateDeadline} onCreate={handleCreateDeadline} onDelete={handleDeleteDeadline} readOnly={activeProfile.role === 'Freelancer'} title={activeProfile.role === 'Freelancer' ? 'Deadline của tôi' : 'Quản lý deadline'} />;
       case 'profile':
-        return <ProfileView currentUser={profile} onSaveProfile={handleSaveProfile} />;
+        return <ProfileView currentUser={activeProfile} onSaveProfile={handleSaveProfile} />;
       case 'dashboard':
       default:
         return (
@@ -368,13 +399,13 @@ export function App() {
             dashboard={data.dashboard}
             tasks={data.tasks}
             deadlines={data.deadlines}
-            currentUser={profile}
+            currentUser={activeProfile}
             onNavigate={handleNavigate}
             onResetAll={handleResetAll}
           />
         );
     }
-  }, [currentView, data, handleCreateDeadline, handleCreateDeadlineRegistration, handleCreateError, handleDeleteDeadline, handleDeleteDeadlineRegistration, handleDeleteError, handleNavigate, handleResetAll, handleSaveProfile, handleUpdateDeadline, handleUpdateDeadlineRegistration, handleUpdateError, isLoading, loadData, profile, salaryMonth]);
+  }, [activeProfile, currentView, data, handleCreateDeadline, handleCreateDeadlineRegistration, handleCreateError, handleDeleteDeadline, handleDeleteDeadlineRegistration, handleDeleteError, handleNavigate, handleResetAll, handleSaveProfile, handleUpdateDeadline, handleUpdateDeadlineRegistration, handleUpdateError, isLoading, loadData, salaryMonth]);
 
   if (isAuthChecking) {
     return (
@@ -401,15 +432,17 @@ export function App() {
       <Sidebar
         currentView={currentView}
         onNavigate={handleNavigate}
-        currentUser={profile}
-        role={profile.role}
+        currentUser={activeProfile}
+        role={role}
+        availableRoles={availableRoles}
+        onRoleChange={handleRoleChange}
         onOpenLogout={handleLogout}
         isOpen={isSidebarOpen}
       />
 
       <div className="main-wrapper">
         <Header
-          currentUser={profile}
+          currentUser={activeProfile}
           deadlines={data.deadlines}
           errors={data.errors}
           onNavigate={handleNavigate}

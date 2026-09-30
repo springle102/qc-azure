@@ -4748,7 +4748,10 @@ function getAuthUser(req) {
   }
   session.expiresAt = now + SESSION_TTL_MS;
   session.lastSeenAt = now;
-  return session.user;
+  const requestedRole = String(req.headers['x-active-role'] || '').trim();
+  const accountRoles = getAccountRoles(session.user);
+  if (!requestedRole || !accountRoles.includes(requestedRole) || requestedRole === session.user.role) return session.user;
+  return { ...session.user, role: requestedRole };
 }
 
 function getOnlineAccountIds() {

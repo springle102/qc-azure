@@ -30,7 +30,7 @@ const ROLE_VIEWS = {
   Freelancer: ['dashboard', 'profile', 'salary', 'deadlineRegistrations', 'deadlines', 'errors']
 };
 
-export function Sidebar({ currentView, onNavigate, currentUser, role = 'QC', onOpenLogout, isOpen = false }) {
+export function Sidebar({ currentView, onNavigate, currentUser, role = 'QC', availableRoles = [], onRoleChange, onOpenLogout, isOpen = false }) {
   const visibleItems = NAV_ITEMS
     .filter(({ id }) => (ROLE_VIEWS[role] || ROLE_VIEWS.Freelancer).includes(id))
     .map((item) => item.id === 'deadlines' && role === 'Freelancer' ? { ...item, label: 'Deadline của tôi' } : item);
@@ -54,6 +54,25 @@ export function Sidebar({ currentView, onNavigate, currentUser, role = 'QC', onO
       <div className="sidebar-section-title">
         {role === 'Freelancer' ? 'Không gian Freelancer' : (role === 'Admin' ? 'Không gian Admin / QC' : 'Không gian QC')}
       </div>
+
+      {availableRoles.length > 1 && (
+        <div className="qc-sidebar-role-switcher" aria-label="Chuyển không gian làm việc">
+          <span>Chuyển không gian</span>
+          <div className="qc-sidebar-role-buttons">
+            {availableRoles.map((availableRole) => (
+              <button
+                type="button"
+                key={availableRole}
+                className={availableRole === role ? 'is-active' : ''}
+                onClick={() => onRoleChange?.(availableRole)}
+                aria-pressed={availableRole === role}
+              >
+                {availableRole}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <nav className="qc-sidebar-nav" aria-label={role === 'Freelancer' ? 'Điều hướng Freelancer' : 'Điều hướng QC'}>
         {visibleItems.map(({ id, label, icon: Icon, tone, badge }) => (

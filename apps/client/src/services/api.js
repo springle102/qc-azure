@@ -1,6 +1,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const SESSION_KEY = 'qc_webtoon_session';
 const REQUEST_TIMEOUT_MS = 15000;
+let activeRole = '';
 
 export function getUserFacingErrorMessage(message, fallback = 'Không thể hoàn tất yêu cầu.') {
   const text = String(message ?? '').replace(/\s+/g, ' ').trim();
@@ -42,6 +43,7 @@ async function request(path, options = {}) {
       headers: {
         'Content-Type': 'application/json',
         ...(getStoredSession()?.token ? { Authorization: 'Bearer ' + getStoredSession().token } : {}),
+        ...(activeRole ? { 'X-Active-Role': activeRole } : {}),
         ...(options.headers || {})
       },
       signal: controller.signal
@@ -71,8 +73,12 @@ async function request(path, options = {}) {
 
 export const api = {
   hasSession: () => Boolean(getStoredSession()?.token),
+  setActiveRole: (role) => { activeRole = String(role || '').trim(); },
   setSession: (session) => window.localStorage.setItem(SESSION_KEY, JSON.stringify(session)),
-  clearSession: () => window.localStorage.removeItem(SESSION_KEY),
+  clearSession: () => {
+    activeRole = '';
+    window.localStorage.removeItem(SESSION_KEY);
+  },
   login: (credentials) => request('/auth/login', {
     method: 'POST',
     body: JSON.stringify(credentials)
