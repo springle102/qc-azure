@@ -1,23 +1,19 @@
 import React, { useMemo } from 'react';
 import {
   IconAlertTriangle,
-  IconBook,
   IconCheckCircle,
   IconClock,
-  IconExternalLink,
-  IconFolder,
   IconRefresh,
   IconTrash,
   IconTasks
 } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 
-const isComplete = (item) => normalizeStatus(item) === 'submitted';
+const isSubmitted = (item) => normalizeStatus(item) === 'submitted';
 const isKpiComplete = (item, role) => normalizeStatus(item) === (role === 'Freelancer' ? 'submitted' : 'done');
 const isFinishedForDashboard = (item) => ['submitted', 'checking', 'fixing', 'done'].includes(normalizeStatus(item));
 const hasFreelancerAssignment = (item) => [item?.fId, item?.fIld, item?.freelancerId]
   .some((value) => value !== null && value !== undefined && String(value).trim() !== '');
-const isAssignedToQC = (item) => Boolean(item?.qcId || item?.qcld || item?.qcID || item?.qcName);
 const needsQC = (item) => {
   const status = String(item?.status || item?.statusRaw || '').trim().toLowerCase();
   return status === 'submitted' || /đã gửi|chờ qc|qc|review|duyệt|kiểm/.test(status);
@@ -34,25 +30,7 @@ function formatDate(value) {
   return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value));
 }
 
-function LinkCard({ icon: Icon, label, value, linkText = 'Xem tại đây' }) {
-  const hasLink = Boolean(value);
-  return (
-    <div className="dashboard-link-card">
-      <div className="dashboard-link-icon"><Icon size={20} /></div>
-      <div className="dashboard-link-content">
-        <span>{label}</span>
-        {hasLink ? (
-          <a href={value} target="_blank" rel="noreferrer" title={linkText}>{linkText}</a>
-        ) : (
-          <strong className="empty-inline">Chưa có đường dẫn</strong>
-        )}
-      </div>
-      {hasLink && <IconExternalLink size={16} className="dashboard-link-arrow" />}
-    </div>
-  );
-}
-
-export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], currentUser = {}, isLoading, onRefresh, onResetAll, onNavigate }) {
+export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], freelancers = [], currentUser = {}, isLoading, onRefresh, onResetAll, onNavigate }) {
   const isFreelancer = currentUser.role === 'Freelancer';
   const canViewChecklists = ['Admin', 'Freelancer'].includes(currentUser.role);
   const [isResetting, setIsResetting] = React.useState(false);
@@ -97,10 +75,10 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
   const recentChaptersByRole = useMemo(() => {
     const records = deadlines.length ? deadlines : tasks;
     const recent = [...records]
-      .sort((a, b) => new Date(b.endTask || b.deadline || 0) - new Date(a.endTask || a.deadline || 0));
+      .sort((a, b) => getTaskSortTimestamp(b) - getTaskSortTimestamp(a));
 
     return {
-      qc: recent.filter(isAssignedToQC).slice(0, 5),
+      qc: recent.filter(isSubmitted).slice(0, 5),
       freelancer: recent.filter(hasFreelancerAssignment).slice(0, 5)
     };
   }, [deadlines, tasks]);
@@ -253,8 +231,8 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], curr
           </>
         ) : (
           <>
-            <RecentChaptersPanel title="Danh sách chapter QC" chapters={recentChaptersByRole.qc} onNavigate={onNavigate} />
-            <RecentChaptersPanel title="Danh sách chapter Freelancer" chapters={recentChaptersByRole.freelancer} onNavigate={onNavigate} />
+            <RecentChaptersPanel title="Danh sách chapter đang chờ QC" chapters={recentChaptersByRole.qc} onNavigate={onNavigate} showQcStatus />
+            <RecentChaptersPanel title="Các task được giao gần đây" chapters={recentChaptersByRole.freelancer} freelancers={freelancers} onNavigate={onNavigate} showAssignmentDetails />
           </>
         )}
       </div>
@@ -310,7 +288,7 @@ function UpcomingTasksPanel({ tasks, onNavigate }) {
   );
 }
 
-function RecentChaptersPanel({ title, chapters, onNavigate, showDeadlineStatus = false }) {
+function RecentChaptersPanel({ title, chapters, freelancers = [], onNavigate, showDeadlineStatus = false, showQcStatus = false, showAssignmentDetails = false }) {
   return (
     <section className="glass-panel dashboard-section">
       <div className="section-heading">
@@ -333,19 +311,31 @@ function RecentChaptersPanel({ title, chapters, onNavigate, showDeadlineStatus =
             <div className="recent-chapter-row" key={`${chapter.seriesId || chapter.id || 'chapter'}-${chapter.chapterNumber || index}`}>
               <div>
                 <strong>{chapter.seriesName || chapter.series || 'Chưa đặt tên bộ truyện'}</strong>
-                <span>Chapter {chapter.chapterNumber ?? chapter.chapter ?? '—'} · Hạn {formatDate(chapter.endTask || chapter.deadline)}</span>
+                <span>ID bộ truyện: {chapter.seriesId ?? '—'} · Chapter {chapter.chapterNumber ?? chapter.chapter ?? '—'} · Hạn {formatDate(chapter.endTask || chapter.deadline)}</span>
+                {showAssignmentDetails && (
+                  <span>Freelancer: {getFreelancerName(chapter, freelancers)} · Giao/cập nhật: {getTaskActivityTimestamp(chapter) ? formatDateTime(new Date(getTaskActivityTimestamp(chapter))) : 'Chưa có mốc thời gian'}</span>
+                )}
               </div>
-              {showDeadlineStatus ? <DeadlineStatusBadge item={chapter} /> : (
-                <span className={`data-status ${isComplete(chapter) ? 'success' : 'pending'}`}>
-                  {chapter.statusRaw || chapter.status || 'Chưa có trạng thái'}
-                </span>
-              )}
+              {showQcStatus ? <span className="data-status pending">Chờ QC</span> : showDeadlineStatus ? <DeadlineStatusBadge item={chapter} /> : showAssignmentDetails ? <AssignedTaskStatusBadge item={chapter} /> : null}
             </div>
           ))}
         </div>
       )}
     </section>
   );
+}
+
+function AssignedTaskStatusBadge({ item }) {
+  const status = normalizeStatus(item);
+  const labels = {
+    doing: 'Đang thực hiện',
+    submitted: 'Đã nộp',
+    checking: 'Đang kiểm tra',
+    fixing: 'Có lỗi cần sửa',
+    done: 'Đã hoàn thành'
+  };
+  const className = status === 'done' ? 'success' : status === 'fixing' ? 'overdue' : 'pending';
+  return <span className={`data-status ${className}`}>{labels[status] || 'Chưa bắt đầu'}</span>;
 }
 
 function DeadlineStatusBadge({ item, upcoming = false }) {
@@ -365,6 +355,25 @@ function normalizeStatus(item) {
   if (value === 'submitted' || /đã gửi|chờ qc/.test(value)) return 'submitted';
   if (value === 'done' || /hoàn thành|completed|complete/.test(value)) return 'done';
   return value;
+}
+
+function getFreelancerName(item, freelancers) {
+  const freelancerId = item?.fIld ?? item?.fId ?? item?.freelancerId;
+  const freelancer = freelancers.find((candidate) => (
+    String(candidate.fIld ?? candidate.fId ?? candidate.id ?? '') === String(freelancerId ?? '')
+  ));
+  return freelancer?.name || freelancer?.displayName || item?.freelancerName || (freelancerId ? `FLID ${freelancerId}` : 'Chưa giao');
+}
+
+function getTaskActivityTimestamp(item) {
+  const timestamps = [item?.assignedAt, item?.updatedAt, item?.submittedAt, item?.doingStartedAt, item?.createdAt]
+    .map((value) => new Date(value || 0).getTime())
+    .filter(Number.isFinite);
+  return Math.max(0, ...timestamps);
+}
+
+function getTaskSortTimestamp(item) {
+  return getTaskActivityTimestamp(item) || new Date(item?.endTask || item?.deadline || 0).getTime() || 0;
 }
 
 function getDueDate(item) {

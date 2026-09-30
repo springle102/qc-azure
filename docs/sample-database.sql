@@ -263,6 +263,7 @@ CREATE TABLE IF NOT EXISTS "SeriesList" (
   "workDurationSeconds" integer NOT NULL DEFAULT 0,
   "urlSeries" text,
   "fIld" integer,
+  "assignedAt" timestamptz,
   "assignedAdminId" bigint,
   "qcId" integer,
   "difficulty" varchar(50),
@@ -290,6 +291,7 @@ ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "status" varchar(20);
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "doingStartedAt" timestamptz;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "workDurationSeconds" integer;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "submittedAt" timestamptz;
+ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "assignedAt" timestamptz;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "assignedAdminId" bigint;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "late" text;
 ALTER TABLE "SeriesList" ADD COLUMN IF NOT EXISTS "paymentApproved" boolean;
@@ -306,6 +308,10 @@ ALTER TABLE "SeriesList" ALTER COLUMN "paymentApproved" SET DEFAULT false;
 ALTER TABLE "SeriesList" ALTER COLUMN "paymentApproved" SET NOT NULL;
 ALTER TABLE "SeriesList" ALTER COLUMN "late" SET DEFAULT '≤0h';
 ALTER TABLE "SeriesList" ALTER COLUMN "late" SET NOT NULL;
+UPDATE "SeriesList"
+SET "assignedAt" = COALESCE("submittedAt", "doingStartedAt", "endTask", now())
+WHERE "fIld" IS NOT NULL
+  AND "assignedAt" IS NULL;
 
 DO $$
 BEGIN
@@ -476,6 +482,7 @@ DELETE FROM "DifficultyLevels"
 WHERE "field" IN ('Latin', 'Japan', 'QC');
 
 CREATE INDEX IF NOT EXISTS "SeriesList_freelancer_idx" ON "SeriesList" ("fIld");
+CREATE INDEX IF NOT EXISTS "SeriesList_assigned_at_idx" ON "SeriesList" ("assignedAt" DESC);
 CREATE INDEX IF NOT EXISTS "SeriesList_qc_idx" ON "SeriesList" ("qcId");
 CREATE INDEX IF NOT EXISTS "DifficultyPricing_field_idx" ON "DifficultyPricing" ("field");
 

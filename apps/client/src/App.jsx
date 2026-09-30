@@ -43,7 +43,7 @@ const ROLE_VIEWS = {
 const ROLE_ORDER = ['Admin', 'QC', 'Freelancer'];
 
 const VIEW_RESOURCES = {
-  dashboard: ['dashboard', 'tasks', 'deadlines', 'errors'],
+  dashboard: ['dashboard', 'tasks', 'deadlines', 'freelancers', 'errors'],
   freelancers: ['freelancers', 'accounts', 'fields', 'errors'],
   deadlineRegistrations: ['deadlineRegistrations', 'freelancers'],
   deadlines: ['deadlines', 'freelancers', 'qcs', 'fields', 'difficultyLevels', 'difficultyPrices', 'errors'],
@@ -428,6 +428,7 @@ export function App() {
             dashboard={data.dashboard}
             tasks={data.tasks}
             deadlines={data.deadlines}
+            freelancers={data.freelancers}
             currentUser={activeProfile}
             onNavigate={handleNavigate}
             onResetAll={handleResetAll}
