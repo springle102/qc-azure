@@ -54,6 +54,23 @@ const VIEW_RESOURCES = {
   profile: []
 };
 
+const RESOURCE_LABELS = {
+  dashboard: 'tổng quan',
+  tasks: 'task',
+  freelancers: 'freelancer',
+  deadlineRegistrations: 'đăng ký deadline',
+  qcs: 'QC',
+  deadlines: 'deadline',
+  difficultyLevels: 'mức độ khó',
+  difficultyPrices: 'giá theo độ khó',
+  bonusSettings: 'cấu hình thưởng',
+  salaries: 'bảng lương',
+  accounts: 'tài khoản',
+  fields: 'lĩnh vực',
+  generalSettings: 'cấu hình chung',
+  errors: 'bảng lỗi'
+};
+
 const THEME_STORAGE_KEY = 'qc-webtoon-theme';
 
 function getInitialTheme() {
@@ -197,14 +214,26 @@ export function App() {
       try {
         const value = await loaders[resource]();
         return { resource, value: value ?? fallbacks[resource], failed: false };
-      } catch {
-        return { resource, value: fallbacks[resource], failed: true };
+      } catch (error) {
+        return {
+          resource,
+          value: fallbacks[resource],
+          failed: true,
+          error: error instanceof Error ? error.message : 'Unknown request error'
+        };
       }
     }));
 
     if (requestId !== loadRequestId.current) return;
 
-    setLoadWarning(results.some((result) => result.failed) ? 'Một số dữ liệu chưa tải được. Vui lòng thử lại.' : '');
+    const failedResources = results
+      .filter((result) => result.failed)
+      .map((result) => RESOURCE_LABELS[result.resource] || result.resource);
+    setLoadWarning(
+      failedResources.length > 0
+        ? `Chưa tải được: ${failedResources.join(', ')}. Vui lòng thử lại.`
+        : ''
+    );
     setData((current) => ({
       ...current,
       ...Object.fromEntries(results.map(({ resource, value }) => [resource, value]))

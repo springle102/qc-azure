@@ -50,7 +50,7 @@ const DEADLINE_REGISTRATION_STABILITY_OPTIONS = ['Trong tháng', '2-3 tháng k�
 const corsOptions = {
   origin: true,
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Active-Role'],
   optionsSuccessStatus: 204
 };
 app.use(cors(corsOptions));
