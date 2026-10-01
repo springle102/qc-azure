@@ -14,7 +14,6 @@ import { ErrorManagementView } from './components/views/ErrorManagementView';
 import { ProfileView } from './components/views/ProfileView';
 import { LoginView } from './components/views/LoginView';
 import { api } from './services/api';
-import { getSalaryMonth } from './utils/bonus.mjs';
 import './App.css';
 
 const EMPTY_DATA = {
@@ -106,7 +105,6 @@ function getResourcesForView(view) {
 
 export function App() {
   const [currentView, setCurrentView] = useState('dashboard');
-  const [salaryMonth, setSalaryMonth] = useState(getSalaryMonth);
   const [activeRole, setActiveRole] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -188,7 +186,7 @@ export function App() {
       difficultyLevels: api.getDifficultyLevels,
       difficultyPrices: api.getDifficultyPrices,
       bonusSettings: api.getBonusSettings,
-      salaries: () => api.getSalaries({ month: salaryMonth }),
+      salaries: api.getSalaries,
       accounts: role === 'Admin' ? api.getAccounts : async () => [],
       fields: api.getFields,
       generalSettings: api.getGeneralSettings,
@@ -239,7 +237,7 @@ export function App() {
       ...Object.fromEntries(results.map(({ resource, value }) => [resource, value]))
     }));
     setIsLoading(false);
-  }, [currentView, role, salaryMonth]);
+  }, [currentView, role]);
 
   useEffect(() => {
     loadData();
@@ -409,7 +407,7 @@ export function App() {
       case 'deadlineRegistrations':
         return <DeadlineRegistrationView {...commonProps} registrations={data.deadlineRegistrations} freelancers={data.freelancers} currentUser={activeProfile} onCreate={handleCreateDeadlineRegistration} onUpdate={handleUpdateDeadlineRegistration} onDelete={handleDeleteDeadlineRegistration} />;
       case 'salary':
-        return <SalaryManagementView {...commonProps} currentUser={activeProfile} salaries={data.salaries} fields={data.fields} month={salaryMonth} onMonthChange={setSalaryMonth} />;
+        return <SalaryManagementView {...commonProps} currentUser={activeProfile} salaries={data.salaries} fields={data.fields} />;
       case 'pricing':
         return <PriceManagementView {...commonProps} difficultyLevels={data.difficultyLevels} difficultyPrices={data.difficultyPrices} fields={data.fields} bonusSettings={data.bonusSettings} />;
       case 'settings':
@@ -435,7 +433,7 @@ export function App() {
           />
         );
     }
-  }, [activeProfile, currentView, data, handleCreateDeadline, handleCreateDeadlineRegistration, handleCreateError, handleDeleteDeadline, handleDeleteDeadlineRegistration, handleDeleteError, handleNavigate, handleResetAll, handleSaveProfile, handleUpdateDeadline, handleUpdateDeadlineRegistration, handleUpdateError, isLoading, loadData, salaryMonth]);
+  }, [activeProfile, currentView, data, handleCreateDeadline, handleCreateDeadlineRegistration, handleCreateError, handleDeleteDeadline, handleDeleteDeadlineRegistration, handleDeleteError, handleNavigate, handleResetAll, handleSaveProfile, handleUpdateDeadline, handleUpdateDeadlineRegistration, handleUpdateError, isLoading, loadData]);
 
   if (isAuthChecking) {
     return (

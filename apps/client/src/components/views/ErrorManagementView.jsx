@@ -255,7 +255,7 @@ function ErrorTypeControl({ value, disabled = false, onChange, ariaLabel = 'Ch�
   );
 }
 
-function ErrorColumnFilterButton({ columnKey, label, values = [], activeValues, activeSortDirection, onApply, onSort }) {
+function ErrorColumnFilterButton({ label, values = [], activeValues, activeSortDirection, onApply, onSort }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchValue, setSearchValue] = useState('');
   const [draftValues, setDraftValues] = useState([]);
@@ -321,8 +321,8 @@ function ErrorColumnFilterButton({ columnKey, label, values = [], activeValues, 
   };
 
   const clearFilter = () => {
-    if (columnKey === 'title') onSort?.(null);
-    else onApply?.(null);
+    onSort?.(null);
+    onApply?.(null);
     setIsOpen(false);
   };
 
@@ -347,7 +347,7 @@ function ErrorColumnFilterButton({ columnKey, label, values = [], activeValues, 
       {isOpen && menuPosition && createPortal(
         <div ref={menuRef} className="column-filter-menu" style={menuPosition} onClick={(event) => event.stopPropagation()}>
           <div className="column-filter-menu-title">Lọc {label}</div>
-          {columnKey === 'title' && (
+          {onSort && (
             <div className="column-filter-sort">
               <div className="column-filter-section-label">Sắp xếp</div>
               <button type="button" className={`column-filter-sort-button${activeSortDirection === 'asc' ? ' active' : ''}`} onClick={() => applySort('asc')}>A → Z</button>
@@ -396,7 +396,7 @@ export function ErrorManagementView({
 }) {
   const canManage = ['Admin', 'QC'].includes(currentUser.role);
   const [activeField, setActiveField] = useState(fields[0]?.name || '');
-  const [titleSortDirection, setTitleSortDirection] = useState(null);
+  const [sort, setSort] = useState({ column: 'title', direction: null });
   const [errorTypeFilter, setErrorTypeFilter] = useState(null);
   const [editorFilter, setEditorFilter] = useState(null);
   const [localErrors, setLocalErrors] = useState(errors);
@@ -455,6 +455,9 @@ export function ErrorManagementView({
   }, [generalSettings]);
 
   const activeSheetUrl = errorSheetUrls[activeField] || '';
+  const updateSort = (column, direction) => {
+    setSort((current) => direction || current.column === column ? { column, direction } : current);
+  };
   const editorFilterOptions = useMemo(() => [...new Set([
     ...localErrors.filter((row) => matchesField(row, activeField)).map(getErrorEditorLabel),
     ...(editorFilter || [])
@@ -464,12 +467,16 @@ export function ErrorManagementView({
       .filter((row) => matchesField(row, activeField))
       .filter((row) => !Array.isArray(errorTypeFilter) || errorTypeFilter.includes(String(row.errorType ?? '')))
       .filter((row) => !Array.isArray(editorFilter) || editorFilter.includes(getErrorEditorLabel(row)));
-    const sortDirection = titleSortDirection || 'asc';
+    const sortDirection = sort.direction || 'asc';
     return [...filtered].sort((left, right) => {
+      if (sort.column === 'editor' && sort.direction) {
+        const comparedEditors = getErrorEditorLabel(left).localeCompare(getErrorEditorLabel(right), 'vi', { numeric: true, sensitivity: 'base' });
+        if (comparedEditors !== 0) return sortDirection === 'asc' ? comparedEditors : -comparedEditors;
+      }
       const compared = String(left.title || '').localeCompare(String(right.title || ''), 'vi', { numeric: true, sensitivity: 'base' });
-      return sortDirection === 'asc' ? compared : -compared;
+      return sort.column === 'title' && sortDirection === 'desc' ? -compared : compared;
     });
-  }, [activeField, editorFilter, errorTypeFilter, localErrors, titleSortDirection]);
+  }, [activeField, editorFilter, errorTypeFilter, localErrors, sort]);
 
   const editorOptions = freelancers.filter((freelancer) => (
     !activeField || getFreelancerFields(freelancer).some((field) => field.toLowerCase() === activeField.toLowerCase())
@@ -763,13 +770,13 @@ export function ErrorManagementView({
               <table className="custom-table error-table">
                 <thead>
                   <tr>
-                    <th><div className="error-column-header"><span>Title</span><ErrorColumnFilterButton columnKey="title" label="Title" activeSortDirection={titleSortDirection} onSort={setTitleSortDirection} /></div></th>
+                    <th><div className="error-column-header"><span>Title</span><ErrorColumnFilterButton label="Title" activeSortDirection={sort.column === 'title' ? sort.direction : null} onSort={(direction) => updateSort('title', direction)} /></div></th>
                     <th><div className="error-column-header"><span>Chapter</span></div></th>
-                    <th><div className="error-column-header"><span>Error Type</span><ErrorColumnFilterButton columnKey="errorType" label="Error Type" values={ERROR_TYPE_OPTIONS} activeValues={errorTypeFilter} onApply={setErrorTypeFilter} /></div></th>
+                    <th><div className="error-column-header"><span>Error Type</span><ErrorColumnFilterButton label="Error Type" values={ERROR_TYPE_OPTIONS} activeValues={errorTypeFilter} onApply={setErrorTypeFilter} /></div></th>
                     <th><div className="error-column-header"><span>Screenshot</span></div></th>
                     <th><div className="error-column-header"><span>Error</span></div></th>
                     <th><div className="error-column-header"><span>Note của FL hoặc QC</span></div></th>
-                    <th><div className="error-column-header"><span>Editor</span><ErrorColumnFilterButton columnKey="editor" label="Editor" values={editorFilterOptions} activeValues={editorFilter} onApply={setEditorFilter} /></div></th>
+                    <th><div className="error-column-header"><span>Editor</span><ErrorColumnFilterButton label="Editor" values={editorFilterOptions} activeValues={editorFilter} activeSortDirection={sort.column === 'editor' ? sort.direction : null} onApply={setEditorFilter} onSort={(direction) => updateSort('editor', direction)} /></div></th>
                     <th><div className="error-column-header"><span>Fix/Check</span></div></th>
                     {canManage && <th><div className="error-column-header"><span>Thao tác</span></div></th>}
                   </tr>

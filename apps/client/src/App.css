@@ -3039,13 +3039,6 @@
   min-width: 720px;
 }
 
-.salary-month-filter {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  white-space: nowrap;
-}
-
 .salary-date-warning {
   padding: 0 20px 16px;
   color: var(--text-main);

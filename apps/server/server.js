@@ -787,8 +787,8 @@ app.delete('/api/errors/:id', requireManager, async (req, res) => {
 });
 app.get('/api/salaries', requireAuth, async (req, res) => {
   try {
-    const month = req.query.month ?? getSalaryMonth();
-    if (!isSalaryMonth(month)) throw validationError('Tháng lương phải có định dạng YYYY-MM.');
+    const month = req.query.month ?? null;
+    if (month !== null && !isSalaryMonth(month)) throw validationError('Tháng lương phải có định dạng YYYY-MM.');
     await syncGoogleSheetIfDue({ waitForCompletion: false });
     const [freelancers, qcs, deadlines, prices, bonusSettings] = await Promise.all([
       getCollection('freelancers'),
@@ -820,15 +820,18 @@ app.get('/api/salaries', requireAuth, async (req, res) => {
       || deadline.paymentApproved === 1
       || String(deadline.paymentApproved).toLowerCase() === 'true'
     ));
-    const monthlyDeadlines = payableDeadlines.filter((deadline) => getSalaryMonth(deadline.submittedAt) === month);
+    const salaryDeadlines = payableDeadlines.filter((deadline) => {
+      const submittedMonth = getSalaryMonth(deadline.submittedAt);
+      return submittedMonth && (month === null || submittedMonth === month);
+    });
     const undatedDeadlines = payableDeadlines.filter((deadline) => !getSalaryMonth(deadline.submittedAt));
-    const payableQCDebt = monthlyDeadlines.filter((deadline) => getTaskStatus(deadline) === 'done');
+    const payableQCDebt = salaryDeadlines.filter((deadline) => getTaskStatus(deadline) === 'done');
     res.json({
       success: true,
         data: scopedDeadlines.length === 0
         ? []
         : [
-            ...buildSalaryRows(scopedFreelancers, monthlyDeadlines, bonusSettings, month, undatedDeadlines),
+            ...buildSalaryRows(scopedFreelancers, salaryDeadlines, bonusSettings, month, undatedDeadlines),
             ...buildQCSalaryRows(scopedQcs, payableQCDebt, bonusSettings, month)
           ]
     });
@@ -4350,7 +4353,7 @@ function getBonusSettingsForField(settings, field) {
   };
 }
 
-function buildSalaryRows(freelancers, deadlines, bonusSettings, month = getSalaryMonth(), undatedDeadlines = []) {
+function buildSalaryRows(freelancers, deadlines, bonusSettings, month = null, undatedDeadlines = []) {
   return freelancers.map((freelancer) => {
     const freelancerId = freelancer.fIld ?? freelancer.fId ?? freelancer.id;
     const freelancerDeadlines = deadlines.filter((deadline) => (
@@ -4358,14 +4361,17 @@ function buildSalaryRows(freelancers, deadlines, bonusSettings, month = getSalar
     ));
     const completedTaskCount = freelancerDeadlines.filter(isFreelancerTaskComplete).length;
     const earnedAmount = freelancerDeadlines.reduce((total, deadline) => total + getDeadlineEarning(deadline), 0);
-    const tasksByField = new Map();
+    const tasksByMonthAndField = new Map();
     freelancerDeadlines.forEach((deadline) => {
-      const key = deadline.type || '';
-      if (!tasksByField.has(key)) tasksByField.set(key, []);
-      if (isFreelancerTaskComplete(deadline)) tasksByField.get(key).push(deadline);
+      const field = deadline.type || '';
+      const salaryMonth = getSalaryMonth(deadline.submittedAt);
+      const key = JSON.stringify([salaryMonth, field]);
+      if (!tasksByMonthAndField.has(key)) tasksByMonthAndField.set(key, { field, salaryMonth, tasks: [] });
+      if (isFreelancerTaskComplete(deadline)) tasksByMonthAndField.get(key).tasks.push(deadline);
     });
-    const bonusByField = [...tasksByField.entries()].map(([field, tasks]) => ({
+    const bonusByField = [...tasksByMonthAndField.values()].map(({ field, salaryMonth, tasks }) => ({
       field,
+      salaryMonth,
       ...calculateMonthlyBonus(tasks, getBonusSettingsForField(bonusSettings, field))
     }));
     const bonus = bonusByField.reduce((sum, summary) => sum + Math.round(summary.total * 100), 0) / 100;
@@ -4388,7 +4394,7 @@ function buildSalaryRows(freelancers, deadlines, bonusSettings, month = getSalar
   });
 }
 
-function buildQCSalaryRows(qcs, deadlines, bonusSettings, month = getSalaryMonth()) {
+function buildQCSalaryRows(qcs, deadlines, bonusSettings, month = null) {
   return qcs.map((qc) => {
     const qcId = qc.qcId ?? qc.id;
     const qcDeadlines = deadlines.filter((deadline) => (

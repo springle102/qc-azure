@@ -124,7 +124,7 @@ async function salaryResponse(tasks, user = { role: 'Admin' }, month = '2026-09'
     section("app.get('/api/salaries',", "app.post('/api/reset-all',")
   ].join('\n'), context);
   const res = { code: 200, status(code) { this.code = code; return this; }, json(payload) { this.payload = payload; return this; } };
-  await handler({ query: { month }, authUser: user }, res);
+  await handler({ query: month == null ? {} : { month }, authUser: user }, res);
   return res;
 }
 
@@ -157,6 +157,41 @@ test('salary API rejects invalid months and reports undated tasks without assign
   const res = await salaryResponse(chapters(1).map((task) => ({ ...task, submittedAt: null })));
   assert.equal(res.payload.data[0].totalSalary, '0.00');
   assert.equal(res.payload.data[0].missingDateChapters.length, 1);
+});
+
+test('salary API without a month totals all periods and keeps monthly bonus milestones separate', async () => {
+  const tasks = [
+    ...chapters(21),
+    ...chapters(21).map((task) => ({ ...task, seriesId: 2, submittedAt: '2026-08-20T00:00:00Z' })),
+    ...chapters(21).map((task) => ({ ...task, seriesId: 3, fIld: 8 })),
+    ...chapters(1).map((task) => ({ ...task, seriesId: 4, paymentApproved: false })),
+    ...chapters(1).map((task) => ({ ...task, seriesId: 5, submittedAt: null }))
+  ];
+  const res = await salaryResponse(tasks, { role: 'Admin' }, null);
+  assert.equal(res.code, 200);
+  const first = res.payload.data.find((row) => row.fIld === 7);
+  assert.equal(first.salaryMonth, null);
+  assert.equal(first.earnedAmount, '420000.00');
+  assert.equal(first.bonus, '410000.00');
+  assert.equal(first.totalSalary, '830000.00');
+  assert.equal(first.missingDateChapters.length, 1);
+  assert.equal(first.bonusByField.find((summary) => summary.salaryMonth === '2026-08').total, 205000);
+  assert.equal(first.bonusByField.find((summary) => summary.salaryMonth === '2026-09').total, 205000);
+  assert.equal(res.payload.data.find((row) => row.isQc).totalSalary, '63000.00');
+  const own = await salaryResponse(tasks, { role: 'Freelancer', freelancerId: 7 }, null);
+  assert.equal(own.payload.data.length, 1);
+  assert.equal(own.payload.data[0].totalSalary, '830000.00');
+});
+
+test('all-period salary does not pool chapters across the Vietnam month boundary to unlock bonus', async () => {
+  const tasks = [
+    ...chapters(10).map((task) => ({ ...task, submittedAt: '2026-08-31T16:59:59Z' })),
+    ...chapters(10).map((task) => ({ ...task, seriesId: 2, submittedAt: '2026-08-31T17:00:00Z' }))
+  ];
+  const res = await salaryResponse(tasks, { role: 'Admin' }, null);
+  assert.equal(res.payload.data[0].earnedAmount, '200000.00');
+  assert.equal(res.payload.data[0].bonus, '0.00');
+  assert.equal(res.payload.data[0].bonusByField.length, 2);
 });
 
 test('only Submitted/Done chapters count toward bonus; QC gets Done only', async () => {
