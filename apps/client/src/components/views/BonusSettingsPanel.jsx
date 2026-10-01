@@ -65,7 +65,6 @@ export function BonusSettingsPanel({ field, settings, isLoading, onRefresh }) {
             <p className="form-help">{config.afterThreshold || '…'} chap đầu đều đạt 100% → thưởng {money(config.afterAmount)}/chap từ chap thứ {Number(config.afterThreshold || 0) + 1}. Chap sau mốc cũng phải đạt 100%.</p>
           </fieldset>
         </div>
-        <p className="form-help">Đếm riêng từng freelancer và mảng theo kỳ lương đang xem. Chỉ task Submitted/Done đã tick Thanh toán được đưa vào mốc bonus. Không bỏ qua chap dưới 100% để thay bằng chap phía sau.</p>
         <fieldset className="bonus-policy-card" disabled={isSaving || isLoading}>
           <legend>Tiền QC</legend>
           <label className="form-group">Giá mặc định QC / task (đồng)
