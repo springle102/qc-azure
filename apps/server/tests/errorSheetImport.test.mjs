@@ -123,15 +123,57 @@ test('a row whose Error is cleared updates the same record and repeated sync add
   assert.equal(rows.length, 1);
 });
 
-test('imports populated hidden rows and removes only records whose source row becomes empty', async () => {
+test('imports only visible rows and removes records whose source row becomes empty', async () => {
   const { sync, rows, sheet } = harness([makeRow({ Note: 'Keep this row' }), makeRow({ Error: 'Remove later' })]);
-  sheet.hiddenRows.add(1);
   assert.equal((await sync()).inserted, 2);
   const keptId = rows[0].id;
   sheet.values[2] = makeRow({});
   assert.equal((await sync()).deleted, 1);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].id, keptId);
+});
+
+test('hidden rows are excluded, removed after hiding, and imported again after becoming visible', async () => {
+  const { sync, rows, sheet } = harness([
+    makeRow({ Title: 'Visible', Note: 'No Error required' }),
+    makeRow({ Error: 'Hidden' })
+  ]);
+  sheet.hiddenRows.add(2);
+  assert.equal((await sync()).inserted, 1);
+  assert.equal(rows[0].title, 'Visible');
+  sheet.hiddenRows.clear();
+  assert.equal((await sync()).inserted, 1);
+  sheet.hiddenRows.add(2);
+  const result = await sync();
+  assert.equal(result.deleted, 1);
+  assert.equal(result.total, 1);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].title, 'Visible');
+});
+
+test('deleted source rows are removed from the web table during the next sync', async () => {
+  const { sync, rows, sheet } = harness([makeRow({ Note: 'Keep' }), makeRow({ Note: 'Delete' })]);
+  await sync();
+  sheet.values.pop();
+  const result = await sync();
+  assert.equal(result.deleted, 1);
+  assert.equal(result.total, 1);
+  assert.equal(rows[0].note, 'Keep');
+});
+
+test('both manual hiding and Sheet filters exclude rows while keeping incomplete visible rows', async () => {
+  const { context, sync, rows, sheet } = harness([]);
+  context.URLSearchParams = URLSearchParams;
+  context.googleSheetsRequest = async () => ({ sheets: [{ data: [{
+    rowData: [headers, makeRow({ Note: 'Visible' }), makeRow({ Error: 'Manual' }), makeRow({ Error: 'Filtered' })]
+      .map((row) => ({ values: row.map((value) => ({ formattedValue: value })) })),
+    rowMetadata: [{}, {}, { hiddenByUser: true }, { hiddenByFilter: true }]
+  }] }] });
+  vm.runInContext(extract('readGoogleSheetValues'), context);
+  Object.assign(sheet, await context.readGoogleSheetValues('book', "'Errors'!A:ZZ"));
+  assert.equal((await sync()).inserted, 1);
+  assert.equal(rows[0].note, 'Visible');
+  assert.equal(rows[0].error, '');
 });
 
 test('QC full sync stays restricted to assigned fields', async () => {

@@ -4043,6 +4043,7 @@ async function syncErrorsWithGoogleSheets(user) {
       .reduce((count, key) => Math.max(count, Number(String(key).split(':')[0]) + 1), 0);
     const rowCount = Math.max(sheet.values.length, sheet.cellData.length, imageRowCount);
     for (let index = sheet.headerRowIndex + 1; index < rowCount; index += 1) {
+      if (sheet.hiddenRows?.has(index)) continue;
       const row = sheet.values[index] || [];
       const cellDataRow = sheet.cellData[index] || [];
       const directScreenshot = screenshotColumn === undefined ? '' : sheet.imageCells?.get(`${index}:${screenshotColumn}`) || '';

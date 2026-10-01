@@ -114,7 +114,7 @@ Mỗi dòng trong bảng `Fields` có thêm `guideUrl` và `resourceUrl`. Dashbo
 
 ## Fix/Check trong Quản lý lỗi
 
-- **Đồng bộ từ Sheet** nhập tất cả dòng có dữ liệu trong các cột lỗi, kể cả dòng thiếu Title/Chapter/Error, chỉ có ghi chú/ảnh hoặc đang bị ẩn. Chỉ bỏ qua dòng trống và dòng trống có checkbox Fix/Check chưa tick; checkbox đã tick vẫn được nhập. Đồng bộ lại cập nhật theo dòng nguồn, không tạo bản sao khi Error bị xóa.
+- **Đồng bộ từ Sheet** chỉ nhập các dòng đang hiển thị và có dữ liệu trong các cột lỗi, kể cả dòng thiếu Title/Chapter/Error hoặc chỉ có ghi chú/ảnh. Bỏ qua dòng bị ẩn thủ công hoặc bởi bộ lọc, dòng trống và dòng trống có checkbox Fix/Check chưa tick; checkbox đã tick vẫn được nhập nếu dòng đang hiển thị. Dòng nguồn đã ẩn, xóa hoặc trống sẽ được loại khỏi bảng lỗi trên web khi đồng bộ lại. Đồng bộ cập nhật theo dòng nguồn, không tạo bản sao khi Error bị xóa.
 - Tick/bỏ tick trên web cập nhật đúng một ô checkbox có sẵn trong Sheet, sau đó mới lưu database. Request chỉ có `updateCells` với `fields: userEnteredValue`; không thêm hàng/cột, tạo checkbox hay ghi nội dung lỗi, ảnh, ghi chú và định dạng.
 - Khi tab Quản lý lỗi đang hiển thị, giao diện gọi `GET /api/errors/fix-check` mỗi 15 giây sau khi lần đọc trước hoàn tất để lấy tick/bỏ tick từ Sheet. Luồng này không xuất ảnh, không ghi Sheet và chỉ cập nhật Fix/Check trong database, theo quyền của người đăng nhập.
 - Cần Service Account có quyền Editor, cột Fix/Check duy nhất và ô có data validation loại checkbox. Hỗ trợ checkbox mặc định và giá trị checked/unchecked tùy chỉnh.
