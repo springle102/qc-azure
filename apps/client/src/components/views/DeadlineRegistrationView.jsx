@@ -55,7 +55,7 @@ export function DeadlineRegistrationView({
       .map((freelancer) => [String(freelancer.fIld ?? freelancer.fId ?? freelancer.id), freelancer])
       .filter(([id]) => id !== 'undefined' && id !== 'null' && id !== '')
   ), [freelancers]);
-  const fieldOptions = useMemo(() => getFieldOptions(freelancers), [freelancers]);
+  const fieldOptions = useMemo(() => getFieldOptions([...freelancers, ...registrations]), [freelancers, registrations]);
 
   const ownRegistration = registrations.find((row) => String(row.fIld ?? row.fId ?? row.freelancerId ?? '') === ownFreelancerId);
   const filteredRegistrations = useMemo(() => {
@@ -345,6 +345,7 @@ function getFieldOptions(freelancers) {
 }
 
 function getRegistrationFields(registration, freelancersById) {
+  if (Array.isArray(registration?.fields) || registration?.field) return getFreelancerFields(registration);
   const freelancerId = registration?.fIld ?? registration?.fId ?? registration?.freelancerId;
   const freelancer = freelancersById.get(String(freelancerId));
   return getFreelancerFields(freelancer);

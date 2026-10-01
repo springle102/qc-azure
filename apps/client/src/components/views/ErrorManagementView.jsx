@@ -22,6 +22,10 @@ function matchesField(row, fieldName) {
   return String(row?.field ?? '').trim().toLowerCase() === String(fieldName ?? '').trim().toLowerCase();
 }
 
+function getErrorEditorLabel(row) {
+  return String(row?.editor ?? '').trim() || 'Chưa gán';
+}
+
 function getErrorTypeClass(value) {
   const slug = String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return slug ? `error-type-${slug}` : 'error-type-empty';
@@ -352,7 +356,7 @@ function ErrorColumnFilterButton({ columnKey, label, values = [], activeValues, 
           )}
           {values.length > 0 && (
             <>
-              <input className="form-input column-filter-search" value={searchValue} onChange={(event) => setSearchValue(event.target.value)} placeholder="Tìm Error Type..." autoFocus />
+              <input className="form-input column-filter-search" value={searchValue} onChange={(event) => setSearchValue(event.target.value)} placeholder={`Tìm ${label}...`} aria-label={`Tìm ${label}`} autoFocus />
               <label className="column-filter-option column-filter-select-all">
                 <input type="checkbox" checked={allSelected} onChange={() => setDraftValues(allSelected ? [] : [...values])} />
                 <span>Chọn tất cả</span>
@@ -394,6 +398,7 @@ export function ErrorManagementView({
   const [activeField, setActiveField] = useState(fields[0]?.name || '');
   const [titleSortDirection, setTitleSortDirection] = useState(null);
   const [errorTypeFilter, setErrorTypeFilter] = useState(null);
+  const [editorFilter, setEditorFilter] = useState(null);
   const [localErrors, setLocalErrors] = useState(errors);
   const [errorSheetUrls, setErrorSheetUrls] = useState(generalSettings?.errorSheetUrls || {});
   const [newError, setNewError] = useState(EMPTY_ERROR_ROW);
@@ -450,16 +455,21 @@ export function ErrorManagementView({
   }, [generalSettings]);
 
   const activeSheetUrl = errorSheetUrls[activeField] || '';
+  const editorFilterOptions = useMemo(() => [...new Set([
+    ...localErrors.filter((row) => matchesField(row, activeField)).map(getErrorEditorLabel),
+    ...(editorFilter || [])
+  ])].sort((left, right) => left.localeCompare(right, 'vi', { sensitivity: 'base' })), [activeField, editorFilter, localErrors]);
   const activeErrors = useMemo(() => {
     const filtered = localErrors
       .filter((row) => matchesField(row, activeField))
-      .filter((row) => !Array.isArray(errorTypeFilter) || errorTypeFilter.includes(String(row.errorType ?? '')));
+      .filter((row) => !Array.isArray(errorTypeFilter) || errorTypeFilter.includes(String(row.errorType ?? '')))
+      .filter((row) => !Array.isArray(editorFilter) || editorFilter.includes(getErrorEditorLabel(row)));
     const sortDirection = titleSortDirection || 'asc';
     return [...filtered].sort((left, right) => {
       const compared = String(left.title || '').localeCompare(String(right.title || ''), 'vi', { numeric: true, sensitivity: 'base' });
       return sortDirection === 'asc' ? compared : -compared;
     });
-  }, [activeField, errorTypeFilter, localErrors, titleSortDirection]);
+  }, [activeField, editorFilter, errorTypeFilter, localErrors, titleSortDirection]);
 
   const editorOptions = freelancers.filter((freelancer) => (
     !activeField || getFreelancerFields(freelancer).some((field) => field.toLowerCase() === activeField.toLowerCase())
@@ -493,6 +503,7 @@ export function ErrorManagementView({
 
   const handleSelectField = (fieldName) => {
     setActiveField(fieldName);
+    setEditorFilter(null);
     setInlineErrorRow(null);
     setDraftRows({});
   };
@@ -754,7 +765,7 @@ export function ErrorManagementView({
                     <th><div className="error-column-header"><span>Screenshot</span></div></th>
                     <th><div className="error-column-header"><span>Error</span></div></th>
                     <th><div className="error-column-header"><span>Note của FL hoặc QC</span></div></th>
-                    <th><div className="error-column-header"><span>Editor</span></div></th>
+                    <th><div className="error-column-header"><span>Editor</span><ErrorColumnFilterButton columnKey="editor" label="Editor" values={editorFilterOptions} activeValues={editorFilter} onApply={setEditorFilter} /></div></th>
                     <th><div className="error-column-header"><span>Fix/Check</span></div></th>
                     {canManage && <th><div className="error-column-header"><span>Thao tác</span></div></th>}
                   </tr>
@@ -773,7 +784,7 @@ export function ErrorManagementView({
                       <td><div className="error-row-actions"><button type="button" className="btn btn-primary btn-sm" onClick={handleSaveInlineRow} disabled={savingRowId === 'inline-new'}><IconCheck size={14} /> Lưu</button><button type="button" className="btn btn-outline btn-sm" onClick={() => setInlineErrorRow(null)} disabled={savingRowId === 'inline-new'}>Hủy</button></div></td>
                     </tr>
                   )}
-                  {activeErrors.length === 0 && !inlineErrorRow ? <tr><td colSpan={canManage ? 9 : 8} className="table-empty">Chưa có lỗi trong mảng này.</td></tr> : activeErrors.map((row) => {
+                  {activeErrors.length === 0 && !inlineErrorRow ? <tr><td colSpan={canManage ? 9 : 8} className="table-empty">{Array.isArray(editorFilter) || Array.isArray(errorTypeFilter) ? 'Không có lỗi phù hợp với bộ lọc.' : 'Chưa có lỗi trong mảng này.'}</td></tr> : activeErrors.map((row) => {
                     const rowDraft = getRowDraft(row);
                     const isRowSaving = savingRowId === row.id;
                     const isRowDirty = canManage && hasRowDraftChanges(row, rowDraft);

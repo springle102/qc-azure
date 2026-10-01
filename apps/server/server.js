@@ -230,12 +230,8 @@ app.get('/api/deadline-registrations', requireAuth, async (req, res) => {
     ]);
     const visibleRows = filterDeadlineRegistrationRowsForUser(rows, req.authUser);
     const data = visibleRows.map((row) => {
-      const freelancer = freelancers.find((item) => String(getFreelancerId(item)) === String(row.fIld ?? ''));
-      return {
-        ...row,
-        fIld: row.fIld ?? row.fId ?? row.freelancerId ?? null,
-        name: freelancer?.name || row.name || ''
-      };
+      const freelancer = freelancers.find((item) => String(getFreelancerId(item)) === String(row.fIld ?? row.fId ?? row.freelancerId ?? ''));
+      return toPublicDeadlineRegistration(row, freelancer);
     });
     res.json({ success: true, data });
   } catch (error) {
@@ -263,7 +259,7 @@ app.post('/api/deadline-registrations', requireAuth, async (req, res) => {
       createdAt: now,
       updatedAt: now
     }, ['fIld', 'name', 'chaptersPerWeek', 'chaptersPerMonth', 'stability', 'note', 'createdAt', 'updatedAt']);
-    res.status(201).json({ success: true, data });
+    res.status(201).json({ success: true, data: toPublicDeadlineRegistration(data, freelancer) });
   } catch (error) {
     res.status(error.statusCode || (error.code === '23505' ? 409 : 502)).json({ success: false, message: error.code === '23505' ? 'Freelancer này đã có đăng ký deadline.' : error.message });
   }
@@ -296,7 +292,7 @@ app.patch('/api/deadline-registrations/:id', requireAuth, async (req, res) => {
       { ...payload, name: freelancer.name, updatedAt: new Date().toISOString() },
       ['fIld', 'name', 'chaptersPerWeek', 'chaptersPerMonth', 'stability', 'note', 'updatedAt']
     );
-    res.json({ success: true, data });
+    res.json({ success: true, data: toPublicDeadlineRegistration(data, freelancer) });
   } catch (error) {
     res.status(error.statusCode || (error.code === '23505' ? 409 : 502)).json({ success: false, message: error.code === '23505' ? 'Freelancer này đã có đăng ký deadline.' : error.message });
   }
@@ -4906,6 +4902,17 @@ function filterFreelancerRowsForUser(rows, user) {
     return rows.filter((row) => String(getFreelancerId(row)) === String(user.freelancerId ?? ''));
   }
   return [];
+}
+
+function toPublicDeadlineRegistration(row, freelancer) {
+  const fields = normalizeStoredFields(freelancer?.fields, freelancer?.field);
+  return {
+    ...row,
+    fIld: row.fIld ?? row.fId ?? row.freelancerId ?? null,
+    name: freelancer?.name || row.name || '',
+    field: fields[0] || '',
+    fields
+  };
 }
 
 function filterDeadlineRegistrationRowsForUser(rows, user) {
