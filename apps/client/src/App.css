@@ -3398,6 +3398,10 @@
   margin-top: 8px;
 }
 
+.general-settings-actions + .general-settings-drive-grid {
+  margin-top: 8px;
+}
+
 .general-settings-subheading h3 {
   margin-top: 4px;
   color: #ffffff;
