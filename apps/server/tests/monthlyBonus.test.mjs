@@ -105,19 +105,20 @@ function section(start, end) {
   return source.slice(from, to);
 }
 
-async function salaryResponse(tasks, user = { role: 'Admin' }, month = '2026-09') {
+async function salaryResponse(tasks, user = { role: 'Admin' }, month = '2026-09', qcData = { qcs: [{ qcId: 2, name: 'QC', freelancerId: 99 }], accounts: [] }) {
   let handler;
   const context = {
     app: { get: (_path, _auth, callback) => { handler = callback; } }, requireAuth: () => {},
     syncGoogleSheetIfDue: async () => {}, getSalaryMonth, isSalaryMonth, calculateMonthlyBonus, resolveBonusRule,
-    getCollection: async (key) => ({ freelancers: [{ fIld: 7, name: 'A' }, { fIld: 8, name: 'B' }], deadlines: tasks, difficultyPricing: [] })[key],
-    getMergedQCs: async () => [{ qcId: 2, name: 'QC', freelancerId: 99 }],
+    getCollection: async (key) => ({ freelancers: [{ fIld: 7, name: 'A' }, { fIld: 8, name: 'B' }], deadlines: tasks, difficultyPricing: [], ...qcData })[key],
+    hasAccountRole: (account, role) => (account.roles || [account.role]).includes(role),
     getBonusSettings: async () => ({ default: { bonusPolicy: { versions: [rule] } }, byField: {} }),
     applyConfiguredPrices: (rows) => rows,
     validationError: (message) => Object.assign(new Error(message), { statusCode: 400 })
   };
   vm.createContext(context);
   vm.runInContext([
+    section('async function getMergedQCs()', "app.get('/api/qcs',"),
     section('function getTaskStatus(', 'function getTaskDueTime('),
     section('function getBonusSettingsForField(', 'function validateDeadlineCreatePayload('),
     section('function filterSalaryRowsForUser(', 'function invalidateAccountSessions('),
@@ -201,6 +202,46 @@ test('only Submitted/Done chapters count toward bonus; QC gets Done only', async
   const res = await salaryResponse(tasks);
   assert.equal(res.payload.data[0].bonus, '200000.00');
   assert.equal(res.payload.data.find((row) => row.isQc).totalSalary, '19000.00');
+});
+
+test('salary merges a legacy QC and their account while retaining earnings under both IDs', async () => {
+  const qcData = {
+    qcs: [{ qcId: 2, name: 'Dương', imageQR: 'saved-qr', fields: [] }],
+    accounts: [{ id: 22, role: 'Admin', roles: ['Admin', 'QC'], displayName: 'Dương', email: 'duong@example.com', fields: ['Japan', 'Latin'], freelancerId: 8 }]
+  };
+  const tasks = [
+    ...chapters(1).map((task) => ({ ...task, completionPercent: 80, receivePrice: 8000 })),
+    ...chapters(1).map((task) => ({ ...task, seriesId: 2, qcId: 22 })),
+    ...chapters(1).map((task) => ({ ...task, seriesId: 3, qcId: 22, paymentApproved: false }))
+  ];
+  const res = await salaryResponse(tasks, { role: 'Admin' }, null, qcData);
+  assert.equal(res.code, 200);
+  const qcs = res.payload.data.filter((row) => row.isQc);
+  assert.equal(qcs.length, 1);
+  assert.equal(qcs[0].qcId, 22);
+  assert.equal(qcs[0].taskCount, 2);
+  assert.equal(qcs[0].earnedAmount, '2000.00');
+  assert.equal(qcs[0].transferredAmount, '2000.00');
+  assert.equal(qcs[0].totalSalary, '4000.00');
+  assert.deepEqual(Array.from(qcs[0].fields), ['Japan', 'Latin']);
+  assert.equal(qcs[0].imageQR, 'saved-qr');
+  assert.equal(res.payload.data.some((row) => !row.isQc && row.fIld === 8), false);
+});
+
+test('QC identity uses linked profile or email, and keeps conflicting or ambiguous names separate', async () => {
+  const account = { id: 22, role: 'QC', displayName: 'Dương', email: 'duong@example.com', freelancerId: 8 };
+  const qcCount = async (qcs, accounts = [account]) => {
+    const res = await salaryResponse(chapters(1), { role: 'Admin' }, null, { qcs, accounts });
+    assert.equal(res.code, 200);
+    return res.payload.data.filter((row) => row.isQc).length;
+  };
+  assert.equal(await qcCount([{ qcId: 2, name: 'Old name', email: ' DUONG@example.com ' }]), 1);
+  assert.equal(await qcCount([{ qcId: 2, name: 'Old name', freelancerId: 8 }]), 1);
+  assert.equal(await qcCount([{ qcId: 2, name: 'Dương', email: 'another@example.com' }]), 2);
+  assert.equal(await qcCount([{ qcId: 2, name: 'Dương', freelancerId: 9 }]), 2);
+  assert.equal(await qcCount([{ qcId: 2, name: 'Dương' }, { qcId: 3, name: 'Dương' }]), 3);
+  assert.equal(await qcCount([{ qcId: 2, name: 'Dương' }], [account, { ...account, id: 23, freelancerId: 9 }]), 3);
+  assert.equal(await qcCount([{ qcId: 22, name: 'Dương' }]), 1);
 });
 
 test('bonus settings API persists both mechanisms across reloads', async () => {

@@ -354,6 +354,7 @@ async function getMergedQCs() {
     .filter((account) => hasAccountRole(account, 'QC'))
     .map((account) => ({
       qcId: account.id,
+      accountId: account.id,
       freelancerId: account.freelancerId ?? null,
       name: account.displayName || account.username,
       email: account.email || null,
@@ -790,13 +791,14 @@ app.get('/api/salaries', requireAuth, async (req, res) => {
     const month = req.query.month ?? null;
     if (month !== null && !isSalaryMonth(month)) throw validationError('Tháng lương phải có định dạng YYYY-MM.');
     await syncGoogleSheetIfDue({ waitForCompletion: false });
-    const [freelancers, qcs, deadlines, prices, bonusSettings] = await Promise.all([
+    const [freelancers, qcProfiles, deadlines, prices, bonusSettings] = await Promise.all([
       getCollection('freelancers'),
       getMergedQCs(),
       getCollection('deadlines'),
       getCollection('difficultyPricing'),
       getBonusSettings()
     ]);
+    const qcs = mergeQCSalaryProfiles(qcProfiles);
     // A QC account also gets a linked Freelancer profile so the account can
     // share identity/contact data. That profile is not a second salary row:
     // the QC account must only appear in the QC section below.
@@ -4394,11 +4396,56 @@ function buildSalaryRows(freelancers, deadlines, bonusSettings, month = null, un
   });
 }
 
+function mergeQCSalaryProfiles(qcs) {
+  const normalize = (value) => String(value ?? '').trim().toLowerCase();
+  const hasId = (value) => value !== null && value !== undefined && value !== '';
+  const accountQcs = qcs.filter((qc) => hasId(qc.accountId));
+  const legacyQcs = qcs.filter((qc) => !hasId(qc.accountId));
+  const merged = accountQcs.map((qc) => ({ ...qc, qcIds: [qc.qcId ?? qc.id] }));
+
+  legacyQcs.forEach((legacy) => {
+    const name = normalize(legacy.name || legacy.displayName || legacy.username);
+    const email = normalize(legacy.email);
+    const candidates = accountQcs.filter((account) => {
+      if (hasId(legacy.freelancerId) && hasId(account.freelancerId)) {
+        return String(legacy.freelancerId) === String(account.freelancerId);
+      }
+      const accountEmail = normalize(account.email);
+      if (email && accountEmail) return email === accountEmail;
+      return name && normalize(account.name || account.displayName || account.username) === name
+        && accountQcs.filter((qc) => normalize(qc.name || qc.displayName || qc.username) === name).length === 1
+        && legacyQcs.filter((qc) => normalize(qc.name || qc.displayName || qc.username) === name).length === 1;
+    });
+    if (candidates.length !== 1) {
+      merged.push({ ...legacy, qcIds: [legacy.qcId ?? legacy.id] });
+      return;
+    }
+    const account = candidates[0];
+    const index = merged.findIndex((qc) => String(qc.accountId) === String(account.accountId));
+    const current = merged[index];
+    const fields = [...new Set([
+      ...(Array.isArray(current.fields) ? current.fields : []), current.field,
+      ...(Array.isArray(legacy.fields) ? legacy.fields : []), legacy.field
+    ].filter(Boolean))];
+    merged[index] = {
+      ...legacy,
+      ...current,
+      fields,
+      field: current.field || legacy.field || fields[0] || null,
+      email: current.email || legacy.email || null,
+      imageQR: current.imageQR || legacy.imageQR || null,
+      qcIds: [...new Set([...current.qcIds, legacy.qcId ?? legacy.id])]
+    };
+  });
+  return merged;
+}
+
 function buildQCSalaryRows(qcs, deadlines, bonusSettings, month = null) {
   return qcs.map((qc) => {
     const qcId = qc.qcId ?? qc.id;
+    const qcIds = new Set((qc.qcIds || [qcId]).map(String));
     const qcDeadlines = deadlines.filter((deadline) => (
-      String(deadline.qcId ?? '') === String(qcId)
+      qcIds.has(String(deadline.qcId ?? ''))
     ));
     const baseAmount = qcDeadlines.reduce((total, deadline) => total + getBonusSettingsForField(bonusSettings, deadline.type).qcDefaultPrice, 0);
     const transferredAmount = qcDeadlines.reduce((total, deadline) => total + getIncompleteCompletionTransfer(deadline), 0);
