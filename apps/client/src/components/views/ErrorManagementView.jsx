@@ -411,7 +411,10 @@ export function ErrorManagementView({
   const [savingRowId, setSavingRowId] = useState(null);
   const [selectedScreenshot, setSelectedScreenshot] = useState(null);
   const [fixCheckSyncWarning, setFixCheckSyncWarning] = useState('');
+  const [fixCheckOverrides, setFixCheckOverrides] = useState({});
+  const pendingFixChecks = useRef(new Set());
   const errorMutationVersion = useRef(0);
+  const hasPendingFixChecks = Object.keys(fixCheckOverrides).length > 0;
 
   useEffect(() => {
     setLocalErrors(errors);
@@ -424,7 +427,7 @@ export function ErrorManagementView({
     const refreshChecks = async () => {
       const version = errorMutationVersion.current;
       try {
-        if (document.visibilityState !== 'hidden') {
+        if (document.visibilityState !== 'hidden' && pendingFixChecks.current.size === 0) {
           const result = await api.getErrorFixChecks();
           if (cancelled || version !== errorMutationVersion.current) return;
           const checks = new Map(result.rows.map((row) => [String(row.id), row.fixCheck]));
@@ -433,7 +436,7 @@ export function ErrorManagementView({
           setFixCheckSyncWarning(result.warnings?.[0] || '');
         }
       } catch (error) {
-        if (!cancelled) setFixCheckSyncWarning(error.message || 'Không thể đồng bộ Fix/Check từ Sheet.');
+        if (!cancelled && version === errorMutationVersion.current) setFixCheckSyncWarning(error.message || 'Không thể đồng bộ Fix/Check từ Sheet.');
       } finally {
         if (!cancelled) timer = window.setTimeout(refreshChecks, 15000);
       }
@@ -649,7 +652,26 @@ export function ErrorManagementView({
   };
 
   const handleCheck = async (row, checked) => {
-    await handleUpdate(row, { fixCheck: checked });
+    const rowId = String(row.id);
+    if (pendingFixChecks.current.has(rowId)) return;
+    pendingFixChecks.current.add(rowId);
+    errorMutationVersion.current += 1;
+    setFixCheckOverrides((current) => ({ ...current, [rowId]: checked }));
+    try {
+      const updated = await api.updateError(row.id, { fixCheck: checked });
+      updateLocalRow(updated);
+      setFixCheckSyncWarning('');
+    } catch (error) {
+      showToast(error.message || 'Không thể cập nhật Fix/Check.', 'error');
+    } finally {
+      errorMutationVersion.current += 1;
+      pendingFixChecks.current.delete(rowId);
+      setFixCheckOverrides((current) => {
+        const next = { ...current };
+        delete next[rowId];
+        return next;
+      });
+    }
   };
 
   const handleDelete = async (row) => {
@@ -675,9 +697,9 @@ export function ErrorManagementView({
           <h2 className="page-title">Quản lý lỗi</h2>
         </div>
         <div className="page-header-actions">
-          {currentUser.role === 'Admin' && <button type="button" className="btn btn-outline" onClick={handleMigrateScreenshots} disabled={isLoading || isSaving}><IconRefresh size={16} /> {isMigratingScreenshots ? 'Đang chuyển ảnh...' : 'Chuyển ảnh lên Storage'}</button>}
-          {canManage && <button type="button" className="btn btn-primary" onClick={handleSync} disabled={isLoading || isSaving}><IconRefresh size={16} /> {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ từ Sheet'}</button>}
-          <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading || isSaving}><IconRefresh size={16} /> {isLoading ? 'Đang tải...' : 'Làm mới'}</button>
+          {currentUser.role === 'Admin' && <button type="button" className="btn btn-outline" onClick={handleMigrateScreenshots} disabled={isLoading || isSaving || hasPendingFixChecks}><IconRefresh size={16} /> {isMigratingScreenshots ? 'Đang chuyển ảnh...' : 'Chuyển ảnh lên Storage'}</button>}
+          {canManage && <button type="button" className="btn btn-primary" onClick={handleSync} disabled={isLoading || isSaving || hasPendingFixChecks}><IconRefresh size={16} /> {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ từ Sheet'}</button>}
+          <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading || isSaving || hasPendingFixChecks}><IconRefresh size={16} /> {isLoading ? 'Đang tải...' : 'Làm mới'}</button>
         </div>
       </div>
 
@@ -693,11 +715,11 @@ export function ErrorManagementView({
               {fields.map((field) => (
                 <div className="form-group" key={field.id || field.name}>
                   <label className="form-label" htmlFor={`error-sheet-${field.id || field.name}`}>Sheet lỗi mảng {field.name}</label>
-                  <input id={`error-sheet-${field.id || field.name}`} className="form-input" type="url" value={errorSheetUrls[field.name] || ''} onChange={(event) => setErrorSheetUrls((current) => ({ ...current, [field.name]: event.target.value }))} placeholder="https://docs.google.com/spreadsheets/d/..." disabled={isSaving} />
+                  <input id={`error-sheet-${field.id || field.name}`} className="form-input" type="url" value={errorSheetUrls[field.name] || ''} onChange={(event) => setErrorSheetUrls((current) => ({ ...current, [field.name]: event.target.value }))} placeholder="https://docs.google.com/spreadsheets/d/..." disabled={isSaving || hasPendingFixChecks} />
                 </div>
               ))}
             </div>
-            <button type="submit" className="btn btn-secondary" disabled={isSaving}><IconCheck size={16} /> Lưu</button>
+            <button type="submit" className="btn btn-secondary" disabled={isSaving || hasPendingFixChecks}><IconCheck size={16} /> Lưu</button>
           </form>
         </section>
       )}
@@ -797,9 +819,11 @@ export function ErrorManagementView({
                   )}
                   {activeErrors.length === 0 && !inlineErrorRow ? <tr><td colSpan={canManage ? 9 : 8} className="table-empty">{Array.isArray(editorFilter) || Array.isArray(errorTypeFilter) ? 'Không có lỗi phù hợp với bộ lọc.' : 'Chưa có lỗi trong mảng này.'}</td></tr> : activeErrors.map((row) => {
                     const rowDraft = getRowDraft(row);
-                    const isRowSaving = savingRowId === row.id;
+                    const isCheckPending = Object.prototype.hasOwnProperty.call(fixCheckOverrides, String(row.id));
+                    const fixCheck = isCheckPending ? fixCheckOverrides[String(row.id)] : Boolean(row.fixCheck);
+                    const isRowSaving = savingRowId === row.id || isCheckPending;
                     const isRowDirty = canManage && hasRowDraftChanges(row, rowDraft);
-                    return <tr key={row.id} className={row.fixCheck ? 'error-row-checked' : ''}>
+                    return <tr key={row.id} className={fixCheck ? 'error-row-checked' : ''}>
                       <td className="error-title-cell">{canManage ? <input className="error-inline-input" value={rowDraft.title || ''} onChange={(event) => updateRowDraft(row, 'title', event.target.value)} disabled={isRowSaving} /> : <strong>{row.title}</strong>}</td>
                       <td>{canManage ? <input className="error-inline-input" value={rowDraft.chapter || ''} onChange={(event) => updateRowDraft(row, 'chapter', event.target.value)} disabled={isRowSaving} /> : row.chapter}</td>
                       <td>
@@ -811,7 +835,7 @@ export function ErrorManagementView({
                       <td className="error-description-cell">{canManage ? <textarea className="error-inline-textarea" value={rowDraft.error || ''} onChange={(event) => updateRowDraft(row, 'error', event.target.value)} disabled={isRowSaving} /> : row.error}</td>
                       <td className="error-note-cell">{canManage ? <NoteEditor value={rowDraft.note || ''} onChange={(value) => updateRowDraft(row, 'note', value)} disabled={isRowSaving} /> : <div className="error-note-readonly">{isImageValue(row.note) ? <img className="error-note-readonly-image" src={row.note} alt={`Note cho ${row.title}`} /> : (row.note || '—')}</div>}</td>
                       <td>{canManage ? <select className="error-inline-select" value={rowDraft.editorFreelancerId || ''} onChange={(event) => updateRowDraft(row, 'editorFreelancerId', event.target.value)} disabled={isRowSaving}><option value="">Chọn freelancer</option>{editorOptions.map((freelancer) => <option value={getFreelancerId(freelancer)} key={getFreelancerId(freelancer)}>{freelancer.name || freelancer.email}</option>)}</select> : <span className="error-editor-badge">{row.editor || 'Chưa gán'}</span>}</td>
-                      <td className="error-check-cell"><label className="error-check-control"><input type="checkbox" checked={Boolean(row.fixCheck)} onChange={(event) => handleCheck(row, event.target.checked)} disabled={isLoading || isSaving || savingRowId !== null} /><span>{row.fixCheck ? 'Đã xem' : 'Chưa xem'}</span></label></td>
+                      <td className="error-check-cell"><label className="error-check-control"><input type="checkbox" checked={fixCheck} onChange={(event) => handleCheck(row, event.target.checked)} disabled={isLoading || isSaving || isRowSaving} aria-busy={isCheckPending} /><span>{isCheckPending ? 'Đang lưu...' : fixCheck ? 'Đã xem' : 'Chưa xem'}</span></label></td>
                       {canManage && <td><div className="error-row-actions"><button type="button" className="btn btn-primary btn-sm" onClick={() => handleSaveRowDraft(row)} disabled={isRowSaving || !isRowDirty}><IconCheck size={14} /> Lưu</button><button type="button" className="btn btn-danger btn-sm" onClick={() => handleDelete(row)} disabled={isRowSaving}><IconTrash size={14} /> Xóa</button></div></td>}
                     </tr>;
                   })}
