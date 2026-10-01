@@ -43,6 +43,7 @@ const ROLE_PRIORITY = { Freelancer: 1, QC: 2, Admin: 3 };
 const GOOGLE_REQUEST_TIMEOUT_MS = 30_000;
 const SYNC_WRITE_CONCURRENCY = 8;
 const GOOGLE_DRIVE_FOLDER_CACHE_TTL_MS = 10 * 60 * 1000;
+const GOOGLE_DRIVE_RAW_SYNC_INTERVAL_MS = 60 * 1000;
 const DEADLINE_TIME_ZONE = 'Asia/Ho_Chi_Minh';
 const DEADLINE_TIME_ZONE_OFFSET = '+07:00';
 const DEADLINE_REGISTRATION_STABILITY_OPTIONS = ['Trong tháng', '2-3 tháng kế', 'cố định mỗi tháng'];
@@ -617,10 +618,12 @@ app.get('/api/bonus-settings', requireAuth, async (req, res) => {
 app.get('/api/general-settings', requireAuth, async (req, res) => {
   try {
     const settings = await getGeneralSettings();
-    res.json({
-      success: true,
-      data: req.authUser.role === 'Freelancer' ? { ...settings, errorSheetUrls: {} } : settings
-    });
+    if (req.authUser.role === 'Freelancer') {
+      const { googleDriveRawTransfer: _rawTransfer, ...visibleSettings } = settings;
+      res.json({ success: true, data: { ...visibleSettings, errorSheetUrls: {} } });
+      return;
+    }
+    res.json({ success: true, data: settings });
   } catch (error) {
     res.status(502).json({ success: false, message: error.message });
   }
@@ -642,6 +645,9 @@ app.patch('/api/general-settings', requireAdmin, async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'googleDriveFolders')) {
       updates.googleDriveFolders = JSON.stringify(normalizeGoogleDriveFolders(req.body.googleDriveFolders));
     }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'googleDriveRawTransfer')) {
+      updates.googleDriveRawTransfer = JSON.stringify(normalizeGoogleDriveRawTransfer(req.body.googleDriveRawTransfer));
+    }
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'errorSheetUrls')) {
       updates.errorSheetUrls = JSON.stringify(normalizeErrorSheetUrls(req.body.errorSheetUrls));
     }
@@ -652,12 +658,23 @@ app.patch('/api/general-settings', requireAdmin, async (req, res) => {
       updates.googleSheetAutoSync = req.body.googleSheetAutoSync === true;
     }
     const data = current
-      ? await updateRow('generalSettings', { id: current.id }, updates, ['googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'errorSheetUrls', 'checklists', 'googleSheetAutoSync'])
-      : await insertRow('generalSettings', { id: 1, ...updates }, ['id', 'googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'errorSheetUrls', 'checklists', 'googleSheetAutoSync']);
+      ? await updateRow('generalSettings', { id: current.id }, updates, ['googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'googleDriveRawTransfer', 'errorSheetUrls', 'checklists', 'googleSheetAutoSync'])
+      : await insertRow('generalSettings', { id: 1, ...updates }, ['id', 'googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'googleDriveRawTransfer', 'errorSheetUrls', 'checklists', 'googleSheetAutoSync']);
     if (updatesDriveFolders) googleDriveFolderCache.clear();
     res.json({ success: true, data });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
+  }
+});
+app.get('/api/google-drive/raw-transfer/status', requireAuth, (_req, res) => {
+  res.json({ success: true, data: googleDriveRawTransferStatus });
+});
+app.post('/api/google-drive/raw-transfer/sync', requireAdmin, async (_req, res) => {
+  try {
+    const result = await syncGoogleDriveRawFiles({ force: true });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: getSafeErrorMessage(error, 'Không thể đồng bộ file raw từ Google Drive.') });
   }
 });
 app.post('/api/google-sheet/sync', requireAdmin, async (req, res) => {
@@ -1455,6 +1472,13 @@ app.post('/api/auth/logout', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Webtoon Deadline Management API listening on port ${PORT}`);
 });
+const googleDriveRawTransferTimer = setInterval(() => {
+  syncGoogleDriveRawFiles().catch((error) => console.error('Google Drive raw transfer failed:', getSafeErrorMessage(error)));
+}, GOOGLE_DRIVE_RAW_SYNC_INTERVAL_MS);
+googleDriveRawTransferTimer.unref();
+setTimeout(() => {
+  syncGoogleDriveRawFiles().catch((error) => console.error('Google Drive raw transfer failed:', getSafeErrorMessage(error)));
+}, 5000).unref();
 
 function applyConfiguredPrices(deadlines, prices) {
   return deadlines.map((deadline) => {
@@ -1764,6 +1788,7 @@ async function getGeneralSettings() {
       ...settings,
       googleSheetTabs: parseGoogleSheetTabs(settings.googleSheetTabs),
       googleDriveFolders: normalizeGoogleDriveFolders(settings.googleDriveFolders),
+      googleDriveRawTransfer: normalizeGoogleDriveRawTransfer(settings.googleDriveRawTransfer),
       errorSheetUrls: normalizeErrorSheetUrls(settings.errorSheetUrls),
       checklists: normalizeChecklists(settings.checklists)
     };
@@ -1774,6 +1799,7 @@ async function getGeneralSettings() {
     googleSheetRange: '',
     googleSheetTabs: {},
     googleDriveFolders: {},
+    googleDriveRawTransfer: { enabled: false, mappings: {} },
     errorSheetUrls: {},
     checklists: {},
     googleSheetAutoSync: false,
@@ -1787,6 +1813,8 @@ let googleAccessTokenCache = null;
 let googleSheetSyncPromise = null;
 const googleDriveFolderCache = new Map();
 const pendingStatusSheetSyncs = new Map();
+let googleDriveRawTransferStatus = { isSyncing: false, lastSyncedAt: null, lastCopiedCount: 0, lastScannedCount: 0, lastSkippedCount: 0, lastAlreadyPresentCount: 0, lastError: '' };
+let googleDriveRawTransferPromise = null;
 
 function getGoogleApiErrorMessage(message, serviceLabel = 'Google API') {
   const raw = String(message ?? '').replace(/\s+/g, ' ').trim();
@@ -1862,6 +1890,30 @@ function normalizeGoogleDriveFolders(value) {
   return Object.fromEntries(Object.entries(parsed)
     .map(([field, folder]) => [String(field).trim(), String(folder ?? '').trim()])
     .filter(([field, folder]) => field && folder));
+}
+
+function normalizeGoogleDriveRawTransfer(value) {
+  let parsed = value;
+  if (typeof value === 'string') {
+    try { parsed = JSON.parse(value); } catch { parsed = {}; }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) parsed = {};
+  const extractFolderId = (input) => {
+    const text = String(input ?? '').trim();
+    if (!text) return '';
+    return text.match(/(?:folders\/|id=)([A-Za-z0-9_-]+)/)?.[1] || text;
+  };
+  const rawMappings = parsed.mappings && typeof parsed.mappings === 'object' && !Array.isArray(parsed.mappings)
+    ? parsed.mappings
+    : {};
+  const mappings = Object.fromEntries(Object.entries(rawMappings).map(([field, mapping]) => [String(field).trim(), {
+    sourceFolderId: extractFolderId(mapping?.sourceFolderId),
+    destinationFolderId: extractFolderId(mapping?.destinationFolderId)
+  }]).filter(([field, mapping]) => field && (mapping.sourceFolderId || mapping.destinationFolderId)));
+  return {
+    enabled: parsed.enabled === true,
+    mappings
+  };
 }
 
 function normalizeErrorSheetUrls(value) {
@@ -1961,8 +2013,7 @@ async function getGoogleAccessToken() {
     iss: credentials.client_email,
     scope: [
       'https://www.googleapis.com/auth/spreadsheets',
-      'https://www.googleapis.com/auth/drive.readonly',
-      'https://www.googleapis.com/auth/drive.file'
+      'https://www.googleapis.com/auth/drive'
     ].join(' '),
     aud: 'https://oauth2.googleapis.com/token',
     iat: issuedAt,
@@ -2031,12 +2082,17 @@ async function googleSheetsRequest(path, options = {}) {
   return response.json();
 }
 
-async function googleDriveRequest(path) {
+async function googleDriveRequest(path, options = {}) {
   const token = await getGoogleAccessToken();
   let response;
   try {
     response = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/${path}`, {
-      headers: { Authorization: `Bearer ${token}` }
+      method: options.method || 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(options.body ? { 'Content-Type': 'application/json' } : {})
+      },
+      ...(options.body ? { body: JSON.stringify(options.body) } : {})
     }, GOOGLE_REQUEST_TIMEOUT_MS);
   } catch (error) {
     if (error?.name === 'AbortError') {
@@ -2048,6 +2104,7 @@ async function googleDriveRequest(path) {
     const message = await response.text();
     throw new Error(getGoogleApiErrorMessage(message, 'Google Drive API'));
   }
+  if (response.status === 204) return {};
   return response.json();
 }
 
@@ -2771,6 +2828,131 @@ function getGoogleSheetTabSnapshot(tab, fields) {
   const startRow = Number(tab.startRow ?? tab.rangeMeta?.startRow ?? 0);
   const startColumn = Number(tab.rangeMeta?.startColumn ?? 0);
   return { ...tab, headerRowIndex, headerIndex, fieldOverride, startRow, startColumn };
+}
+
+async function listDriveChildren(folderId) {
+  const items = [];
+  let pageToken = '';
+  do {
+    const params = new URLSearchParams({
+      q: `'${escapeGoogleDriveQueryValue(folderId)}' in parents and trashed = false`,
+      spaces: 'drive',
+      includeItemsFromAllDrives: 'true',
+      supportsAllDrives: 'true',
+      pageSize: '1000',
+      fields: 'nextPageToken,files(id,name,mimeType,appProperties,webViewLink)'
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+    const payload = await googleDriveRequest(`files?${params.toString()}`);
+    items.push(...(payload.files || []));
+    pageToken = payload.nextPageToken || '';
+  } while (pageToken);
+  return items;
+}
+
+async function syncGoogleDriveRawFiles({ force = false } = {}) {
+  if (googleDriveRawTransferPromise) return googleDriveRawTransferPromise;
+  googleDriveRawTransferPromise = (async () => {
+    const settings = await getGeneralSettings();
+    const config = normalizeGoogleDriveRawTransfer(settings.googleDriveRawTransfer);
+    if (!config.enabled && !force) return { copied: 0, skipped: true, message: 'Tự động chuyển file raw đang tắt.' };
+    const configuredMappings = Object.entries(config.mappings).filter(([, mapping]) => mapping.sourceFolderId || mapping.destinationFolderId);
+    if (configuredMappings.length === 0) throw validationError('Cần cấu hình folder công ty và folder freelancer cho ít nhất một mảng.');
+    const incompleteField = configuredMappings.find(([, mapping]) => !mapping.sourceFolderId || !mapping.destinationFolderId);
+    if (incompleteField) throw validationError(`Mảng ${incompleteField[0]} cần có đủ folder nguồn và folder đích.`);
+    const sameFolderField = configuredMappings.find(([, mapping]) => mapping.sourceFolderId === mapping.destinationFolderId);
+    if (sameFolderField) throw validationError(`Folder nguồn và folder đích của mảng ${sameFolderField[0]} phải khác nhau.`);
+
+    googleDriveRawTransferStatus = { ...googleDriveRawTransferStatus, isSyncing: true, lastError: '' };
+    let copied = 0;
+    let scanned = 0;
+    let skipped = 0;
+    let alreadyPresent = 0;
+    try {
+      for (const [field, mapping] of configuredMappings) {
+        const [sourceRoot, destinationRoot] = await Promise.all([
+          listDriveChildren(mapping.sourceFolderId),
+          listDriveChildren(mapping.destinationFolderId)
+        ]);
+        const sourceSeriesFolders = sourceRoot.filter((item) => item.mimeType === 'application/vnd.google-apps.folder');
+        const destinationSeriesByName = new Map(destinationRoot
+          .filter((item) => item.mimeType === 'application/vnd.google-apps.folder')
+          .map((item) => [item.name, item]));
+
+        for (const sourceSeries of sourceSeriesFolders) {
+          const destinationSeries = destinationSeriesByName.get(sourceSeries.name);
+          if (!destinationSeries) {
+            skipped += 1;
+            continue;
+          }
+          const [sourceSeriesContents, destinationSeriesContents] = await Promise.all([
+            listDriveChildren(sourceSeries.id),
+            listDriveChildren(destinationSeries.id)
+          ]);
+          const sourceRawFolder = sourceSeriesContents.find((item) => item.name === '2.RAW' && item.mimeType === 'application/vnd.google-apps.folder');
+          const destinationRawFolder = destinationSeriesContents.find((item) => item.name === '2.RAW' && item.mimeType === 'application/vnd.google-apps.folder');
+          if (!sourceRawFolder || !destinationRawFolder) {
+            skipped += 1;
+            continue;
+          }
+          const [sourceRawFiles, destinationRawFiles] = await Promise.all([
+            listDriveChildren(sourceRawFolder.id),
+            listDriveChildren(destinationRawFolder.id)
+          ]);
+          const sourceFiles = sourceRawFiles.filter((item) => item.mimeType !== 'application/vnd.google-apps.folder');
+          const alreadyCopied = new Set(destinationRawFiles
+            .map((item) => item.appProperties?.qcRawTransferSourceId)
+            .filter(Boolean));
+          const destinationFileNames = new Set(destinationRawFiles
+            .filter((item) => item.mimeType !== 'application/vnd.google-apps.folder')
+            .map((item) => item.name));
+          scanned += sourceFiles.length;
+          for (const file of sourceFiles) {
+            if (alreadyCopied.has(file.id)) continue;
+            if (destinationFileNames.has(file.name)) {
+              alreadyPresent += 1;
+              continue;
+            }
+            const params = new URLSearchParams({ supportsAllDrives: 'true', fields: 'id,name,mimeType,webViewLink,appProperties' });
+            await googleDriveRequest(`files/${encodeURIComponent(file.id)}/copy?${params.toString()}`, {
+              method: 'POST',
+              body: {
+                name: file.name,
+                parents: [destinationRawFolder.id],
+                appProperties: { qcRawTransferSourceId: file.id, qcRawTransferField: field }
+              }
+            });
+            alreadyCopied.add(file.id);
+            destinationFileNames.add(file.name);
+            copied += 1;
+          }
+        }
+      }
+      googleDriveRawTransferStatus = {
+        isSyncing: false,
+        lastSyncedAt: new Date().toISOString(),
+        lastCopiedCount: copied,
+        lastScannedCount: scanned,
+        lastSkippedCount: skipped,
+        lastAlreadyPresentCount: alreadyPresent,
+        lastError: ''
+      };
+      return { copied, scanned, skipped, alreadyPresent, lastSyncedAt: googleDriveRawTransferStatus.lastSyncedAt };
+    } catch (error) {
+      googleDriveRawTransferStatus = {
+        ...googleDriveRawTransferStatus,
+        isSyncing: false,
+        lastSyncedAt: new Date().toISOString(),
+        lastCopiedCount: copied,
+        lastScannedCount: scanned,
+        lastSkippedCount: skipped,
+        lastAlreadyPresentCount: alreadyPresent,
+        lastError: getSafeErrorMessage(error, 'Đồng bộ file raw thất bại.')
+      };
+      throw error;
+    }
+  })().finally(() => { googleDriveRawTransferPromise = null; });
+  return googleDriveRawTransferPromise;
 }
 
 function getImportedDeadlineCompleteness(entry) {

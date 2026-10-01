@@ -34,7 +34,7 @@ Các bảng giao diện bám theo schema trong `docs/database diagram.png` và s
 
 Deadline công ty và bảng `Companies` đã được loại bỏ khỏi giao diện, API và database.
 
-File PostgreSQL mẫu để tạo schema và dữ liệu test: `docs/sample-database.sql`. Nếu database đã tồn tại từ trước, chạy các migration trong `docs/migrations/` trong SQL Editor để thêm đăng ký deadline, cột màu chữ, mapping folder Drive và bảng Quản lý lỗi. Sheet lỗi gốc cần có các cột `Title`, `Chapter`, `Error Type`, `Error`, `Note`, `Editor`, `Fix/Check`; Service Account cần quyền Editor trên từng Sheet. `Error Type` gồm: `TR`, `File`, `Censor`, `Exposure`, `Logo/Credit`, `Text`, `SFX`, `Image`, `Bubble`, `Aesthetics`, `RD`.
+File PostgreSQL mẫu để tạo schema và dữ liệu test: `docs/sample-database.sql`. Nếu database đã tồn tại từ trước, chạy các migration trong `docs/migrations/` trong SQL Editor để thêm đăng ký deadline, cột màu chữ, mapping folder Drive, sao chép raw từ Drive và bảng Quản lý lỗi. Sheet lỗi gốc cần có các cột `Title`, `Chapter`, `Error Type`, `Error`, `Note`, `Editor`, `Fix/Check`; Service Account cần quyền Editor trên từng Sheet. `Error Type` gồm: `TR`, `File`, `Censor`, `Exposure`, `Logo/Credit`, `Text`, `SFX`, `Image`, `Bubble`, `Aesthetics`, `RD`.
 
 ## Cấu hình dữ liệu
 
@@ -62,6 +62,8 @@ Tài khoản Admin mẫu trong `docs/sample-database.sql`: username `admin`, pas
 Khi cấp account role `Freelancer` hoặc `QC`, Admin chọn mảng từ danh sách cấu hình; QC có thể chọn nhiều mảng. Freelancer chỉ được chỉnh status `Doing`/`Submitted`, còn QC/Admin được chỉnh các status còn lại. Khi task chuyển sang `Doing`, hệ thống bắt đầu lưu thời gian làm; khi rời `Doing`, thời gian được chốt vào `workDurationSeconds`.
 
 Đồng bộ Google Sheet riêng tư: tạo Google Service Account, bật Google Sheets API, chia sẻ file cho email `client_email` của Service Account với quyền Editor, rồi đặt file key JSON ngoài Git qua `GOOGLE_SERVICE_ACCOUNT_FILE`. Sau đó Admin nhập link Sheet trong tab Cấu hình chung, khai báo mỗi tab tương ứng một mảng (Japan/Latin/QC) và chọn Đồng bộ ngay hoặc bật tự động đồng bộ. Đồng bộ deadline là hai chiều theo khóa `seriesId` + `chapterNumber`: tạo/sửa/xóa ở Sheet hoặc web sẽ được phản ánh sang bên còn lại. Để tự gắn URL bộ truyện, bật thêm Google Drive API và chia sẻ Drive tổng (hoặc folder tổng) cho cùng email Service Account với quyền Viewer. Khi đồng bộ, hệ thống tìm folder có tên chính xác bằng `seriesId` và điền link folder vào `urlSeries` nếu dòng chưa có URL.
+
+Để tự sao chép raw, chạy migration `docs/migrations/20261001_google_drive_raw_transfer.sql`, bật Google Drive API và cấp Service Account quyền Editor trên các folder gốc. Trong Cấu hình chung, với mỗi mảng (ví dụ Japan), nhập folder gốc công ty (JP_công_ty) và folder gốc freelancer (JP), rồi bật **Tự động sao chép file mới**. Mỗi phút backend đối chiếu các folder bộ truyện trùng tên, tìm folder `2.RAW` ở hai bên và sao chép file mới vào `2.RAW` freelancer; file gốc vẫn được giữ ở công ty. Nếu `2.RAW` đích đã có file cùng tên thì bỏ qua; folder truyện hoặc `2.RAW` thiếu ở bên freelancer cũng được bỏ qua và thống kê.
 
 ## Chạy project
 

@@ -57,6 +57,8 @@ Mặc định server chạy tại `http://localhost:5000`.
 - `GET /api/general-settings`
 - `PATCH /api/general-settings` (Admin; cấu hình kết nối Google Sheet)
 - `POST /api/google-sheet/sync` (Admin; đối soát hai chiều Google Sheet và `SeriesList`)
+- `GET /api/google-drive/raw-transfer/status` (đăng nhập; xem lần quét raw gần nhất)
+- `POST /api/google-drive/raw-transfer/sync` (Admin; quét và sao chép file raw ngay)
 
 ### Account có hai role
 
@@ -136,5 +138,12 @@ Mã QR freelancer được upload vào bucket `SUPABASE_QR_BUCKET` và cột `Fr
 2. Chia sẻ file Google Sheet cho email `client_email` trong file JSON với quyền Editor để hệ thống có thể ghi ngược dữ liệu.
 3. Đặt đường dẫn file JSON vào `GOOGLE_SERVICE_ACCOUNT_FILE` trong `apps/server/.env` (hoặc dùng biến JSON/base64), rồi khởi động lại server.
 4. Vào Cấu hình chung, nhập link Google Sheet, khai báo tab cho từng mảng (ví dụ `Japan` → tab `Japan`, `Latin` → tab `Latin`, `QC` → tab `QC`), lưu kết nối và bấm Đồng bộ ngay.
+
+## Tự sao chép raw trên Google Drive
+
+1. Chạy migration `docs/migrations/20261001_google_drive_raw_transfer.sql` để thêm cấu hình vào `GeneralSettings`.
+2. Bật Google Drive API và chia sẻ folder raw công ty cùng folder freelancer nhận file cho email `client_email` của Service Account với quyền Editor.
+3. Trong Cấu hình chung, theo từng mảng nhập folder gốc công ty và folder gốc freelancer, bật tự sao chép rồi lưu. Backend đối chiếu folder bộ truyện cùng tên, tìm `2.RAW` bên trong và sao chép file mới sang `2.RAW` freelancer; file gốc vẫn ở folder công ty. Lệnh **Sao chép ngay** chạy một lượt dù tự động sao chép đang tắt.
+4. Trước khi sao chép, backend so khớp tên file trong `2.RAW` đích; nếu tên đã tồn tại thì bỏ qua. Bản do hệ thống tạo còn được đánh dấu bằng `appProperties`, nên không tạo trùng giữa các lượt quét. Nếu folder bộ truyện hoặc `2.RAW` ở đích không tồn tại, mục đó được bỏ qua và tính vào số bỏ qua.
 
 Dòng đầu tiên của mỗi tab là header. Tên mảng của tab được dùng làm `type` của deadline nên không bắt buộc phải có cột `type`. `chapterNumber` là chuỗi tối đa 100 ký tự, nên có thể dùng các giá trị như `1A`, `01`, `Prologue` hoặc `Side Story`. Khóa đồng bộ là `seriesId` + `chapterNumber`. Đồng bộ hai chiều: dòng mới/sửa/xóa trên Sheet được phản ánh về web; tạo/sửa/xóa trên web được ghi lại vào Sheet. Nếu đồng thời sửa cùng một dòng, lần ghi cuối sẽ được giữ lại. Web kiểm tra Sheet khi tải dữ liệu và tối đa mỗi 5 phút khi bật tự động đồng bộ.
