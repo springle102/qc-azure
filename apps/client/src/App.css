@@ -4365,29 +4365,14 @@
   background: rgba(37, 99, 235, 0.1);
 }
 
-:root[data-theme='light'] .deadline-action-buttons .btn-danger {
+:root[data-theme='light'] .btn-danger {
   color: #b91c1c;
   background: rgba(239, 68, 68, 0.14);
   border-color: rgba(220, 38, 38, 0.42);
   font-weight: 700;
 }
 
-:root[data-theme='light'] .price-table .btn-danger,
-:root[data-theme='light'] .account-table .btn-danger {
-  color: #b91c1c;
-  background: rgba(239, 68, 68, 0.14);
-  border-color: rgba(220, 38, 38, 0.42);
-  font-weight: 700;
-}
-
-:root[data-theme='light'] .deadline-action-buttons .btn-danger:hover:not(:disabled) {
-  color: #991b1b;
-  background: rgba(239, 68, 68, 0.22);
-  border-color: rgba(185, 28, 28, 0.55);
-}
-
-:root[data-theme='light'] .price-table .btn-danger:hover:not(:disabled),
-:root[data-theme='light'] .account-table .btn-danger:hover:not(:disabled) {
+:root[data-theme='light'] .btn-danger:hover:not(:disabled) {
   color: #991b1b;
   background: rgba(239, 68, 68, 0.22);
   border-color: rgba(185, 28, 28, 0.55);
