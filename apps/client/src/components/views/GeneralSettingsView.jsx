@@ -399,7 +399,6 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
             <button type="button" className="btn btn-secondary" onClick={connectGoogleDriveTransferAccount} disabled={isSaving}>{isSaving ? 'Đang kết nối...' : 'Chọn tài khoản Google tạo bản sao'}</button>
           )}
         </div>
-        <p className="form-help">Bản sao dùng quota của tài khoản Google đã kết nối khi folder đích nằm trong My Drive của tài khoản đó. Tài khoản này cần quyền xem folder công ty và chỉnh sửa folder freelancer.</p>
         {fields.map((field) => {
           const mapping = googleDriveRawTransfer.mappings?.[field.name] || {};
           return (
