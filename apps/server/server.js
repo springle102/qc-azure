@@ -3696,14 +3696,14 @@ function getErrorSheetValue(row, headerIndex, key, cellDataRow = []) {
   return String(row[index] ?? '').trim();
 }
 
-function isDecorativeErrorSheetRow(row, headerIndex) {
-  return ERROR_SHEET_COLUMNS.every((key) => !getErrorSheetValue(row, headerIndex, key));
-}
-
-function isIncompleteErrorSheetRow(row, headerIndex) {
-  return !getErrorSheetValue(row, headerIndex, 'title')
-    || !getErrorSheetValue(row, headerIndex, 'chapter')
-    || !getErrorSheetValue(row, headerIndex, 'error');
+function isDecorativeErrorSheetRow(row, headerIndex, cellDataRow = [], directImages = []) {
+  if (directImages.some(Boolean)) return false;
+  return ERROR_SHEET_COLUMNS.every((key) => {
+    const value = getErrorSheetValue(row, headerIndex, key, cellDataRow);
+    if (key !== 'fixCheck') return !value;
+    // Unchecked checkboxes are often prefilled through otherwise empty rows.
+    return !readErrorCheckbox(cellDataRow[getErrorSheetHeaderIndex(headerIndex, key)], value);
+  });
 }
 
 function normalizeZipPath(value) {
@@ -4015,7 +4015,7 @@ async function syncErrorsWithGoogleSheets(user) {
   let inserted = 0;
   let updated = 0;
   let deleted = 0;
-  let skipped = 0;
+  const skipped = 0;
 
   const currentBySourceKey = new Map();
   const currentByFallbackKey = new Map();
@@ -4037,21 +4037,20 @@ async function syncErrorsWithGoogleSheets(user) {
       warnings.push(`${sheet.field}: ${sheet.imageReadError}`);
     }
     const importedRows = [];
-    for (let index = sheet.headerRowIndex + 1; index < sheet.values.length; index += 1) {
+    const screenshotColumn = getErrorSheetHeaderIndex(sheet.headerIndex, 'screenshot');
+    const noteColumn = getErrorSheetHeaderIndex(sheet.headerIndex, 'note');
+    const imageRowCount = Array.from(sheet.imageCells?.keys() || [])
+      .reduce((count, key) => Math.max(count, Number(String(key).split(':')[0]) + 1), 0);
+    const rowCount = Math.max(sheet.values.length, sheet.cellData.length, imageRowCount);
+    for (let index = sheet.headerRowIndex + 1; index < rowCount; index += 1) {
       const row = sheet.values[index] || [];
-      if (sheet.hiddenRows?.has(index)) continue;
-      if (isDecorativeErrorSheetRow(row, sheet.headerIndex)) continue;
-      const sourceRow = sheet.rangeMeta.startRow + index + 1;
-      sourceKeys.add(sourceRow);
-      if (isIncompleteErrorSheetRow(row, sheet.headerIndex)) {
-        skipped += 1;
-        continue;
-      }
-      const imported = buildImportedError(row, sheet.headerIndex, freelancers, sourceRow, sheet.field, sheet.sourceUrl, sheet.cellData[index]);
-      const screenshotColumn = getErrorSheetHeaderIndex(sheet.headerIndex, 'screenshot');
-      const noteColumn = getErrorSheetHeaderIndex(sheet.headerIndex, 'note');
+      const cellDataRow = sheet.cellData[index] || [];
       const directScreenshot = screenshotColumn === undefined ? '' : sheet.imageCells?.get(`${index}:${screenshotColumn}`) || '';
       const directNote = noteColumn === undefined ? '' : sheet.imageCells?.get(`${index}:${noteColumn}`) || '';
+      if (isDecorativeErrorSheetRow(row, sheet.headerIndex, cellDataRow, [directScreenshot, directNote])) continue;
+      const sourceRow = sheet.rangeMeta.startRow + index + 1;
+      sourceKeys.add(sourceRow);
+      const imported = buildImportedError(row, sheet.headerIndex, freelancers, sourceRow, sheet.field, sheet.sourceUrl, cellDataRow);
       if (!imported.screenshot && directScreenshot) imported.screenshot = normalizeErrorScreenshot(directScreenshot);
       if (directNote && !normalizeErrorScreenshot(imported.note)) imported.note = normalizeErrorScreenshot(directNote);
       const importedErrorTypeValue = getErrorSheetValue(row, sheet.headerIndex, 'errorType');
