@@ -3997,7 +3997,13 @@
   .dashboard-two-column,
   .profile-grid,
   .difficulty-field-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-two-column,
+  .dashboard-two-column > *,
+  .dashboard-section {
+    min-width: 0;
   }
 
   .profile-password-card {
@@ -4028,6 +4034,38 @@
 
   .dashboard-link-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-section .section-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-section .section-heading > div {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .dashboard-section .section-heading h3 {
+    overflow-wrap: anywhere;
+  }
+
+  .dashboard-section .section-heading .text-button {
+    white-space: nowrap;
+  }
+
+  .recent-chapter-row {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .recent-chapter-row > div {
+    flex: 1 1 220px;
+    min-width: 0;
+  }
+
+  .recent-chapter-row .data-status {
+    margin-left: auto;
   }
 
   .data-connection-banner {
