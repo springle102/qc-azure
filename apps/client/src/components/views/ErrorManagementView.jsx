@@ -696,7 +696,11 @@ export function ErrorManagementView({
       )}
 
       {fields.length === 0 ? (
-        <section className="glass-panel table-empty">Chưa có mảng nào được cấu hình.</section>
+        <section className="glass-panel table-empty">{isLoading
+          ? 'Đang tải danh sách mảng...'
+          : currentUser.role === 'Admin'
+            ? 'Chưa có mảng nào được cấu hình.'
+            : 'Không có mảng được cấp cho tài khoản. Vui lòng nhờ Admin kiểm tra mục Mảng trong tài khoản của bạn.'}</section>
       ) : (
         <>
           <section className="glass-panel error-field-panel">

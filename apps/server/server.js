@@ -1308,10 +1308,13 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Username hoặc password không đúng.' });
     }
 
+    const linkedFreelancers = account.freelancerId !== null && account.freelancerId !== undefined && account.freelancerId !== ''
+      ? await getCollection('freelancers') : [];
+    const user = toPublicAccount(account, linkedFreelancers);
     const token = crypto.randomBytes(32).toString('hex');
     const now = Date.now();
-    sessions.set(token, { user: toPublicAccount(account), expiresAt: now + SESSION_TTL_MS, lastSeenAt: now });
-    res.json({ success: true, data: { token, user: toPublicAccount(account) } });
+    sessions.set(token, { user, expiresAt: now + SESSION_TTL_MS, lastSeenAt: now });
+    res.json({ success: true, data: { token, user } });
   } catch (error) {
     res.status(502).json({ success: false, message: error.message });
   }
@@ -5044,7 +5047,8 @@ function validateRoleFields(roles, fields) {
 
 function toPublicAccount(account, freelancers = []) {
   const linkedFreelancer = freelancers.find((freelancer) => String(freelancer.fIld ?? freelancer.fId ?? freelancer.id) === String(account.freelancerId ?? ''));
-  const fields = normalizeStoredFields(account.fields || linkedFreelancer?.fields, account.field || linkedFreelancer?.field);
+  const accountFields = normalizeStoredFields(account.fields, account.field);
+  const fields = accountFields.length > 0 ? accountFields : normalizeStoredFields(linkedFreelancer?.fields, linkedFreelancer?.field);
   const roles = getAccountRoles(account);
   return {
     id: account.id,
