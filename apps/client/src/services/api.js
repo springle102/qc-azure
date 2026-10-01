@@ -10,7 +10,7 @@ export function getUserFacingErrorMessage(message, fallback = 'Không thể hoà
     return 'File Google Sheet quá lớn nên không thể đọc ảnh trực tiếp.';
   }
   if (/permission|not have access|does not have permission|insufficient permissions/i.test(text)) {
-    return 'Service Account chưa được cấp quyền truy cập Google Sheet.';
+    return 'Tài khoản Google dùng cho tích hợp chưa được cấp quyền truy cập tài nguyên này.';
   }
   if (/SERVICE_DISABLED|has not been used in project|API .* disabled/i.test(text)) {
     return 'Google API cần thiết chưa được bật.';
@@ -165,6 +165,8 @@ export const api = {
     body: JSON.stringify(settings)
   }),
   getGoogleDriveRawTransferStatus: () => request('/google-drive/raw-transfer/status', { cache: 'no-store' }),
+  startGoogleDriveRawTransferOAuth: () => request('/google-drive/raw-transfer/oauth/start', { method: 'POST' }),
+  disconnectGoogleDriveRawTransferOAuth: () => request('/google-drive/raw-transfer/oauth', { method: 'DELETE' }),
   syncGoogleDriveRawFiles: () => request('/google-drive/raw-transfer/sync', { method: 'POST', timeoutMs: 120000 }),
   syncGoogleSheet: () => request('/google-sheet/sync', { method: 'POST', timeoutMs: 120000 }),
   getErrors: () => request('/errors'),

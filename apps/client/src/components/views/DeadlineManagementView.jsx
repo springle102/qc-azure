@@ -327,7 +327,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
         <div>
           <span className="qc-kicker">QUẢN LÝ TIẾN ĐỘ</span>
           <h2 className="page-title">{title}</h2>
-          <p className="page-subtitle">{readOnly ? 'Bạn được sửa Status và Feedback của deadline được giao.' : 'Giữ nguyên 100% cột dữ liệu, cuộn ngang mượt mà với ghim cố định 3 cột đầu.'}</p>
+          {readOnly && <p className="page-subtitle">Bạn được sửa Status và Feedback của deadline được giao.</p>}
         </div>
         <div className="page-header-actions">
           {!readOnly && <button type="button" className="btn btn-primary" onClick={openCreate} disabled={isSaving}>

@@ -38,7 +38,6 @@ export function BonusSettingsPanel({ field, settings, isLoading, onRefresh }) {
       <div className="bonus-settings-header">
         <span className="qc-kicker">BONUS FREELANCER · {field}</span>
         <h3>Thưởng theo tháng — {field}</h3>
-        <p className="form-help">Hai cơ chế bật độc lập và cộng dồn. Chỉ các chap đã tick Thanh toán được tính; toàn bộ chap đạt mốc phải hoàn thành đúng 100%.</p>
       </div>
       <form className="bonus-policy-form" onSubmit={save}>
         <div className="bonus-policy-grid">

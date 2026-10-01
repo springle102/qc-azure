@@ -67,7 +67,6 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
         <div>
           <span className="qc-kicker">NHÂN SỰ</span>
           <h2 className="page-title">Lương</h2>
-          <p className="page-subtitle">Tất cả các tháng · Theo Ngày nộp (giờ Việt Nam), các task đã tick Thanh toán.</p>
         </div>
         <button type="button" className="btn btn-outline" onClick={onRefresh} disabled={isLoading}>
           <IconRefresh size={16} /> {isLoading ? 'Đang tải...' : 'Làm mới'}

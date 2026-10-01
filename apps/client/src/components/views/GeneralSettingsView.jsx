@@ -49,7 +49,8 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
     };
     loadStatus();
     const timer = window.setInterval(loadStatus, 30000);
-    return () => { active = false; window.clearInterval(timer); };
+    window.addEventListener('focus', loadStatus);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', loadStatus); };
   }, []);
 
   const addField = async (event) => {
@@ -108,6 +109,34 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
         [fieldName]: { ...(current.mappings?.[fieldName] || {}), [key]: value }
       }
     }));
+  };
+
+  const connectGoogleDriveTransferAccount = async () => {
+    const popup = window.open('about:blank', '_blank');
+    setIsSaving(true);
+    try {
+      const result = await api.startGoogleDriveRawTransferOAuth();
+      if (popup) popup.location.href = result.authorizeUrl;
+      else window.location.href = result.authorizeUrl;
+    } catch (error) {
+      popup?.close();
+      showToast(error.message || 'Không thể bắt đầu kết nối Google Drive.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const disconnectGoogleDriveTransferAccount = async () => {
+    setIsSaving(true);
+    try {
+      await api.disconnectGoogleDriveRawTransferOAuth();
+      setGoogleDriveRawTransferStatus((current) => ({ ...current, isConnected: false, connectedEmail: '' }));
+      showToast('Đã ngắt kết nối tài khoản tạo bản sao.', 'success');
+    } catch (error) {
+      showToast(error.message || 'Không thể ngắt kết nối tài khoản Google.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const saveGoogleDriveRawTransfer = async () => {
@@ -308,7 +337,7 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
 
       <section className="glass-panel general-settings-panel">
         <div className="section-heading">
-          <div><span className="qc-kicker">GOOGLE SHEET</span><h3>Đồng bộ hai chiều bảng quản lý deadline</h3><p className="form-help">Service Account cần quyền Editor trên file. Dòng đầu tiên của mỗi tab phải là tên cột.</p></div>
+          <div><span className="qc-kicker">GOOGLE SHEET</span><h3>Đồng bộ hai chiều bảng quản lý deadline</h3></div>
         </div>
         <form className="general-settings-form google-sheet-settings-form" onSubmit={saveGoogleSheet}>
           <div className="form-group form-group-full">
@@ -328,7 +357,6 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
             <div className="general-settings-subheading">
               <span className="qc-kicker">GOOGLE DRIVE</span>
               <h3>Folder gốc theo mảng</h3>
-              <p className="form-help">Hệ thống ưu tiên folder con có tên seriesId, sau đó đối chiếu tên truyện; hỗ trợ tên tiếng Anh, Hàn, Trung và các ký tự đặc biệt.</p>
             </div>
             <div className="general-settings-tab-grid">
               {fields.map((field) => (
@@ -358,9 +386,20 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
           <div>
             <span className="qc-kicker">GOOGLE DRIVE</span>
             <h3>Tự sao chép file raw cho freelancer</h3>
-            <p className="form-help">Theo từng mảng, backend tìm folder truyện trùng tên ở hai folder gốc, rồi theo dõi file mới trong folder con 2.RAW. File gốc ở folder công ty được giữ nguyên.</p>
           </div>
         </div>
+        <div className="general-settings-actions">
+          {googleDriveRawTransferStatus?.isConnected ? (
+            <>
+              <span className="form-help">Tài khoản tạo bản sao: <strong>{googleDriveRawTransferStatus.connectedEmail}</strong></span>
+              <button type="button" className="btn btn-outline" onClick={connectGoogleDriveTransferAccount} disabled={isSaving}>Đổi tài khoản</button>
+              <button type="button" className="btn btn-secondary" onClick={disconnectGoogleDriveTransferAccount} disabled={isSaving}>Ngắt kết nối</button>
+            </>
+          ) : (
+            <button type="button" className="btn btn-secondary" onClick={connectGoogleDriveTransferAccount} disabled={isSaving}>{isSaving ? 'Đang kết nối...' : 'Chọn tài khoản Google tạo bản sao'}</button>
+          )}
+        </div>
+        <p className="form-help">Bản sao dùng quota của tài khoản Google đã kết nối khi folder đích nằm trong My Drive của tài khoản đó. Tài khoản này cần quyền xem folder công ty và chỉnh sửa folder freelancer.</p>
         {fields.map((field) => {
           const mapping = googleDriveRawTransfer.mappings?.[field.name] || {};
           return (
@@ -383,7 +422,6 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
           <input type="checkbox" checked={googleDriveRawTransfer.enabled === true} onChange={(event) => setGoogleDriveRawTransfer((current) => ({ ...current, enabled: event.target.checked }))} disabled={isSaving} />
           <span>Bật tự động sao chép file mới (quét mỗi phút)</span>
         </label>
-        <p className="form-help">Cấp quyền Editor cho Service Account trên các folder gốc. Hệ thống chỉ sao chép file trực tiếp trong 2.RAW, không xử lý các folder con bên trong đó. Nếu 2.RAW freelancer đã có file cùng tên thì bỏ qua; folder truyện hoặc 2.RAW bị thiếu sẽ được bỏ qua.</p>
         <div className="general-settings-actions">
           <button type="button" className="btn btn-primary" onClick={saveGoogleDriveRawTransfer} disabled={isSaving}>{isSaving ? 'Đang lưu...' : 'Lưu cấu hình raw'}</button>
           <button type="button" className="btn btn-secondary" onClick={syncGoogleDriveRawFiles} disabled={isSaving || !Object.values(googleDriveRawTransfer.mappings || {}).some((mapping) => mapping.sourceFolderId && mapping.destinationFolderId)}>Sao chép ngay</button>
@@ -394,7 +432,7 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
 
       <section className="glass-panel qc-table-panel">
         <div className="section-heading">
-          <div><span className="qc-kicker">DANH SÁCH MẢNG</span><h3>Thêm, sửa, xóa mảng</h3><p className="form-help">Mỗi mảng có một Guide và một link Tài nguyên riêng. Freelancer chỉ nhìn thấy link của mảng được cấp.</p></div>
+          <div><span className="qc-kicker">DANH SÁCH MẢNG</span><h3>Thêm, sửa, xóa mảng</h3></div>
         </div>
         <form className="general-field-create-form" onSubmit={addField}>
           <input className="form-input" value={newField} onChange={(event) => setNewField(event.target.value)} placeholder="Tên mảng mới" maxLength="50" disabled={isSaving} required />
@@ -449,7 +487,6 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
           <div>
             <span className="qc-kicker">CHECKLIST</span>
             <h3>Checklist theo mảng</h3>
-            <p className="form-help">Một mảng có thể có nhiều checklist. Chỉ chấp nhận link Google Sheet và checklist sẽ hiển thị trên dashboard của Admin và Freelancer thuộc mảng tương ứng.</p>
           </div>
         </div>
         <div className="general-checklist-list">
