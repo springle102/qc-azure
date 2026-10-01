@@ -9,14 +9,13 @@ import {
 } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 
-const isSubmitted = (item) => normalizeStatus(item) === 'submitted';
 const isKpiComplete = (item, role) => normalizeStatus(item) === (role === 'Freelancer' ? 'submitted' : 'done');
 const isFinishedForDashboard = (item) => ['submitted', 'checking', 'fixing', 'done'].includes(normalizeStatus(item));
 const hasFreelancerAssignment = (item) => [item?.fId, item?.fIld, item?.freelancerId]
   .some((value) => value !== null && value !== undefined && String(value).trim() !== '');
 const needsQC = (item) => {
-  const status = String(item?.status || item?.statusRaw || '').trim().toLowerCase();
-  return status === 'submitted' || /đã gửi|chờ qc|qc|review|duyệt|kiểm/.test(status);
+  const status = String(item?.status ?? '').trim().toLowerCase();
+  return ['submitted', 'checking'].includes(status);
 };
 const isDoing = (item) => normalizeStatus(item) === 'doing';
 const isUpcoming = (item) => {
@@ -78,7 +77,7 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], free
       .sort((a, b) => getTaskReceivedTimestamp(b) - getTaskReceivedTimestamp(a));
 
     return {
-      qc: recent.filter(isSubmitted).slice(0, 5),
+      qc: recent.filter(needsQC).slice(0, 5),
       freelancer: recent.filter(hasFreelancerAssignment).slice(0, 5)
     };
   }, [deadlines, tasks]);

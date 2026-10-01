@@ -166,7 +166,7 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
       .filter((item) => isDashboardTaskComplete(item, req.authUser.role))
       .length;
     const assigned = scopedTasks.filter(hasFreelancerAssignment).length;
-    const review = trackedTaskSource.filter((item) => getTaskStatus(item) === 'submitted').length;
+    const review = trackedTaskSource.filter((item) => ['submitted', 'checking'].includes(String(item?.status ?? '').trim().toLowerCase())).length;
 
     res.json({
       success: true,

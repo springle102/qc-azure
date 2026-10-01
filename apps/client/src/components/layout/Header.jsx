@@ -11,7 +11,7 @@ export function Header({ currentUser, deadlines = [], errors = [], onNavigate, o
   const themeLabel = isDarkMode ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối';
 
   const reviewCount = useMemo(() => {
-    return (deadlines || []).filter((item) => normalizeHeaderStatus(item) === 'submitted').length;
+    return (deadlines || []).filter((item) => ['submitted', 'checking'].includes(String(item?.status ?? '').trim().toLowerCase())).length;
   }, [deadlines]);
 
   useEffect(() => {
