@@ -2005,8 +2005,11 @@ function normalizeGoogleDriveRawTransfer(value) {
     ? parsed.mappings
     : {};
   const mappings = Object.fromEntries(Object.entries(rawMappings).map(([field, mapping]) => [String(field).trim(), {
+    enabled: mapping?.enabled === true || (mapping?.enabled !== false && Boolean(mapping?.sourceFolderId && mapping?.destinationFolderId)),
     sourceFolderId: extractFolderId(mapping?.sourceFolderId),
-    destinationFolderId: extractFolderId(mapping?.destinationFolderId)
+    destinationFolderId: extractFolderId(mapping?.destinationFolderId),
+    sourceRawPath: normalizeDriveRelativePath(mapping?.sourceRawPath, '0-RAW'),
+    destinationRawPath: normalizeDriveRelativePath(mapping?.destinationRawPath, '2.RAW')
   }]).filter(([field, mapping]) => field && (mapping.sourceFolderId || mapping.destinationFolderId)));
   return {
     enabled: parsed.enabled === true,
@@ -3068,15 +3071,33 @@ async function listDriveChildren(folderId) {
   return items;
 }
 
+function normalizeDriveRelativePath(value, fallback = '') {
+  if (value === undefined || value === null) return fallback;
+  const path = String(value ?? '').trim().replace(/\\/g, '/');
+  return path.split('/').map((part) => part.trim()).filter(Boolean).join('/');
+}
+
+async function resolveDriveFolderPath(startFolderId, relativePath) {
+  const segments = normalizeDriveRelativePath(relativePath).split('/').filter(Boolean);
+  let currentFolderId = startFolderId;
+  for (const segment of segments) {
+    const children = await listDriveChildren(currentFolderId);
+    const folder = children.find((item) => item.name === segment && item.mimeType === 'application/vnd.google-apps.folder');
+    if (!folder) return null;
+    currentFolderId = folder.id;
+  }
+  return currentFolderId;
+}
+
 async function syncGoogleDriveRawFiles({ force = false } = {}) {
   if (googleDriveRawTransferPromise) return googleDriveRawTransferPromise;
   googleDriveRawTransferPromise = (async () => {
     const settings = await getGeneralSettings();
     const config = normalizeGoogleDriveRawTransfer(settings.googleDriveRawTransfer);
     if (!config.enabled && !force) return { copied: 0, skipped: true, message: 'Tự động chuyển file raw đang tắt.' };
-    const configuredMappings = Object.entries(config.mappings).filter(([, mapping]) => mapping.sourceFolderId || mapping.destinationFolderId);
-    if (configuredMappings.length === 0) throw validationError('Cần cấu hình folder công ty và folder freelancer cho ít nhất một mảng.');
-    const incompleteField = configuredMappings.find(([, mapping]) => !mapping.sourceFolderId || !mapping.destinationFolderId);
+    const configuredMappings = Object.entries(config.mappings).filter(([, mapping]) => mapping.enabled !== false && (mapping.sourceFolderId || mapping.destinationFolderId));
+    if (configuredMappings.length === 0) throw validationError('Hãy bật và cấu hình folder công ty cùng folder freelancer cho ít nhất một mảng.');
+    const incompleteField = configuredMappings.find(([, mapping]) => !mapping.sourceFolderId || !mapping.destinationFolderId || !mapping.sourceRawPath || !mapping.destinationRawPath);
     if (incompleteField) throw validationError(`Mảng ${incompleteField[0]} cần có đủ folder nguồn và folder đích.`);
     const sameFolderField = configuredMappings.find(([, mapping]) => mapping.sourceFolderId === mapping.destinationFolderId);
     if (sameFolderField) throw validationError(`Folder nguồn và folder đích của mảng ${sameFolderField[0]} phải khác nhau.`);
@@ -3103,19 +3124,17 @@ async function syncGoogleDriveRawFiles({ force = false } = {}) {
             skipped += 1;
             continue;
           }
-          const [sourceSeriesContents, destinationSeriesContents] = await Promise.all([
-            listDriveChildren(sourceSeries.id),
-            listDriveChildren(destinationSeries.id)
+          const [sourceRawFolderId, destinationRawFolderId] = await Promise.all([
+            resolveDriveFolderPath(sourceSeries.id, mapping.sourceRawPath),
+            resolveDriveFolderPath(destinationSeries.id, mapping.destinationRawPath)
           ]);
-          const sourceRawFolder = sourceSeriesContents.find((item) => item.name === '2.RAW' && item.mimeType === 'application/vnd.google-apps.folder');
-          const destinationRawFolder = destinationSeriesContents.find((item) => item.name === '2.RAW' && item.mimeType === 'application/vnd.google-apps.folder');
-          if (!sourceRawFolder || !destinationRawFolder) {
+          if (!sourceRawFolderId || !destinationRawFolderId) {
             skipped += 1;
             continue;
           }
           const [sourceRawFiles, destinationRawFiles] = await Promise.all([
-            listDriveChildren(sourceRawFolder.id),
-            listDriveChildren(destinationRawFolder.id)
+            listDriveChildren(sourceRawFolderId),
+            listDriveChildren(destinationRawFolderId)
           ]);
           const sourceFiles = sourceRawFiles.filter((item) => item.mimeType !== 'application/vnd.google-apps.folder');
           const alreadyCopied = new Set(destinationRawFiles
@@ -3136,7 +3155,7 @@ async function syncGoogleDriveRawFiles({ force = false } = {}) {
               method: 'POST',
               body: {
                 name: file.name,
-                parents: [destinationRawFolder.id],
+                parents: [destinationRawFolderId],
                 appProperties: { qcRawTransferSourceId: file.id, qcRawTransferField: field }
               }
             });

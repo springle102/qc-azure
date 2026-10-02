@@ -31,7 +31,13 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
     const defaultDriveFolders = Object.fromEntries(fields.map((field) => [field.name, '']));
     setGoogleDriveFolders({ ...defaultDriveFolders, ...configuredDriveFolders });
     const configuredRawTransfer = generalSettings?.googleDriveRawTransfer || { enabled: false, mappings: {} };
-    const defaultRawMappings = Object.fromEntries(fields.map((field) => [field.name, { sourceFolderId: '', destinationFolderId: '' }]));
+    const defaultRawMappings = Object.fromEntries(fields.map((field) => [field.name, {
+      enabled: false,
+      sourceFolderId: '',
+      destinationFolderId: '',
+      sourceRawPath: '0-RAW',
+      destinationRawPath: '2.RAW'
+    }]));
     setGoogleDriveRawTransfer({ ...configuredRawTransfer, mappings: { ...defaultRawMappings, ...(configuredRawTransfer.mappings || {}) } });
     const configuredChecklists = generalSettings?.checklists && typeof generalSettings.checklists === 'object' ? generalSettings.checklists : {};
     const defaultChecklists = Object.fromEntries(fields.map((field) => [field.name, Array.isArray(configuredChecklists[field.name]) ? configuredChecklists[field.name] : []]));
@@ -166,7 +172,7 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
         lastAlreadyPresentCount: result.alreadyPresent,
         lastError: ''
       });
-      showToast(`Đã quét ${result.scanned || 0} file: sao chép ${result.copied || 0}, đã có file cùng tên ${result.alreadyPresent || 0}, bỏ qua ${result.skipped || 0} folder thiếu bên freelancer.`, 'success');
+      showToast(`Đã quét ${result.scanned || 0} file: sao chép ${result.copied || 0}, đã có file cùng tên ${result.alreadyPresent || 0}, bỏ qua ${result.skipped || 0} folder truyện hoặc đường dẫn RAW chưa tìm thấy.`, 'success');
       await onRefresh?.();
     } catch (error) {
       showToast(error.message || 'Không thể sao chép file raw.', 'error');
@@ -400,10 +406,16 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
           )}
         </div>
         {fields.map((field) => {
-          const mapping = googleDriveRawTransfer.mappings?.[field.name] || {};
+          const mapping = googleDriveRawTransfer.mappings?.[field.name] || { enabled: false, sourceRawPath: '0-RAW', destinationRawPath: '2.RAW' };
           return (
             <div className="general-settings-drive-grid" key={`raw-transfer-${field.id || field.name}`}>
-              <div className="general-settings-subheading"><span className="field-badge">{field.name}</span></div>
+              <div className="general-settings-subheading">
+                <span className="field-badge">{field.name}</span>
+                <label className="general-settings-checkbox">
+                  <input type="checkbox" checked={mapping.enabled === true} onChange={(event) => updateGoogleDriveRawTransfer(field.name, 'enabled', event.target.checked)} disabled={isSaving} />
+                  <span>Áp dụng cho mảng này</span>
+                </label>
+              </div>
               <div className="general-settings-tab-grid">
                 <div className="form-group">
                   <label className="form-label" htmlFor={`raw-source-drive-folder-${field.id || field.name}`}>Folder gốc công ty · {field.name}</label>
@@ -414,16 +426,26 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
                   <input id={`raw-destination-drive-folder-${field.id || field.name}`} className="form-input" value={mapping.destinationFolderId || ''} onChange={(event) => updateGoogleDriveRawTransfer(field.name, 'destinationFolderId', event.target.value)} placeholder="Link hoặc ID, ví dụ JP" disabled={isSaving} />
                 </div>
               </div>
+              <div className="general-settings-tab-grid">
+                <div className="form-group">
+                  <label className="form-label" htmlFor={`raw-source-relative-path-${field.id || field.name}`}>Đường dẫn RAW nguồn bên trong folder truyện</label>
+                  <input id={`raw-source-relative-path-${field.id || field.name}`} className="form-input" value={mapping.sourceRawPath ?? '0-RAW'} onChange={(event) => updateGoogleDriveRawTransfer(field.name, 'sourceRawPath', event.target.value)} placeholder="Ví dụ: 0-RAW hoặc RAW/Original" disabled={isSaving} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor={`raw-destination-relative-path-${field.id || field.name}`}>Đường dẫn RAW đích bên trong folder truyện</label>
+                  <input id={`raw-destination-relative-path-${field.id || field.name}`} className="form-input" value={mapping.destinationRawPath ?? '2.RAW'} onChange={(event) => updateGoogleDriveRawTransfer(field.name, 'destinationRawPath', event.target.value)} placeholder="Ví dụ: 2.RAW hoặc RAW/Source" disabled={isSaving} />
+                </div>
+              </div>
             </div>
           );
         })}
         <label className="general-settings-checkbox">
           <input type="checkbox" checked={googleDriveRawTransfer.enabled === true} onChange={(event) => setGoogleDriveRawTransfer((current) => ({ ...current, enabled: event.target.checked }))} disabled={isSaving} />
-          <span>Bật tự động sao chép file mới (quét mỗi phút)</span>
+          <span>Bật lịch tự động sao chép mỗi phút cho các mảng đã chọn và cấu hình đủ</span>
         </label>
         <div className="general-settings-actions">
           <button type="button" className="btn btn-primary" onClick={saveGoogleDriveRawTransfer} disabled={isSaving}>{isSaving ? 'Đang lưu...' : 'Lưu cấu hình raw'}</button>
-          <button type="button" className="btn btn-secondary" onClick={syncGoogleDriveRawFiles} disabled={isSaving || !Object.values(googleDriveRawTransfer.mappings || {}).some((mapping) => mapping.sourceFolderId && mapping.destinationFolderId)}>Sao chép ngay</button>
+          <button type="button" className="btn btn-secondary" onClick={syncGoogleDriveRawFiles} disabled={isSaving || !Object.values(googleDriveRawTransfer.mappings || {}).some((mapping) => mapping.enabled === true && mapping.sourceFolderId && mapping.destinationFolderId && mapping.sourceRawPath && mapping.destinationRawPath)}>Sao chép ngay</button>
         </div>
         {googleDriveRawTransferStatus?.lastSyncedAt && <p className="form-help general-settings-sync-status">Lần kiểm tra gần nhất: {new Date(googleDriveRawTransferStatus.lastSyncedAt).toLocaleString('vi-VN')} · đã quét {googleDriveRawTransferStatus.lastScannedCount ?? 0}, sao chép {googleDriveRawTransferStatus.lastCopiedCount ?? 0}, đã có tên trùng {googleDriveRawTransferStatus.lastAlreadyPresentCount ?? 0}, folder thiếu {googleDriveRawTransferStatus.lastSkippedCount ?? 0}</p>}
         {googleDriveRawTransferStatus?.lastError && <p className="form-help general-settings-sync-error">Lỗi gần nhất: {getUserFacingErrorMessage(googleDriveRawTransferStatus.lastError, 'Sao chép file raw chưa thành công.')}</p>}

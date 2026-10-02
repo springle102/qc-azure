@@ -391,7 +391,10 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
               {filteredDeadlines.length === 0 ? (
                 <tr><td colSpan={visibleColumns.length}><div className="empty-state table-empty"><IconTasks size={24} /><strong>{isLoading ? 'Đang tải dữ liệu...' : 'Chưa có deadline trong hệ thống.'}</strong></div></td></tr>
               ) : filteredDeadlines.map((item, index) => (
-                <tr key={`${item.seriesId || 'series'}-${item.chapterNumber || index}`}>
+                <tr
+                  key={`${item.seriesId || 'series'}-${item.chapterNumber || index}`}
+                  className={isDeadlineOverdue(item, statusOverrides) ? 'deadline-row-overdue' : undefined}
+                >
                   {visibleColumns.map(([key]) => (
                     <td key={key} className={`deadline-column deadline-column-${key}`}>
                       {key === 'edit' ? (
@@ -798,6 +801,17 @@ function getStatusDisplayValue(item, overrides = {}) {
   return Object.prototype.hasOwnProperty.call(overrides, rowKey)
     ? overrides[rowKey]
     : item?.status;
+}
+
+function isDeadlineOverdue(item, statusOverrides = {}) {
+  const dueDate = String(item?.endTask ?? '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!dueDate) return false;
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const dueDateKey = `${dueDate[1]}-${dueDate[2]}-${dueDate[3]}`;
+  const status = String(getStatusDisplayValue(item, statusOverrides) ?? '').trim().toLowerCase();
+  const isComplete = ['done', 'completed', 'complete', 'hoàn thành', 'đã hoàn thành'].includes(status);
+  return dueDateKey < todayKey && !isComplete;
 }
 
 function getVisibleStatusOptions(readOnly) {

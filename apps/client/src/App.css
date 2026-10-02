@@ -5904,6 +5904,45 @@
   border-color: #cbd5e1;
   color: #0f172a;
 }
+/* Overdue deadline rows keep strong text contrast in both color themes. */
+.deadline-table tbody tr.deadline-row-overdue td {
+  background: #4b2026 !important;
+  border-color: #71343d !important;
+  color: #ffe4e6 !important;
+}
+.deadline-table tbody tr.deadline-row-overdue:hover td {
+  background: #5a252d !important;
+}
+.deadline-table tbody tr.deadline-row-overdue td.deadline-column-endTask,
+.deadline-table tbody tr.deadline-row-overdue td.deadline-column-seriesId,
+.deadline-table tbody tr.deadline-row-overdue td.deadline-column-type {
+  background: #4b2026 !important;
+}
+.deadline-table tbody tr.deadline-row-overdue:hover td.deadline-column-endTask,
+.deadline-table tbody tr.deadline-row-overdue:hover td.deadline-column-seriesId,
+.deadline-table tbody tr.deadline-row-overdue:hover td.deadline-column-type {
+  background: #5a252d !important;
+}
+
+:root[data-theme='light'] .deadline-table tbody tr.deadline-row-overdue td {
+  background: #fee2e2 !important;
+  border-color: #fecaca !important;
+  color: #991b1b !important;
+}
+:root[data-theme='light'] .deadline-table tbody tr.deadline-row-overdue:hover td {
+  background: #fecaca !important;
+}
+:root[data-theme='light'] .deadline-table tbody tr.deadline-row-overdue td.deadline-column-endTask,
+:root[data-theme='light'] .deadline-table tbody tr.deadline-row-overdue td.deadline-column-seriesId,
+:root[data-theme='light'] .deadline-table tbody tr.deadline-row-overdue td.deadline-column-type {
+  background: #fee2e2 !important;
+}
+:root[data-theme='light'] .deadline-table tbody tr.deadline-row-overdue:hover td.deadline-column-endTask,
+:root[data-theme='light'] .deadline-table tbody tr.deadline-row-overdue:hover td.deadline-column-seriesId,
+:root[data-theme='light'] .deadline-table tbody tr.deadline-row-overdue:hover td.deadline-column-type {
+  background: #fecaca !important;
+}
+
 :root[data-theme='light'] .auth-card {
   background: #ffffff;
   border-color: #cbd5e1;
