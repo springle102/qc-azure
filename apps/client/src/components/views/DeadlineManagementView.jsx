@@ -390,13 +390,16 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
             <tbody>
               {filteredDeadlines.length === 0 ? (
                 <tr><td colSpan={visibleColumns.length}><div className="empty-state table-empty"><IconTasks size={24} /><strong>{isLoading ? 'Đang tải dữ liệu...' : 'Chưa có deadline trong hệ thống.'}</strong></div></td></tr>
-              ) : filteredDeadlines.map((item, index) => (
+              ) : filteredDeadlines.map((item, index) => {
+                const overdue = isDeadlineOverdue(item);
+                const overdueSubmitted = overdue && isSubmittedStatus(item, statusOverrides);
+                return (
                 <tr
                   key={`${item.seriesId || 'series'}-${item.chapterNumber || index}`}
-                  className={isDeadlineOverdue(item, statusOverrides) ? 'deadline-row-overdue' : undefined}
+                  className={overdue && !overdueSubmitted ? 'deadline-row-overdue' : undefined}
                 >
                   {visibleColumns.map(([key]) => (
-                    <td key={key} className={`deadline-column deadline-column-${key}`}>
+                    <td key={key} className={`deadline-column deadline-column-${key}${key === 'submittedAt' && overdueSubmitted ? ' deadline-submitted-late' : ''}`}>
                       {key === 'edit' ? (
                         <div className="deadline-action-buttons">
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(item)} disabled={deletingKey === String(item.seriesId) + '-' + String(item.chapterNumber)}>
@@ -446,7 +449,8 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
                     </td>
                   ))}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -803,15 +807,17 @@ function getStatusDisplayValue(item, overrides = {}) {
     : item?.status;
 }
 
-function isDeadlineOverdue(item, statusOverrides = {}) {
+function isDeadlineOverdue(item) {
   const dueDate = String(item?.endTask ?? '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!dueDate) return false;
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const dueDateKey = `${dueDate[1]}-${dueDate[2]}-${dueDate[3]}`;
-  const status = String(getStatusDisplayValue(item, statusOverrides) ?? '').trim().toLowerCase();
-  const isComplete = ['done', 'completed', 'complete', 'hoàn thành', 'đã hoàn thành'].includes(status);
-  return dueDateKey < todayKey && !isComplete;
+  return dueDateKey < todayKey;
+}
+
+function isSubmittedStatus(item, statusOverrides = {}) {
+  return String(getStatusDisplayValue(item, statusOverrides) ?? '').trim().toLowerCase() === 'submitted';
 }
 
 function getVisibleStatusOptions(readOnly) {

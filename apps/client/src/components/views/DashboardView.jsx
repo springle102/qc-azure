@@ -9,20 +9,30 @@ import {
 } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 
-const isKpiComplete = (item, role) => normalizeStatus(item) === (role === 'Freelancer' ? 'submitted' : 'done');
 const isFinishedForDashboard = (item) => ['submitted', 'checking', 'fixing', 'done'].includes(normalizeStatus(item));
 const hasFreelancerAssignment = (item) => [item?.fId, item?.fIld, item?.freelancerId]
   .some((value) => value !== null && value !== undefined && String(value).trim() !== '');
-const needsQC = (item) => {
-  const status = String(item?.status ?? '').trim().toLowerCase();
-  return ['submitted', 'checking'].includes(status);
+const needsQC = (item) => ['submitted', 'checking'].includes(normalizeStatus(item));
+const isDone = (item) => normalizeStatus(item) === 'done';
+const isFreelancerComplete = (item) => ['submitted', 'checking', 'done'].includes(normalizeStatus(item));
+const isWaitingForAssignment = (item) => !hasFreelancerAssignment(item) && !needsQC(item) && !isDone(item);
+const isProcessing = (item) => hasFreelancerAssignment(item) && !needsQC(item) && !isDone(item);
+const getDaysUntil = (date) => {
+  const dueDay = Date.parse(`${getCalendarDateKey(date)}T00:00:00Z`);
+  const today = Date.parse(`${getCalendarDateKey(Date.now())}T00:00:00Z`);
+  return Math.round((dueDay - today) / 86_400_000);
 };
-const isDoing = (item) => normalizeStatus(item) === 'doing';
 const isUpcoming = (item) => {
   const dueAt = getDueDate(item);
-  if (!dueAt || isFinishedForDashboard(item)) return false;
-  return getCalendarDateKey(dueAt) === getCalendarDateKey(Date.now());
+  if (!dueAt || isFreelancerComplete(item)) return false;
+  const daysUntilDue = getDaysUntil(dueAt);
+  return daysUntilDue >= 0 && daysUntilDue <= 3;
 };
+
+const formatPercent = (value, total) => total > 0 ? `${Math.round((value / total) * 100)}%` : '—';
+const formatPercentTitle = (value, total, suffix = 'task') => total > 0
+  ? `${value} / ${total} ${suffix}`
+  : 'Chưa có task để tính tỉ lệ';
 
 function formatDate(value) {
   if (!value) return '—';
@@ -34,24 +44,29 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], free
   const canViewChecklists = ['Admin', 'Freelancer'].includes(currentUser.role);
   const [isResetting, setIsResetting] = React.useState(false);
   const freelancerTasks = useMemo(() => deadlines.length > 0 ? deadlines : tasks, [deadlines, tasks]);
+  const pipelineTasks = freelancerTasks;
   const fieldResources = useMemo(() => {
     if (Array.isArray(dashboard.fieldResources) && dashboard.fieldResources.length > 0) return dashboard.fieldResources;
     return [{ field: '', guideUrl: dashboard.guideUrl || '', resourceUrl: dashboard.resourceUrl || '', checklists: [] }];
   }, [dashboard]);
-  const metrics = useMemo(() => ({
-    waiting: Number.isFinite(Number(dashboard.waitingTasks)) ? Number(dashboard.waitingTasks) : tasks.filter((item) => !hasFreelancerAssignment(item)).length,
-    assigned: Number.isFinite(Number(dashboard.assignedTasks)) ? Number(dashboard.assignedTasks) : tasks.filter(hasFreelancerAssignment).length,
-    review: Number.isFinite(Number(dashboard.reviewTasks)) ? Number(dashboard.reviewTasks) : tasks.filter(needsQC).length,
-    completed: Number.isFinite(Number(dashboard.completedTasks))
-      ? Number(dashboard.completedTasks)
-      : tasks.filter((item) => isKpiComplete(item, currentUser.role)).length
-  }), [currentUser.role, dashboard, tasks]);
+  const metrics = useMemo(() => {
+    const total = Number.isFinite(Number(dashboard.pipelineTotalTasks)) ? Number(dashboard.pipelineTotalTasks) : pipelineTasks.length;
+    return {
+      total,
+      waiting: Number.isFinite(Number(dashboard.waitingTasks)) ? Number(dashboard.waitingTasks) : pipelineTasks.filter(isWaitingForAssignment).length,
+      processing: Number.isFinite(Number(dashboard.processingTasks)) ? Number(dashboard.processingTasks) : pipelineTasks.filter(isProcessing).length,
+      review: Number.isFinite(Number(dashboard.reviewTasks)) ? Number(dashboard.reviewTasks) : pipelineTasks.filter(needsQC).length,
+      completed: Number.isFinite(Number(dashboard.completedTasks)) ? Number(dashboard.completedTasks) : pipelineTasks.filter(isDone).length
+    };
+  }, [dashboard, pipelineTasks]);
   const freelancerMetrics = useMemo(() => ({
-    doing: Number.isFinite(Number(dashboard.inProgressTasks)) ? Number(dashboard.inProgressTasks) : freelancerTasks.filter(isDoing).length,
+    total: Number.isFinite(Number(dashboard.pipelineTotalTasks)) ? Number(dashboard.pipelineTotalTasks) : freelancerTasks.length,
+    active: Number.isFinite(Number(dashboard.activeTasks)) ? Number(dashboard.activeTasks) : freelancerTasks.filter((item) => !isFreelancerComplete(item)).length,
+    doing: Number.isFinite(Number(dashboard.inProgressTasks)) ? Number(dashboard.inProgressTasks) : freelancerTasks.filter(isProcessing).length,
     upcoming: Array.isArray(dashboard.upcomingTasks) ? dashboard.upcomingTasks.length : freelancerTasks.filter(isUpcoming).length,
     completed: Number.isFinite(Number(dashboard.completedTasks))
       ? Number(dashboard.completedTasks)
-      : freelancerTasks.filter((item) => isKpiComplete(item, 'Freelancer')).length
+      : freelancerTasks.filter(isFreelancerComplete).length
   }), [dashboard, freelancerTasks]);
   const upcomingTasks = useMemo(() => {
     if (Array.isArray(dashboard.upcomingTasks)) return dashboard.upcomingTasks;
@@ -83,14 +98,14 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], free
   }, [deadlines, tasks]);
 
   const cards = isFreelancer ? [
-    { label: 'Tổng task đang làm', value: freelancerMetrics.doing, tone: 'cyan', icon: IconTasks, desc: 'Đang thực hiện', percent: '45%' },
-    { label: 'Tổng task sắp đến hạn', value: freelancerMetrics.upcoming, tone: 'amber', icon: IconAlertTriangle, desc: 'Ưu tiên hoàn thành', percent: '15%' },
-    { label: 'Tổng task đã hoàn thành', value: freelancerMetrics.completed, tone: 'green', icon: IconCheckCircle, desc: 'Đạt chuẩn chất lượng', percent: '96%' }
+    { label: 'Tổng task đang xử lý', value: freelancerMetrics.doing, tone: 'cyan', icon: IconTasks, desc: 'Đã giao, chưa nộp QC', percent: formatPercent(freelancerMetrics.doing, freelancerMetrics.total), percentTitle: formatPercentTitle(freelancerMetrics.doing, freelancerMetrics.total) },
+    { label: 'Task đến hạn trong 3 ngày', value: freelancerMetrics.upcoming, tone: 'amber', icon: IconAlertTriangle, desc: 'Trong số task chưa nộp', percent: formatPercent(freelancerMetrics.upcoming, freelancerMetrics.active), percentTitle: formatPercentTitle(freelancerMetrics.upcoming, freelancerMetrics.active, 'task chưa nộp') },
+    { label: 'Task đã nộp / hoàn tất', value: freelancerMetrics.completed, tone: 'green', icon: IconCheckCircle, desc: 'Đã gửi QC hoặc được duyệt', percent: formatPercent(freelancerMetrics.completed, freelancerMetrics.total), percentTitle: formatPercentTitle(freelancerMetrics.completed, freelancerMetrics.total) }
   ] : [
-    { label: 'Tổng task chờ giao', value: metrics.waiting, tone: 'cyan', icon: IconClock, desc: 'Đang chờ phân bổ', percent: '25%' },
-    { label: 'Tổng task đã giao', value: metrics.assigned, tone: 'indigo', icon: IconTasks, desc: 'Đang thực hiện', percent: '68%' },
-    { label: 'Task cần QC', value: metrics.review, tone: 'amber', icon: IconAlertTriangle, desc: 'Đang cần QC gấp', percent: '12%' },
-    { label: 'Tổng task đã hoàn thành', value: metrics.completed, tone: 'green', icon: IconCheckCircle, desc: 'Đạt chuẩn chất lượng', percent: '96%' }
+    { label: 'Tổng task chờ giao', value: metrics.waiting, tone: 'cyan', icon: IconClock, desc: 'Chưa có freelancer nhận', percent: formatPercent(metrics.waiting, metrics.total), percentTitle: formatPercentTitle(metrics.waiting, metrics.total) },
+    { label: 'Freelancer đang xử lý', value: metrics.processing, tone: 'indigo', icon: IconTasks, desc: 'Đã giao, chưa nộp QC/hoàn tất', percent: formatPercent(metrics.processing, metrics.total), percentTitle: formatPercentTitle(metrics.processing, metrics.total) },
+    { label: 'Task cần QC', value: metrics.review, tone: 'amber', icon: IconAlertTriangle, desc: 'Đã nộp hoặc đang được kiểm tra', percent: formatPercent(metrics.review, metrics.total), percentTitle: formatPercentTitle(metrics.review, metrics.total) },
+    { label: 'Tổng task đã hoàn thành', value: metrics.completed, tone: 'green', icon: IconCheckCircle, desc: 'Status Done', percent: formatPercent(metrics.completed, metrics.total), percentTitle: formatPercentTitle(metrics.completed, metrics.total) }
   ];
 
   return (
@@ -115,7 +130,7 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], free
 
       {/* 4 Bento KPI Cards */}
       <div className="kpi-grid qc-kpi-grid">
-        {cards.map(({ label, value, tone, icon: Icon, desc, percent }) => (
+        {cards.map(({ label, value, tone, icon: Icon, desc, percent, percentTitle }) => (
           <div className={`kpi-card qc-kpi-card tone-${tone}`} key={label}>
             <div className="kpi-top-row">
               <span className="kpi-title">{label}</span>
@@ -126,7 +141,7 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], free
                 <div className="kpi-value">{value}</div>
                 <div className="kpi-desc-status">{desc}</div>
               </div>
-              <div className="kpi-mini-circle">{percent}</div>
+              <div className="kpi-mini-circle" title={percentTitle} aria-label={`${percent}, ${percentTitle}`}>{percent}</div>
             </div>
           </div>
         ))}
@@ -413,7 +428,8 @@ function getUpcomingTaskStatus(item) {
   const dueAt = getDueDate(item);
   if (!dueAt) return { label: 'Sắp đến hạn', className: 'pending' };
   const dayMonth = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit' }).format(dueAt);
-  return { label: `Hôm nay ${dayMonth}`, className: 'pending' };
+  const daysUntilDue = getDaysUntil(dueAt);
+  return { label: daysUntilDue === 0 ? `Hôm nay ${dayMonth}` : `Còn ${daysUntilDue} ngày · ${dayMonth}`, className: 'pending' };
 }
 
 function getCalendarDateKey(value) {

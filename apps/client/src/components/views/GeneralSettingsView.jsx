@@ -9,8 +9,6 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
   const [googleSheetUrl, setGoogleSheetUrl] = useState(generalSettings?.googleSheetUrl || '');
   const [googleSheetTabs, setGoogleSheetTabs] = useState(generalSettings?.googleSheetTabs || {});
   const [googleDriveFolders, setGoogleDriveFolders] = useState(generalSettings?.googleDriveFolders || {});
-  const [googleDriveRawTransfer, setGoogleDriveRawTransfer] = useState(generalSettings?.googleDriveRawTransfer || { enabled: false, mappings: {} });
-  const [googleDriveRawTransferStatus, setGoogleDriveRawTransferStatus] = useState(null);
   const [checklists, setChecklists] = useState(generalSettings?.checklists || {});
   const [googleSheetAutoSync, setGoogleSheetAutoSync] = useState(generalSettings?.googleSheetAutoSync === true);
   const [newField, setNewField] = useState('');
@@ -30,34 +28,11 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
     const configuredDriveFolders = generalSettings?.googleDriveFolders || {};
     const defaultDriveFolders = Object.fromEntries(fields.map((field) => [field.name, '']));
     setGoogleDriveFolders({ ...defaultDriveFolders, ...configuredDriveFolders });
-    const configuredRawTransfer = generalSettings?.googleDriveRawTransfer || { enabled: false, mappings: {} };
-    const defaultRawMappings = Object.fromEntries(fields.map((field) => [field.name, {
-      enabled: false,
-      sourceFolderId: '',
-      destinationFolderId: '',
-      sourceRawPath: '0-RAW',
-      destinationRawPath: '2.RAW'
-    }]));
-    setGoogleDriveRawTransfer({ ...configuredRawTransfer, mappings: { ...defaultRawMappings, ...(configuredRawTransfer.mappings || {}) } });
     const configuredChecklists = generalSettings?.checklists && typeof generalSettings.checklists === 'object' ? generalSettings.checklists : {};
     const defaultChecklists = Object.fromEntries(fields.map((field) => [field.name, Array.isArray(configuredChecklists[field.name]) ? configuredChecklists[field.name] : []]));
     setChecklists({ ...configuredChecklists, ...defaultChecklists });
     setGoogleSheetAutoSync(generalSettings?.googleSheetAutoSync === true);
   }, [generalSettings, fields]);
-
-  useEffect(() => {
-    let active = true;
-    const loadStatus = async () => {
-      try {
-        const result = await api.getGoogleDriveRawTransferStatus();
-        if (active) setGoogleDriveRawTransferStatus(result);
-      } catch { /* Status is optional while the backend is unavailable. */ }
-    };
-    loadStatus();
-    const timer = window.setInterval(loadStatus, 30000);
-    window.addEventListener('focus', loadStatus);
-    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', loadStatus); };
-  }, []);
 
   const addField = async (event) => {
     event.preventDefault();
@@ -105,80 +80,6 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
 
   const updateGoogleDriveFolder = (fieldName, value) => {
     setGoogleDriveFolders((current) => ({ ...current, [fieldName]: value }));
-  };
-
-  const updateGoogleDriveRawTransfer = (fieldName, key, value) => {
-    setGoogleDriveRawTransfer((current) => ({
-      ...current,
-      mappings: {
-        ...(current.mappings || {}),
-        [fieldName]: { ...(current.mappings?.[fieldName] || {}), [key]: value }
-      }
-    }));
-  };
-
-  const connectGoogleDriveTransferAccount = async () => {
-    const popup = window.open('about:blank', '_blank');
-    setIsSaving(true);
-    try {
-      const result = await api.startGoogleDriveRawTransferOAuth();
-      if (popup) popup.location.href = result.authorizeUrl;
-      else window.location.href = result.authorizeUrl;
-    } catch (error) {
-      popup?.close();
-      showToast(error.message || 'Không thể bắt đầu kết nối Google Drive.', 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const disconnectGoogleDriveTransferAccount = async () => {
-    setIsSaving(true);
-    try {
-      await api.disconnectGoogleDriveRawTransferOAuth();
-      setGoogleDriveRawTransferStatus((current) => ({ ...current, isConnected: false, connectedEmail: '' }));
-      showToast('Đã ngắt kết nối tài khoản tạo bản sao.', 'success');
-    } catch (error) {
-      showToast(error.message || 'Không thể ngắt kết nối tài khoản Google.', 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const saveGoogleDriveRawTransfer = async () => {
-    setIsSaving(true);
-    try {
-      await api.updateGeneralSettings({ googleDriveRawTransfer });
-      showToast('Đã lưu cấu hình sao chép file raw.', 'success');
-      await onRefresh?.();
-    } catch (error) {
-      showToast(error.message || 'Không thể lưu cấu hình sao chép file raw.', 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const syncGoogleDriveRawFiles = async () => {
-    setIsSaving(true);
-    try {
-      await api.updateGeneralSettings({ googleDriveRawTransfer });
-      const result = await api.syncGoogleDriveRawFiles();
-      setGoogleDriveRawTransferStatus({
-        ...result,
-        lastSyncedAt: result.lastSyncedAt,
-        lastCopiedCount: result.copied,
-        lastScannedCount: result.scanned,
-        lastSkippedCount: result.skipped,
-        lastAlreadyPresentCount: result.alreadyPresent,
-        lastError: ''
-      });
-      showToast(`Đã quét ${result.scanned || 0} file: sao chép ${result.copied || 0}, đã có file cùng tên ${result.alreadyPresent || 0}, bỏ qua ${result.skipped || 0} folder truyện hoặc đường dẫn RAW chưa tìm thấy.`, 'success');
-      await onRefresh?.();
-    } catch (error) {
-      showToast(error.message || 'Không thể sao chép file raw.', 'error');
-    } finally {
-      setIsSaving(false);
-    }
   };
 
   const updateChecklistDraft = (fieldName, key, value) => {
@@ -385,70 +286,6 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
         </form>
         {generalSettings?.googleSheetLastSyncedAt && <p className="form-help general-settings-sync-status">Lần đồng bộ gần nhất: {new Date(generalSettings.googleSheetLastSyncedAt).toLocaleString('vi-VN')} · {generalSettings.googleSheetLastSyncCount ?? 0} dòng hợp lệ</p>}
         {generalSettings?.googleSheetLastSyncError && <p className="form-help general-settings-sync-error">Cảnh báo/lỗi gần nhất: {getUserFacingErrorMessage(generalSettings.googleSheetLastSyncError, 'Google Sheet chưa đồng bộ thành công.')}</p>}
-      </section>
-
-      <section className="glass-panel general-settings-panel">
-        <div className="section-heading">
-          <div>
-            <span className="qc-kicker">GOOGLE DRIVE</span>
-            <h3>Tự sao chép file raw cho freelancer</h3>
-          </div>
-        </div>
-        <div className="general-settings-actions">
-          {googleDriveRawTransferStatus?.isConnected ? (
-            <>
-              <span className="form-help">Tài khoản tạo bản sao: <strong>{googleDriveRawTransferStatus.connectedEmail}</strong></span>
-              <button type="button" className="btn btn-outline" onClick={connectGoogleDriveTransferAccount} disabled={isSaving}>Đổi tài khoản</button>
-              <button type="button" className="btn btn-secondary" onClick={disconnectGoogleDriveTransferAccount} disabled={isSaving}>Ngắt kết nối</button>
-            </>
-          ) : (
-            <button type="button" className="btn btn-secondary" onClick={connectGoogleDriveTransferAccount} disabled={isSaving}>{isSaving ? 'Đang kết nối...' : 'Chọn tài khoản Google tạo bản sao'}</button>
-          )}
-        </div>
-        {fields.map((field) => {
-          const mapping = googleDriveRawTransfer.mappings?.[field.name] || { enabled: false, sourceRawPath: '0-RAW', destinationRawPath: '2.RAW' };
-          return (
-            <div className="general-settings-drive-grid" key={`raw-transfer-${field.id || field.name}`}>
-              <div className="general-settings-subheading">
-                <span className="field-badge">{field.name}</span>
-                <label className="general-settings-checkbox">
-                  <input type="checkbox" checked={mapping.enabled === true} onChange={(event) => updateGoogleDriveRawTransfer(field.name, 'enabled', event.target.checked)} disabled={isSaving} />
-                  <span>Áp dụng cho mảng này</span>
-                </label>
-              </div>
-              <div className="general-settings-tab-grid">
-                <div className="form-group">
-                  <label className="form-label" htmlFor={`raw-source-drive-folder-${field.id || field.name}`}>Folder gốc công ty · {field.name}</label>
-                  <input id={`raw-source-drive-folder-${field.id || field.name}`} className="form-input" value={mapping.sourceFolderId || ''} onChange={(event) => updateGoogleDriveRawTransfer(field.name, 'sourceFolderId', event.target.value)} placeholder="Link hoặc ID, ví dụ JP_công_ty" disabled={isSaving} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor={`raw-destination-drive-folder-${field.id || field.name}`}>Folder gốc freelancer · {field.name}</label>
-                  <input id={`raw-destination-drive-folder-${field.id || field.name}`} className="form-input" value={mapping.destinationFolderId || ''} onChange={(event) => updateGoogleDriveRawTransfer(field.name, 'destinationFolderId', event.target.value)} placeholder="Link hoặc ID, ví dụ JP" disabled={isSaving} />
-                </div>
-              </div>
-              <div className="general-settings-tab-grid">
-                <div className="form-group">
-                  <label className="form-label" htmlFor={`raw-source-relative-path-${field.id || field.name}`}>Đường dẫn RAW nguồn bên trong folder truyện</label>
-                  <input id={`raw-source-relative-path-${field.id || field.name}`} className="form-input" value={mapping.sourceRawPath ?? '0-RAW'} onChange={(event) => updateGoogleDriveRawTransfer(field.name, 'sourceRawPath', event.target.value)} placeholder="Ví dụ: 0-RAW hoặc RAW/Original" disabled={isSaving} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor={`raw-destination-relative-path-${field.id || field.name}`}>Đường dẫn RAW đích bên trong folder truyện</label>
-                  <input id={`raw-destination-relative-path-${field.id || field.name}`} className="form-input" value={mapping.destinationRawPath ?? '2.RAW'} onChange={(event) => updateGoogleDriveRawTransfer(field.name, 'destinationRawPath', event.target.value)} placeholder="Ví dụ: 2.RAW hoặc RAW/Source" disabled={isSaving} />
-                </div>
-              </div>
-            </div>
-          );
-        })}
-        <label className="general-settings-checkbox">
-          <input type="checkbox" checked={googleDriveRawTransfer.enabled === true} onChange={(event) => setGoogleDriveRawTransfer((current) => ({ ...current, enabled: event.target.checked }))} disabled={isSaving} />
-          <span>Bật lịch tự động sao chép mỗi phút cho các mảng đã chọn và cấu hình đủ</span>
-        </label>
-        <div className="general-settings-actions">
-          <button type="button" className="btn btn-primary" onClick={saveGoogleDriveRawTransfer} disabled={isSaving}>{isSaving ? 'Đang lưu...' : 'Lưu cấu hình raw'}</button>
-          <button type="button" className="btn btn-secondary" onClick={syncGoogleDriveRawFiles} disabled={isSaving || !Object.values(googleDriveRawTransfer.mappings || {}).some((mapping) => mapping.enabled === true && mapping.sourceFolderId && mapping.destinationFolderId && mapping.sourceRawPath && mapping.destinationRawPath)}>Sao chép ngay</button>
-        </div>
-        {googleDriveRawTransferStatus?.lastSyncedAt && <p className="form-help general-settings-sync-status">Lần kiểm tra gần nhất: {new Date(googleDriveRawTransferStatus.lastSyncedAt).toLocaleString('vi-VN')} · đã quét {googleDriveRawTransferStatus.lastScannedCount ?? 0}, sao chép {googleDriveRawTransferStatus.lastCopiedCount ?? 0}, đã có tên trùng {googleDriveRawTransferStatus.lastAlreadyPresentCount ?? 0}, folder thiếu {googleDriveRawTransferStatus.lastSkippedCount ?? 0}</p>}
-        {googleDriveRawTransferStatus?.lastError && <p className="form-help general-settings-sync-error">Lỗi gần nhất: {getUserFacingErrorMessage(googleDriveRawTransferStatus.lastError, 'Sao chép file raw chưa thành công.')}</p>}
       </section>
 
       <section className="glass-panel qc-table-panel">

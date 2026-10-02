@@ -164,10 +164,6 @@ export const api = {
     method: 'PATCH',
     body: JSON.stringify(settings)
   }),
-  getGoogleDriveRawTransferStatus: () => request('/google-drive/raw-transfer/status', { cache: 'no-store' }),
-  startGoogleDriveRawTransferOAuth: () => request('/google-drive/raw-transfer/oauth/start', { method: 'POST' }),
-  disconnectGoogleDriveRawTransferOAuth: () => request('/google-drive/raw-transfer/oauth', { method: 'DELETE' }),
-  syncGoogleDriveRawFiles: () => request('/google-drive/raw-transfer/sync', { method: 'POST', timeoutMs: 120000 }),
   syncGoogleSheet: () => request('/google-sheet/sync', { method: 'POST', timeoutMs: 120000 }),
   getErrors: () => request('/errors'),
   getErrorFixChecks: () => request('/errors/fix-check', { cache: 'no-store', timeoutMs: 120000 }),
