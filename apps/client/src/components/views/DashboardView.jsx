@@ -98,13 +98,13 @@ export function DashboardView({ dashboard = {}, tasks = [], deadlines = [], free
   }, [deadlines, tasks]);
 
   const cards = isFreelancer ? [
-    { label: 'Tổng task đang xử lý', value: freelancerMetrics.doing, tone: 'cyan', icon: IconTasks, desc: 'Đã giao, chưa nộp QC', percent: formatPercent(freelancerMetrics.doing, freelancerMetrics.total), percentTitle: formatPercentTitle(freelancerMetrics.doing, freelancerMetrics.total) },
+    { label: 'Tổng task đang xử lý', value: freelancerMetrics.doing, tone: 'cyan', icon: IconTasks, desc: 'Đang thực hiện', percent: formatPercent(freelancerMetrics.doing, freelancerMetrics.total), percentTitle: formatPercentTitle(freelancerMetrics.doing, freelancerMetrics.total) },
     { label: 'Task đến hạn trong 3 ngày', value: freelancerMetrics.upcoming, tone: 'amber', icon: IconAlertTriangle, desc: 'Trong số task chưa nộp', percent: formatPercent(freelancerMetrics.upcoming, freelancerMetrics.active), percentTitle: formatPercentTitle(freelancerMetrics.upcoming, freelancerMetrics.active, 'task chưa nộp') },
     { label: 'Task đã nộp / hoàn tất', value: freelancerMetrics.completed, tone: 'green', icon: IconCheckCircle, desc: 'Đã gửi QC hoặc được duyệt', percent: formatPercent(freelancerMetrics.completed, freelancerMetrics.total), percentTitle: formatPercentTitle(freelancerMetrics.completed, freelancerMetrics.total) }
   ] : [
-    { label: 'Tổng task chờ giao', value: metrics.waiting, tone: 'cyan', icon: IconClock, desc: 'Chưa có freelancer nhận', percent: formatPercent(metrics.waiting, metrics.total), percentTitle: formatPercentTitle(metrics.waiting, metrics.total) },
-    { label: 'Freelancer đang xử lý', value: metrics.processing, tone: 'indigo', icon: IconTasks, desc: 'Đã giao, chưa nộp QC/hoàn tất', percent: formatPercent(metrics.processing, metrics.total), percentTitle: formatPercentTitle(metrics.processing, metrics.total) },
-    { label: 'Task cần QC', value: metrics.review, tone: 'amber', icon: IconAlertTriangle, desc: 'Đã nộp hoặc đang được kiểm tra', percent: formatPercent(metrics.review, metrics.total), percentTitle: formatPercentTitle(metrics.review, metrics.total) },
+    { label: 'Tổng task chờ giao', value: metrics.waiting, tone: 'cyan', icon: IconClock, desc: 'Chưa giao', percent: formatPercent(metrics.waiting, metrics.total), percentTitle: formatPercentTitle(metrics.waiting, metrics.total) },
+    { label: 'Các task đang tiến hành', value: metrics.processing, tone: 'indigo', icon: IconTasks, desc: 'Đang thực hiện', percent: formatPercent(metrics.processing, metrics.total), percentTitle: formatPercentTitle(metrics.processing, metrics.total) },
+    { label: 'Task cần QC', value: metrics.review, tone: 'amber', icon: IconAlertTriangle, desc: 'Cần QC gấp', percent: formatPercent(metrics.review, metrics.total), percentTitle: formatPercentTitle(metrics.review, metrics.total) },
     { label: 'Tổng task đã hoàn thành', value: metrics.completed, tone: 'green', icon: IconCheckCircle, desc: 'Status Done', percent: formatPercent(metrics.completed, metrics.total), percentTitle: formatPercentTitle(metrics.completed, metrics.total) }
   ];
 

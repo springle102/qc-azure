@@ -391,15 +391,14 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
               {filteredDeadlines.length === 0 ? (
                 <tr><td colSpan={visibleColumns.length}><div className="empty-state table-empty"><IconTasks size={24} /><strong>{isLoading ? 'Đang tải dữ liệu...' : 'Chưa có deadline trong hệ thống.'}</strong></div></td></tr>
               ) : filteredDeadlines.map((item, index) => {
-                const overdue = isDeadlineOverdue(item);
-                const overdueSubmitted = overdue && isSubmittedStatus(item, statusOverrides);
+                const overdueDoing = isDeadlineOverdue(item) && isDoingStatus(item, statusOverrides);
                 return (
                 <tr
                   key={`${item.seriesId || 'series'}-${item.chapterNumber || index}`}
-                  className={overdue && !overdueSubmitted ? 'deadline-row-overdue' : undefined}
+                  className={overdueDoing ? 'deadline-row-overdue' : undefined}
                 >
                   {visibleColumns.map(([key]) => (
-                    <td key={key} className={`deadline-column deadline-column-${key}${key === 'submittedAt' && overdueSubmitted ? ' deadline-submitted-late' : ''}`}>
+                    <td key={key} className={`deadline-column deadline-column-${key}`}>
                       {key === 'edit' ? (
                         <div className="deadline-action-buttons">
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(item)} disabled={deletingKey === String(item.seriesId) + '-' + String(item.chapterNumber)}>
@@ -816,8 +815,8 @@ function isDeadlineOverdue(item) {
   return dueDateKey < todayKey;
 }
 
-function isSubmittedStatus(item, statusOverrides = {}) {
-  return String(getStatusDisplayValue(item, statusOverrides) ?? '').trim().toLowerCase() === 'submitted';
+function isDoingStatus(item, statusOverrides = {}) {
+  return String(getStatusDisplayValue(item, statusOverrides) ?? '').trim().toLowerCase() === 'doing';
 }
 
 function getVisibleStatusOptions(readOnly) {

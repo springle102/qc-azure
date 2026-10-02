@@ -5943,14 +5943,6 @@
   background: #fecaca !important;
 }
 
-.deadline-table td.deadline-submitted-late .submitted-at-cell > span:first-child {
-  color: #f87171;
-  font-weight: 700;
-}
-:root[data-theme='light'] .deadline-table td.deadline-submitted-late .submitted-at-cell > span:first-child {
-  color: #b91c1c;
-}
-
 :root[data-theme='light'] .auth-card {
   background: #ffffff;
   border-color: #cbd5e1;
