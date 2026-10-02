@@ -37,23 +37,25 @@ test('milestones unlock independently and switches can disable either or both', 
   assert.equal(calculateMonthlyBonus(chapters(25), { ...rule, kpiEnabled: false, afterEnabled: false }).total, 0);
 });
 
-test('after-milestone partial chapters get no bonus without blocking later full chapters', () => {
+test('after-milestone chapters below 100% get no bonus while chapters at or above 100% do', () => {
   const tasks = chapters(25);
   tasks[20].completionPercent = 80;
   tasks[21].completionPercent = 150;
   const result = calculateMonthlyBonus(tasks, rule);
-  assert.equal(result.after.rewardedCount, 3);
-  assert.equal(result.total, 215000);
+  assert.equal(result.after.rewardedCount, 4);
+  assert.equal(result.total, 220000);
 });
 
-test('missing percentages fail the 100% gate, numeric strings pass', () => {
-  for (const value of [null, undefined, '', 99, 101, 200]) {
+test('missing or below-100 percentages fail the gate, numeric strings at or above 100 pass', () => {
+  for (const value of [null, undefined, '', 99]) {
     const tasks = chapters(21);
     tasks[0].completionPercent = value;
     assert.equal(calculateMonthlyBonus(tasks, rule).total, 0);
   }
   const tasks = chapters(20);
   tasks[0].completionPercent = '100';
+  assert.equal(calculateMonthlyBonus(tasks, rule).total, 200000);
+  tasks[0].completionPercent = '140';
   assert.equal(calculateMonthlyBonus(tasks, rule).total, 200000);
 });
 

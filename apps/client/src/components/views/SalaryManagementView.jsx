@@ -168,7 +168,7 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
             </div>
             <div className="modal-body bonus-policy-form">
               {(selectedBonus.bonusByField || []).map((summary) => <section className="bonus-policy-card" key={`${summary.salaryMonth}:${summary.field}`}>
-                <h4>{summary.field || 'Chưa có mảng'}{summary.salaryMonth ? ` · ${summary.salaryMonth}` : ''} · {summary.chapterCount} chap, {summary.fullCompletionCount} chap đạt 100%</h4>
+                <h4>{summary.field || 'Chưa có mảng'}{summary.salaryMonth ? ` · ${summary.salaryMonth}` : ''} · {summary.chapterCount} chap, {summary.fullCompletionCount} chap đạt từ 100%</h4>
                 <BonusGateDetails title="Thưởng KPI" gate={summary.kpi} />
                 <BonusGateDetails title="Thưởng sau mốc" gate={summary.after} />
                 <p>Sau mốc: {summary.after.rewardedCount} chap × {formatSalary(summary.after.amountPerChapter)} = {formatSalary(summary.after.amount)}</p>
@@ -210,7 +210,7 @@ function BonusGateDetails({ title, gate }) {
   return <div>
     <p>{title} · Mốc {gate.threshold} chap: {gate.unlocked ? 'Đã đạt' : 'Chưa đạt'} · {formatSalary(gate.amount)}</p>
     {gate.missingCount > 0 && <p className="form-help">Còn thiếu {gate.missingCount} chap để đạt mốc.</p>}
-    {gate.blockedChapters.length > 0 && <details><summary>{gate.blockedChapters.length} chap trong mốc chưa đạt 100%</summary>
+    {gate.blockedChapters.length > 0 && <details><summary>{gate.blockedChapters.length} chap trong mốc dưới 100%</summary>
       <ul className="bonus-policy-history">{gate.blockedChapters.map((chapter) => <li key={`${chapter.seriesId}:${chapter.chapterNumber}`}>ID {chapter.seriesId} · Chapter {chapter.chapterNumber}: {chapter.completionPercent ?? 'Chưa nhập'}%</li>)}</ul>
     </details>}
   </div>;

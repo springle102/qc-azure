@@ -65,7 +65,7 @@ export function validateBonusRule(payload) {
 
 export function isFullCompletion(task) {
   return task.completionPercent !== null && task.completionPercent !== undefined
-    && String(task.completionPercent).trim() !== '' && Number(task.completionPercent) === 100;
+    && String(task.completionPercent).trim() !== '' && Number(task.completionPercent) >= 100;
 }
 
 export function calculateMonthlyBonus(tasks, rule) {

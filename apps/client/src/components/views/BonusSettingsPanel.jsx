@@ -50,7 +50,7 @@ export function BonusSettingsPanel({ field, settings, isLoading, onRefresh }) {
             <label className="form-group">Tiền thưởng một lần (đồng)
               <input className="form-input" type="number" min="0" step="0.01" required value={config.kpiAmount} disabled={!config.kpiEnabled} onChange={(event) => update('kpiAmount', event.target.value)} />
             </label>
-            <p className="form-help">Đủ {config.kpiThreshold || '…'} chap đầu tiên đều đạt 100% → nhận {money(config.kpiAmount)} một lần/tháng.</p>
+            <p className="form-help">Đủ {config.kpiThreshold || '…'} chap đầu tiên đều đạt từ 100% → nhận {money(config.kpiAmount)} một lần/tháng.</p>
           </fieldset>
           <fieldset className="bonus-policy-card" disabled={isSaving || isLoading}>
             <legend>Thưởng sau mốc hoàn thành</legend>
@@ -61,7 +61,7 @@ export function BonusSettingsPanel({ field, settings, isLoading, onRefresh }) {
             <label className="form-group">Thưởng mỗi chap sau mốc (đồng)
               <input className="form-input" type="number" min="0" step="0.01" required value={config.afterAmount} disabled={!config.afterEnabled} onChange={(event) => update('afterAmount', event.target.value)} />
             </label>
-            <p className="form-help">{config.afterThreshold || '…'} chap đầu đều đạt 100% → thưởng {money(config.afterAmount)}/chap từ chap thứ {Number(config.afterThreshold || 0) + 1}. Chap sau mốc cũng phải đạt 100%.</p>
+            <p className="form-help">{config.afterThreshold || '…'} chap đầu đều đạt từ 100% → thưởng {money(config.afterAmount)}/chap từ chap thứ {Number(config.afterThreshold || 0) + 1}. Chap sau mốc cũng phải đạt từ 100%.</p>
           </fieldset>
         </div>
         <fieldset className="bonus-policy-card" disabled={isSaving || isLoading}>
