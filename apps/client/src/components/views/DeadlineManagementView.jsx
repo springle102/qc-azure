@@ -394,14 +394,14 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
                 const overdue = isDeadlineOverdue(item);
                 const doing = isDoingStatus(item, statusOverrides);
                 const overdueDoing = overdue && doing;
-                const overdueNotDoing = overdue && !doing;
+                const submittedLate = !doing && isSubmissionLate(item);
                 return (
                 <tr
                   key={`${item.seriesId || 'series'}-${item.chapterNumber || index}`}
                   className={overdueDoing ? 'deadline-row-overdue' : undefined}
                 >
                   {visibleColumns.map(([key]) => (
-                    <td key={key} className={`deadline-column deadline-column-${key}${key === 'submittedAt' && overdueNotDoing ? ' deadline-submitted-late' : ''}`}>
+                    <td key={key} className={`deadline-column deadline-column-${key}${key === 'submittedAt' && submittedLate ? ' deadline-submitted-late' : ''}`}>
                       {key === 'edit' ? (
                         <div className="deadline-action-buttons">
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(item)} disabled={deletingKey === String(item.seriesId) + '-' + String(item.chapterNumber)}>
@@ -812,6 +812,12 @@ function getStatusDisplayValue(item, overrides = {}) {
 function isDeadlineOverdue(item) {
   const deadlineEnd = getDeadlineEndTimestamp(item);
   return deadlineEnd !== null && Date.now() > deadlineEnd;
+}
+
+function isSubmissionLate(item) {
+  const deadlineEnd = getDeadlineEndTimestamp(item);
+  const submittedAt = new Date(item?.submittedAt).getTime();
+  return deadlineEnd !== null && Number.isFinite(submittedAt) && submittedAt > deadlineEnd;
 }
 
 function getDeadlineEndTimestamp(item) {
