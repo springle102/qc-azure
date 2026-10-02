@@ -391,14 +391,17 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
               {filteredDeadlines.length === 0 ? (
                 <tr><td colSpan={visibleColumns.length}><div className="empty-state table-empty"><IconTasks size={24} /><strong>{isLoading ? 'Đang tải dữ liệu...' : 'Chưa có deadline trong hệ thống.'}</strong></div></td></tr>
               ) : filteredDeadlines.map((item, index) => {
-                const overdueDoing = isDeadlineOverdue(item) && isDoingStatus(item, statusOverrides);
+                const overdue = isDeadlineOverdue(item);
+                const doing = isDoingStatus(item, statusOverrides);
+                const overdueDoing = overdue && doing;
+                const overdueNotDoing = overdue && !doing;
                 return (
                 <tr
                   key={`${item.seriesId || 'series'}-${item.chapterNumber || index}`}
                   className={overdueDoing ? 'deadline-row-overdue' : undefined}
                 >
                   {visibleColumns.map(([key]) => (
-                    <td key={key} className={`deadline-column deadline-column-${key}`}>
+                    <td key={key} className={`deadline-column deadline-column-${key}${key === 'submittedAt' && overdueNotDoing ? ' deadline-submitted-late' : ''}`}>
                       {key === 'edit' ? (
                         <div className="deadline-action-buttons">
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(item)} disabled={deletingKey === String(item.seriesId) + '-' + String(item.chapterNumber)}>
@@ -807,12 +810,15 @@ function getStatusDisplayValue(item, overrides = {}) {
 }
 
 function isDeadlineOverdue(item) {
+  const deadlineEnd = getDeadlineEndTimestamp(item);
+  return deadlineEnd !== null && Date.now() > deadlineEnd;
+}
+
+function getDeadlineEndTimestamp(item) {
   const dueDate = String(item?.endTask ?? '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!dueDate) return false;
-  const today = new Date();
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  const dueDateKey = `${dueDate[1]}-${dueDate[2]}-${dueDate[3]}`;
-  return dueDateKey < todayKey;
+  if (!dueDate) return null;
+  const deadlineEnd = Date.parse(`${dueDate[1]}-${dueDate[2]}-${dueDate[3]}T23:59:59.999+07:00`);
+  return Number.isFinite(deadlineEnd) ? deadlineEnd : null;
 }
 
 function isDoingStatus(item, statusOverrides = {}) {
