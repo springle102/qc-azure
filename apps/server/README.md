@@ -90,6 +90,7 @@ Chạy migration `docs/migrations/20260929_add_account_roles.sql` trước. Trig
 - `PORT`
 - `DATABASE_URL` (PostgreSQL trực tiếp, được ưu tiên nếu có)
 - `DATABASE_SSL_REJECT_UNAUTHORIZED` (mặc định `true`; chỉ đặt `false` trong `.env` local nếu mạng thay chứng chỉ TLS Supabase. Kết nối vẫn mã hóa nhưng không xác minh danh tính chứng chỉ; production nên dùng CA Supabase để xác minh.)
+- `NODE_EXTRA_CA_CERTS` (Docker backend đã đặt tới `certs/supabase-ca.crt`, CA Supabase công khai được đóng gói cùng image. Nếu chạy Node trực tiếp, đặt biến này trong shell trước khi khởi động Node; chỉ đặt trong `.env` không có hiệu lực.)
 - `GUIDE_URL`
 - `RESOURCE_URL`
 - `SUPABASE_URL`

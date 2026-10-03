@@ -9,6 +9,8 @@ COPY apps/server/package.json apps/server/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 # Runtime modules only; secrets, parked features and tests are not copied.
 COPY apps/server/*.js apps/server/*.mjs ./
+COPY apps/server/certs/supabase-ca.crt ./certs/supabase-ca.crt
+ENV NODE_EXTRA_CA_CERTS=/app/apps/server/certs/supabase-ca.crt
 USER node
 EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

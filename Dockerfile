@@ -18,6 +18,7 @@ WORKDIR /app/apps/server
 COPY apps/server/package.json apps/server/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY apps/server/ ./
+ENV NODE_EXTRA_CA_CERTS=/app/apps/server/certs/supabase-ca.crt
 USER node
 EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

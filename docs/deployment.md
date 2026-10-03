@@ -56,6 +56,19 @@ Nếu môi trường kết nối chỉ có IPv4, chọn Shared Session Pooler (p
 
 Giữ TLS verification bật. Nếu Railway báo lỗi chứng chỉ, xử lý CA phù hợp với Supabase thay vì sao chép thiết lập bỏ xác minh từ mạng local. Storage cho avatar/QR/screenshot cần cấu hình URL project và khóa backend ngay cả khi database dùng kết nối PostgreSQL trực tiếp.
 
+### Chứng chỉ CA Supabase cho Docker backend
+
+`apps/server/certs/supabase-ca.crt` là chứng chỉ CA công khai tải từ Supabase Database > Settings > SSL Configuration > Download Certificate, không phải private key hay thông tin đăng nhập. `Dockerfile.railway` và target `server` của Docker local đã đóng gói CA này và đặt `NODE_EXTRA_CA_CERTS=/app/apps/server/certs/supabase-ca.crt` trước khi Node khởi động. Không cần upload file riêng lên Railway hoặc cấu hình đường dẫn Windows.
+
+- Commit/push chứng chỉ và Dockerfile đã sửa, rồi build/deploy lại backend.
+- Giữ `DATABASE_SSL_REJECT_UNAUTHORIZED=true` trong Railway Variables. Xóa `NODE_TLS_REJECT_UNAUTHORIZED=0` nếu từng thêm.
+- Nếu Railway có `NODE_EXTRA_CA_CERTS` cũ, xóa biến ghi đè đó hoặc đặt đúng đường dẫn Linux trên.
+- Không để các tham số `sslmode`, `sslrootcert`, `sslcert`, `sslkey`, `ssl` hoặc `uselibpqcompat` trong `DATABASE_URL` ghi đè cấu hình xác minh TLS của backend. Giữ nguyên host/port/username/password/database và các tham số không liên quan TLS; không đưa URL có mật khẩu vào log hoặc chat.
+- Sau deploy, thử đăng nhập và đọc dữ liệu. `/api/health` không thực hiện truy vấn database.
+- CA này có hạn tới 2031-04-26; khi Supabase thay CA, tải chứng chỉ mới từ Dashboard, cập nhật file và build lại image. Không lấy CA từ nguồn không tin cậy.
+
+Khi chạy Node trực tiếp trên PowerShell (không dùng Docker), từ gốc repository đặt `$env:NODE_EXTRA_CA_CERTS = (Resolve-Path 'apps/server/certs/supabase-ca.crt').Path` trước khi chạy `npm run dev`. Node chỉ đọc biến này khi tiến trình khởi động, nên dotenv không thể bật nó sau đó.
+
 ## 3. Frontend Cloudflare Pages
 
 Hướng dẫn này dùng Pages (frontend tĩnh React/Vite). Không deploy Dockerfile hoặc Compose lên Pages.
