@@ -37,25 +37,26 @@ export function BonusSettingsPanel({ field, settings, isLoading, onRefresh }) {
     <section className="glass-panel bonus-settings-panel">
       <div className="bonus-settings-header">
         <span className="qc-kicker">BONUS FREELANCER · {field}</span>
-        <h3>Thưởng theo tháng — {field}</h3>
+        <h3>Thưởng cộng dồn — {field}</h3>
+        <p className="form-help">Tính trên tất cả chap đã tick Thanh toán của mỗi freelancer trong mảng này, không chia theo tháng hoặc lọc theo status.</p>
       </div>
       <form className="bonus-policy-form" onSubmit={save}>
         <div className="bonus-policy-grid">
           <fieldset className="bonus-policy-card" disabled={isSaving || isLoading}>
             <legend>Thưởng đạt KPI</legend>
             <label className="bonus-policy-toggle"><input type="checkbox" checked={config.kpiEnabled} onChange={(event) => update('kpiEnabled', event.target.checked)} /> Bật thưởng KPI</label>
-            <label className="form-group">Mốc KPI (chap/tháng)
+            <label className="form-group">Mốc KPI (chap)
               <input className="form-input" type="number" min="1" max="1000000" step="1" required value={config.kpiThreshold} disabled={!config.kpiEnabled} onChange={(event) => update('kpiThreshold', event.target.value)} />
             </label>
             <label className="form-group">Tiền thưởng một lần (đồng)
               <input className="form-input" type="number" min="0" step="0.01" required value={config.kpiAmount} disabled={!config.kpiEnabled} onChange={(event) => update('kpiAmount', event.target.value)} />
             </label>
-            <p className="form-help">Đủ {config.kpiThreshold || '…'} chap đầu tiên đều đạt từ 100% → nhận {money(config.kpiAmount)} một lần/tháng.</p>
+            <p className="form-help">Đủ {config.kpiThreshold || '…'} chap đầu tiên đã tick Thanh toán và đều đạt từ 100% → nhận {money(config.kpiAmount)} một lần, không đặt lại mốc mỗi tháng.</p>
           </fieldset>
           <fieldset className="bonus-policy-card" disabled={isSaving || isLoading}>
             <legend>Thưởng sau mốc hoàn thành</legend>
             <label className="bonus-policy-toggle"><input type="checkbox" checked={config.afterEnabled} onChange={(event) => update('afterEnabled', event.target.checked)} /> Bật thưởng sau mốc</label>
-            <label className="form-group">Mốc cần hoàn thành (chap/tháng)
+            <label className="form-group">Mốc cần hoàn thành (chap)
               <input className="form-input" type="number" min="1" max="1000000" step="1" required value={config.afterThreshold} disabled={!config.afterEnabled} onChange={(event) => update('afterThreshold', event.target.value)} />
             </label>
             <label className="form-group">Thưởng mỗi chap sau mốc (đồng)

@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { calculateMonthlyBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, validateBonusRule } from '../bonus.mjs';
+import { calculateBonus, calculateMonthlyBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, validateBonusRule } from '../bonus.mjs';
+import { calculateBonus as calculateSharedBonus } from '../../shared/bonus.mjs';
+import { resolveBonusRule as resolveClientBonusRule } from '../../client/src/utils/bonus.mjs';
 
 const rule = { kpiEnabled: true, kpiThreshold: 20, kpiAmount: 200000,
   afterEnabled: true, afterThreshold: 20, afterAmount: 5000, qcDefaultPrice: 1000 };
@@ -107,11 +109,11 @@ function section(start, end) {
   return source.slice(from, to);
 }
 
-async function salaryResponse(tasks, user = { role: 'Admin' }, month = '2026-09', qcData = { qcs: [{ qcId: 2, name: 'QC', freelancerId: 99 }], accounts: [] }) {
+async function salaryResponse(tasks, user = { role: 'Admin' }, month = null, qcData = { qcs: [{ qcId: 2, name: 'QC', freelancerId: 99 }], accounts: [] }) {
   let handler;
   const context = {
     app: { get: (_path, _auth, callback) => { handler = callback; } }, requireAuth: () => {},
-    syncGoogleSheetIfDue: async () => {}, getSalaryMonth, isSalaryMonth, calculateMonthlyBonus, resolveBonusRule,
+    syncGoogleSheetIfDue: async () => {}, getSalaryMonth, isSalaryMonth, calculateBonus, resolveBonusRule,
     getCollection: async (key) => ({ freelancers: [{ fIld: 7, name: 'A' }, { fIld: 8, name: 'B' }], deadlines: tasks, difficultyPricing: [], ...qcData })[key],
     hasAccountRole: (account, role) => (account.roles || [account.role]).includes(role),
     getBonusSettings: async () => ({ default: { bonusPolicy: { versions: [rule] } }, byField: {} }),
@@ -131,7 +133,7 @@ async function salaryResponse(tasks, user = { role: 'Admin' }, month = '2026-09'
   return res;
 }
 
-test('salary route scopes by month, field and freelancer; totals include bonus once', async () => {
+test('legacy explicit-month query still scopes its data; totals include bonus once', async () => {
   const tasks = [
     ...chapters(21),
     ...chapters(10).map((task) => ({ ...task, seriesId: 2, type: 'Latin' })),
@@ -140,7 +142,7 @@ test('salary route scopes by month, field and freelancer; totals include bonus o
     ...chapters(30).map((task) => ({ ...task, seriesId: 5, paymentApproved: false })),
     ...chapters(1).map((task) => ({ ...task, seriesId: 6, submittedAt: null }))
   ];
-  const res = await salaryResponse(tasks);
+  const res = await salaryResponse(tasks, { role: 'Admin' }, '2026-09');
   assert.equal(res.code, 200);
   const first = res.payload.data.find((row) => row.fIld === 7);
   assert.equal(first.earnedAmount, '310000.00');
@@ -150,19 +152,19 @@ test('salary route scopes by month, field and freelancer; totals include bonus o
   assert.equal(first.bonusByField.find((item) => item.field === 'Latin').total, 0);
   assert.equal(res.payload.data.find((row) => row.fIld === 8).bonus, '200000.00');
   assert.equal(res.payload.data.find((row) => row.isQc).totalSalary, '51000.00');
-  const own = await salaryResponse(tasks, { role: 'Freelancer', freelancerId: 7 });
+  const own = await salaryResponse(tasks, { role: 'Freelancer', freelancerId: 7 }, '2026-09');
   assert.equal(own.payload.data.length, 1);
   assert.equal(own.payload.data[0].fIld, 7);
 });
 
-test('salary API rejects invalid months and reports undated tasks without assigning salary', async () => {
+test('legacy explicit-month query rejects invalid months and reports unassignable dates', async () => {
   assert.equal((await salaryResponse(chapters(1), { role: 'Admin' }, '2026-13')).code, 400);
-  const res = await salaryResponse(chapters(1).map((task) => ({ ...task, submittedAt: null })));
+  const res = await salaryResponse(chapters(1).map((task) => ({ ...task, submittedAt: null })), { role: 'Admin' }, '2026-09');
   assert.equal(res.payload.data[0].totalSalary, '0.00');
   assert.equal(res.payload.data[0].missingDateChapters.length, 1);
 });
 
-test('salary API without a month totals all periods and keeps monthly bonus milestones separate', async () => {
+test('default salary totals all approved chapters with one cumulative milestone per field', async () => {
   const tasks = [
     ...chapters(21),
     ...chapters(21).map((task) => ({ ...task, seriesId: 2, submittedAt: '2026-08-20T00:00:00Z' })),
@@ -174,36 +176,100 @@ test('salary API without a month totals all periods and keeps monthly bonus mile
   assert.equal(res.code, 200);
   const first = res.payload.data.find((row) => row.fIld === 7);
   assert.equal(first.salaryMonth, null);
-  assert.equal(first.earnedAmount, '420000.00');
-  assert.equal(first.bonus, '410000.00');
-  assert.equal(first.totalSalary, '830000.00');
-  assert.equal(first.missingDateChapters.length, 1);
-  assert.equal(first.bonusByField.find((summary) => summary.salaryMonth === '2026-08').total, 205000);
-  assert.equal(first.bonusByField.find((summary) => summary.salaryMonth === '2026-09').total, 205000);
-  assert.equal(res.payload.data.find((row) => row.isQc).totalSalary, '63000.00');
+  assert.equal(first.earnedAmount, '430000.00');
+  assert.equal(first.bonus, '315000.00');
+  assert.equal(first.totalSalary, '745000.00');
+  assert.equal(first.missingDateChapters.length, 0);
+  assert.equal(first.bonusByField.length, 1);
+  assert.equal(first.bonusByField[0].chapterCount, 43);
+  assert.equal(first.bonusByField[0].after.rewardedCount, 23);
+  assert.equal('salaryMonth' in first.bonusByField[0], false);
+  assert.equal(res.payload.data.find((row) => row.isQc).totalSalary, '64000.00');
   const own = await salaryResponse(tasks, { role: 'Freelancer', freelancerId: 7 }, null);
   assert.equal(own.payload.data.length, 1);
-  assert.equal(own.payload.data[0].totalSalary, '830000.00');
+  assert.equal(own.payload.data[0].totalSalary, '745000.00');
 });
 
-test('all-period salary does not pool chapters across the Vietnam month boundary to unlock bonus', async () => {
+test('chapters on opposite sides of the month boundary unlock one cumulative bonus', async () => {
   const tasks = [
     ...chapters(10).map((task) => ({ ...task, submittedAt: '2026-08-31T16:59:59Z' })),
     ...chapters(10).map((task) => ({ ...task, seriesId: 2, submittedAt: '2026-08-31T17:00:00Z' }))
   ];
   const res = await salaryResponse(tasks, { role: 'Admin' }, null);
   assert.equal(res.payload.data[0].earnedAmount, '200000.00');
-  assert.equal(res.payload.data[0].bonus, '0.00');
-  assert.equal(res.payload.data[0].bonusByField.length, 2);
+  assert.equal(res.payload.data[0].bonus, '200000.00');
+  assert.equal(res.payload.data[0].bonusByField.length, 1);
 });
 
-test('only Submitted/Done chapters count toward bonus; QC gets Done only', async () => {
+test('all approved workflow statuses count toward bonus; QC still gets Done only', async () => {
   const tasks = chapters(21);
   tasks[0].status = 'doing';
   tasks[1].status = 'submitted';
   const res = await salaryResponse(tasks);
-  assert.equal(res.payload.data[0].bonus, '200000.00');
+  assert.equal(res.payload.data[0].bonus, '205000.00');
   assert.equal(res.payload.data.find((row) => row.isQc).totalSalary, '19000.00');
+});
+
+test('unset, Doing, Checking and Fixing statuses all count when approved', async () => {
+  for (const status of [null, '', 'doing', 'checking', 'fixing', 'submitted', 'done']) {
+    const tasks = chapters(21).map((task) => ({ ...task, status }));
+    const res = await salaryResponse(tasks);
+    const freelancer = res.payload.data.find((row) => !row.isQc && row.fIld === 7);
+    assert.equal(freelancer.bonus, '205000.00', `status: ${status}`);
+    assert.equal(freelancer.bonusByField[0].chapterCount, 21);
+    assert.equal(res.payload.data.find((row) => row.isQc).taskCount, status === 'done' ? 21 : 0);
+  }
+});
+
+test('undated approved tasks count in salary and bonus without altering stored dates', async () => {
+  const tasks = chapters(21).map((task, index) => ({
+    ...task, submittedAt: [null, '', 'invalid', undefined][index % 4]
+  }));
+  const snapshot = structuredClone(tasks);
+  const res = await salaryResponse(tasks);
+  assert.equal(res.payload.data[0].earnedAmount, '210000.00');
+  assert.equal(res.payload.data[0].bonus, '205000.00');
+  assert.equal(res.payload.data[0].missingDateChapters.length, 0);
+  assert.deepEqual(tasks, snapshot);
+});
+
+test('approval toggles change cumulative milestones and exclude all unchecked chapters', async () => {
+  const tasks = chapters(21);
+  tasks[0].paymentApproved = false;
+  tasks[1].paymentApproved = 0;
+  assert.equal((await salaryResponse(tasks)).payload.data[0].bonus, '0.00');
+  tasks[0].paymentApproved = 1;
+  assert.equal((await salaryResponse(tasks)).payload.data[0].bonus, '200000.00');
+  tasks[1].paymentApproved = 'true';
+  assert.equal((await salaryResponse(tasks)).payload.data[0].bonus, '205000.00');
+  tasks[1].paymentApproved = 'false';
+  assert.equal((await salaryResponse(tasks)).payload.data[0].bonus, '200000.00');
+});
+
+test('fields and freelancers have independent cumulative milestones', async () => {
+  const tasks = [
+    ...chapters(10),
+    ...chapters(10).map((task) => ({ ...task, seriesId: 2, type: 'Latin' })),
+    ...chapters(10).map((task) => ({ ...task, seriesId: 3, fIld: 8 }))
+  ];
+  const res = await salaryResponse(tasks);
+  const first = res.payload.data.find((row) => !row.isQc && row.fIld === 7);
+  assert.equal(first.bonus, '0.00');
+  assert.equal(first.bonusByField.length, 2);
+  assert.equal(res.payload.data.find((row) => !row.isQc && row.fIld === 8).bonus, '0.00');
+});
+
+test('undated milestone ordering is deterministic and shared calculation stays consistent', () => {
+  const tasks = chapters(23);
+  tasks[0].submittedAt = null;
+  tasks[1].submittedAt = 'invalid';
+  tasks[0].completionPercent = 50;
+  const result = calculateBonus(tasks, rule);
+  assert.equal(result.total, 210000);
+  assert.deepEqual(calculateBonus([...tasks].reverse(), rule), result);
+  assert.deepEqual(calculateSharedBonus(tasks, rule), result);
+  assert.deepEqual(calculateMonthlyBonus(tasks, rule), result);
+  assert.deepEqual(resolveClientBonusRule({ bonusPolicy: rule }), resolveBonusRule({ bonusPolicy: rule }));
 });
 
 test('salary merges a legacy QC and their account while retaining earnings under both IDs', async () => {

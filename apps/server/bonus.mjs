@@ -66,9 +66,15 @@ export function isFullCompletion(task) {
     && String(task.completionPercent).trim() !== '' && Number(task.completionPercent) >= 100;
 }
 
-export function calculateMonthlyBonus(tasks, rule) {
+export function calculateBonus(tasks, rule) {
+  // Dates only order the milestone; they never split it into monthly groups.
+  // Put undated chapters last and use stable IDs to avoid NaN-dependent sorting.
+  const submittedTime = (task) => {
+    const timestamp = task.submittedAt ? new Date(task.submittedAt).getTime() : NaN;
+    return Number.isFinite(timestamp) ? timestamp : Infinity;
+  };
   const ordered = [...tasks].sort((a, b) => (
-    new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime()
+    submittedTime(a) - submittedTime(b)
     || String(a.seriesId).localeCompare(String(b.seriesId), 'en', { numeric: true })
     || String(a.chapterNumber).localeCompare(String(b.chapterNumber), 'en', { numeric: true })
   ));
@@ -92,3 +98,6 @@ export function calculateMonthlyBonus(tasks, rule) {
     total: (kpiCents + afterCents) / 100
   };
 }
+
+// Compatibility for existing callers; this function does not group by month.
+export const calculateMonthlyBonus = calculateBonus;

@@ -5,7 +5,7 @@ Giao diện QC cho việc theo dõi freelancer, deadline, mã QR, lương và gi
 ## Kiến trúc
 
 - **Frontend (`apps/client`)**: React 19, đóng gói và chạy phát triển bằng Vite. `src/main.jsx` khởi chạy ứng dụng; `src/App.jsx` kết nối các màn hình trong `src/components/`. Các lời gọi HTTP tập trung trong `src/services/api.js`; tiện ích nằm trong `src/utils/`.
-- **Backend (`apps/server`)**: Node.js + Express, khởi chạy từ `server.js` và cung cấp REST API cho client. Các thao tác dữ liệu được tách trong `supabaseRepository.js`; upload/xóa ảnh đại diện, mã QR và ảnh lỗi dùng `supabaseStorage.js`; quy tắc thưởng tháng được đặt trong `bonus.mjs`.
+- **Backend (`apps/server`)**: Node.js + Express, khởi chạy từ `server.js` và cung cấp REST API cho client. Các thao tác dữ liệu được tách trong `supabaseRepository.js`; upload/xóa ảnh đại diện, mã QR và ảnh lỗi dùng `supabaseStorage.js`; quy tắc thưởng cộng dồn được đặt trong `bonus.mjs`.
 - **Lưu trữ dữ liệu**: backend ưu tiên PostgreSQL khi có `DATABASE_URL`. Nếu không có, backend dùng Supabase REST khi đã cấu hình `SUPABASE_URL` và service role key; nếu chưa cấu hình nguồn dữ liệu, các collection trả về rỗng. Supabase Storage được dùng cho ảnh khi cấu hình Supabase tương ứng.
 - **Tích hợp ngoài**: backend đồng bộ deadline hai chiều với Google Sheets và tra cứu folder Google Drive để gắn link bộ truyện khi có cấu hình Service Account. Client chỉ gọi API backend, không kết nối trực tiếp tới database hoặc Google API.
 - **Logic dùng chung (`apps/shared`)**: chứa các module nghiệp vụ có bản tương ứng ở client và server; khi sửa logic chung, cần kiểm tra và giữ các bản liên quan đồng bộ.

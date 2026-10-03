@@ -3,7 +3,7 @@ import cors from 'cors';
 import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { inflateRawSync } from 'node:zlib';
-import { calculateMonthlyBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, validateBonusRule } from './bonus.mjs';
+import { calculateBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, validateBonusRule } from './bonus.mjs';
 import {
   deleteRowById,
   deleteRowsByKeys,
@@ -844,10 +844,12 @@ app.get('/api/salaries', requireAuth, async (req, res) => {
       || String(deadline.paymentApproved).toLowerCase() === 'true'
     ));
     const salaryDeadlines = payableDeadlines.filter((deadline) => {
+      // The default salary table includes every approved chapter, even without a date.
+      if (month === null) return true;
       const submittedMonth = getSalaryMonth(deadline.submittedAt);
-      return submittedMonth && (month === null || submittedMonth === month);
+      return submittedMonth === month;
     });
-    const undatedDeadlines = payableDeadlines.filter((deadline) => !getSalaryMonth(deadline.submittedAt));
+    const undatedDeadlines = month === null ? [] : payableDeadlines.filter((deadline) => !getSalaryMonth(deadline.submittedAt));
     const payableQCDebt = salaryDeadlines.filter((deadline) => getTaskStatus(deadline) === 'done');
     res.json({
       success: true,
@@ -4392,18 +4394,16 @@ function buildSalaryRows(freelancers, deadlines, bonusSettings, month = null, un
     ));
     const completedTaskCount = freelancerDeadlines.filter(isFreelancerTaskComplete).length;
     const earnedAmount = freelancerDeadlines.reduce((total, deadline) => total + getDeadlineEarning(deadline), 0);
-    const tasksByMonthAndField = new Map();
+    const tasksByField = new Map();
     freelancerDeadlines.forEach((deadline) => {
       const field = deadline.type || '';
-      const salaryMonth = getSalaryMonth(deadline.submittedAt);
-      const key = JSON.stringify([salaryMonth, field]);
-      if (!tasksByMonthAndField.has(key)) tasksByMonthAndField.set(key, { field, salaryMonth, tasks: [] });
-      if (isFreelancerTaskComplete(deadline)) tasksByMonthAndField.get(key).tasks.push(deadline);
+      if (!tasksByField.has(field)) tasksByField.set(field, []);
+      // Approval, not the workflow status, selects chapters for the bonus milestone.
+      tasksByField.get(field).push(deadline);
     });
-    const bonusByField = [...tasksByMonthAndField.values()].map(({ field, salaryMonth, tasks }) => ({
+    const bonusByField = [...tasksByField.entries()].map(([field, tasks]) => ({
       field,
-      salaryMonth,
-      ...calculateMonthlyBonus(tasks, getBonusSettingsForField(bonusSettings, field))
+      ...calculateBonus(tasks, getBonusSettingsForField(bonusSettings, field))
     }));
     const bonus = bonusByField.reduce((sum, summary) => sum + Math.round(summary.total * 100), 0) / 100;
     const bonusTaskCount = bonusByField.reduce((sum, summary) => sum + summary.after.rewardedCount, 0);

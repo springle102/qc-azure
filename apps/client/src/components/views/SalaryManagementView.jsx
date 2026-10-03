@@ -11,7 +11,6 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
   const [selectedQR, setSelectedQR] = useState(null);
   const [selectedBonus, setSelectedBonus] = useState(null);
   const members = useMemo(() => Array.isArray(salaries) ? salaries : [], [salaries]);
-  const missingDateCount = members.reduce((count, row) => count + (row.missingDateChapters?.length || 0), 0);
   const canUseScopeFilters = currentUser?.role !== 'Freelancer';
   const fieldOptions = useMemo(() => getFieldOptions(fields, members), [fields, members]);
   const roleOptions = useMemo(() => getRoleOptions(members), [members]);
@@ -103,7 +102,6 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
           )}
         </div>
 
-        {missingDateCount > 0 && <p className="salary-date-warning" role="status">Có {missingDateCount} task đã tick Thanh toán nhưng thiếu Ngày nộp hợp lệ, chưa được tính vào kỳ lương nào. Mở chi tiết Bonus của freelancer để xem task cần bổ sung.</p>}
         <div className="table-wrapper table-wrapper-flat">
             <table className="custom-table salary-table">
             <thead>
@@ -169,18 +167,15 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
               <button type="button" className="icon-button" aria-label="Đóng" onClick={() => setSelectedBonus(null)}><IconX size={18} /></button>
             </div>
             <div className="modal-body bonus-policy-form">
-              {(selectedBonus.bonusByField || []).map((summary) => <section className="bonus-policy-card" key={`${summary.salaryMonth}:${summary.field}`}>
-                <h4>{summary.field || 'Chưa có mảng'}{summary.salaryMonth ? ` · ${summary.salaryMonth}` : ''} · {summary.chapterCount} chap, {summary.fullCompletionCount} chap đạt từ 100%</h4>
+              <p className="form-help">Cộng dồn tất cả chap đã tick Thanh toán theo từng mảng, không chia theo tháng hoặc lọc theo status.</p>
+              {(selectedBonus.bonusByField || []).map((summary) => <section className="bonus-policy-card" key={summary.field}>
+                <h4>{summary.field || 'Chưa có mảng'} · {summary.chapterCount} chap, {summary.fullCompletionCount} chap đạt từ 100%</h4>
                 <BonusGateDetails title="Thưởng KPI" gate={summary.kpi} />
                 <BonusGateDetails title="Thưởng sau mốc" gate={summary.after} />
                 <p>Sau mốc: {summary.after.rewardedCount} chap × {formatSalary(summary.after.amountPerChapter)} = {formatSalary(summary.after.amount)}</p>
                 <strong>Tổng bonus mảng: {formatSalary(summary.total)}</strong>
               </section>)}
               {!selectedBonus.bonusByField?.length && <p>Chưa có chap đủ điều kiện tính bonus.</p>}
-              {selectedBonus.missingDateChapters?.length > 0 && <section className="bonus-policy-card">
-                <h4>Task thiếu Ngày nộp — chưa tính lương/bonus</h4>
-                <ul className="bonus-policy-history">{selectedBonus.missingDateChapters.map((chapter) => <li key={`${chapter.seriesId}:${chapter.chapterNumber}`}>{chapter.field} · ID {chapter.seriesId} · Chapter {chapter.chapterNumber}</li>)}</ul>
-              </section>}
               <strong>Tổng bonus: {formatSalary(selectedBonus.bonus)}</strong>
             </div>
           </div>

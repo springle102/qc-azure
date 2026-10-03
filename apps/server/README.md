@@ -6,17 +6,18 @@ Backend Node.js + Express cung cấp lớp API cho giao diện QC. Backend ưu t
 
 Triển khai backend Railway bằng `Dockerfile.railway` ở gốc repository, với Root Directory `/` và biến `RAILWAY_DOCKERFILE_PATH=Dockerfile.railway`. Không dùng Dockerfile frontend mặc định. Các biến database/Google/Storage đặt trong Railway Variables; healthcheck dùng `/api/health`. Xem [hướng dẫn triển khai](../../docs/deployment.md) cho các bước đầy đủ.
 
-### Bonus theo tháng
+### Bonus cộng dồn theo các chap đã tick Thanh toán
 
-Trước khi triển khai bonus mới, chạy `docs/migrations/20260929_monthly_bonus_policy.sql` trong Supabase SQL Editor. Migration chỉ thêm cột JSONB `BonusSettings.bonusPolicy`; không liên quan Supabase Storage. Nếu dùng tên bảng tùy chỉnh, đổi tên bảng trong migration tương ứng.
+Giữ cấu hình hiện có trong `BonusSettings.bonusPolicy`; việc chuyển sang cộng dồn không đổi schema hoặc yêu cầu migration mới.
 
 Khi đóng gói backend, giữ file `apps/server/bonus.mjs` trong cùng service với `apps/server/server.js`. Frontend có bản module tương ứng trong `apps/client/src/utils/bonus.mjs`; điều này giúp Railway chạy được khi mỗi service dùng một Root Directory riêng.
 
 - Tab Giá tiền có hai công tắc độc lập: thưởng KPI một lần và thưởng từng chap **sau** mốc. Bật cả hai thì cộng dồn.
-- `GET /api/salaries` mặc định trả tổng lương tất cả các tháng. API vẫn hỗ trợ `?month=YYYY-MM` khi cần xem một kỳ, chia kỳ theo `submittedAt` ở múi giờ `Asia/Ho_Chi_Minh`. Task thiếu Ngày nộp không được tự gán tháng; API trả `missingDateChapters` để hiển thị cảnh báo.
-- Lương cơ bản chỉ gồm task đã duyệt Thanh toán trong kỳ. Bonus chỉ đếm các task đó có trạng thái Submitted/Done, riêng từng freelancer và mảng. QC vẫn chỉ nhận lương task Done.
-- Xếp theo Ngày nộp, rồi ID truyện/chapter khi trùng thời điểm. Cả N chap đầu tiên phải có `completionPercent >= 100`; không lọc bỏ chap chưa đạt rồi đếm bù. Sau mốc, chap đạt từ 100% được thưởng. KPI cộng một lần; thưởng sau mốc bắt đầu từ N+1.
-- Cấu hình là chính sách hiện hành của từng mảng, không có tháng hiệu lực. Tab Lương không lọc tháng; bonus được tính riêng từng tháng và mảng trên các chap đã tick Thanh toán, rồi cộng vào tổng lương.
+- `GET /api/salaries` mặc định trả tổng lương tất cả task đã tick Thanh toán, kể cả thiếu Ngày nộp. Ngày nộp không còn là điều kiện để được tính trong bảng tổng; hệ thống không tự sửa ngày trong database.
+- Bonus đếm mọi chap đã tick Thanh toán, không lọc status, riêng từng freelancer và từng mảng; không chia tháng, không đặt lại mốc mỗi tháng. Lương cơ bản vẫn dựa trên số tiền của task đã duyệt Thanh toán. QC vẫn chỉ nhận lương task Done, theo giá QC và tiền chuyển QC hiện có.
+- Xếp theo Ngày nộp, rồi ID truyện/chapter khi trùng thời điểm. Chap thiếu/ngày không hợp lệ được xếp sau các chap có ngày, rồi theo ID truyện/chapter. Cả N chap đầu tiên phải có `completionPercent >= 100`; không lọc bỏ chap chưa đạt rồi đếm bù. Sau mốc, chap đạt từ 100% được thưởng. KPI cộng một lần trên tổng các chap; thưởng sau mốc bắt đầu từ N+1.
+- Cấu hình là chính sách hiện hành của từng mảng, không có tháng hiệu lực. Tab Lương không lọc tháng; chi tiết Bonus chỉ hiển thị một nhóm cho mỗi mảng.
+- Để tương thích caller cũ, API vẫn hỗ trợ `?month=YYYY-MM` như bộ lọc dữ liệu theo `submittedAt` ở múi giờ `Asia/Ho_Chi_Minh`; khi dùng bộ lọc này, chỉ các task thuộc tháng được chọn được đưa vào bảng tính. Đây không phải chế độ của tab Lương hiện tại. `missingDateChapters` chỉ còn báo task không gán được vào bộ lọc tháng cũ; trên bảng tổng, mảng này rỗng.
 - Với dữ liệu cấu hình cũ, giữ `taskThreshold` (tối thiểu 1) và `bonusPerTask` làm mốc/số tiền của thưởng sau mốc; KPI mặc định tắt. Quy tắc mới kiểm tra từ 100% và chỉ tính task đã tick Thanh toán.
 - Kiểm thử: `node --test apps/server/tests/monthlyBonus.test.mjs` từ thư mục gốc dự án.
 

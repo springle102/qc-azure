@@ -4,6 +4,8 @@
 
 Dòng cuối bảng giữ tổng từng cột theo các hàng đang được lọc và hiển thị thêm tổng của hai cột tiền ở ô ngoài cùng bên phải. Ô mới là phép cộng hai cột hiển thị, không thay đổi cách tính lương/bonus: `Tổng lương` đã bao gồm bonus nên ô mới không phải số tiền thanh toán thực tế.
 
+Bonus cộng dồn mọi chap đã tick Thanh toán theo từng freelancer và từng mảng, không chia tháng hoặc lọc status. Task thiếu Ngày nộp vẫn được tính trong bảng tổng; mốc thưởng và điều kiện % hoàn thành giữ nguyên. Chi tiết bonus mỗi mảng chỉ có một nhóm; KPI nhận một lần, không đặt lại mốc vào tháng mới.
+
 ## Deadline quá hạn
 
 Dòng deadline được tô đỏ khi đã qua ngày Hạn DL (hết ngày theo múi giờ Việt Nam) và status là Doing hoặc chưa được đặt (Chưa bắt đầu). Submitted/Checking/Fixing/Done không tô đỏ cả dòng theo quy tắc này; cảnh báo Ngày nộp trễ giữ nguyên. Màu dòng dùng status đang hiển thị, kể cả lúc cập nhật status chưa lưu xong.
