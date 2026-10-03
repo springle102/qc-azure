@@ -49,7 +49,7 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
   const salaryTotals = useMemo(() => filteredFreelancers.reduce((totals, member) => {
     // totalSalary already includes bonus (or the transferred amount for QC).
     const salary = Number(member.totalSalary ?? member.salary ?? member.luong);
-    const bonus = Number(member.isQc ? member.transferredAmount : member.bonus);
+    const bonus = Number(member.isQc ? 0 : member.bonus);
     return {
       salaryCents: totals.salaryCents + (Number.isFinite(salary) ? Math.round(salary * 100) : 0),
       bonusCents: totals.bonusCents + (Number.isFinite(bonus) ? Math.round(bonus * 100) : 0)
@@ -110,7 +110,7 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
                 <th><div className="deadline-column-header"><span>Họ và tên</span><SalarySortButton label="Họ và tên" activeSortDirection={columnSort?.key === 'name' ? columnSort.direction : null} onSort={(direction) => updateColumnSort('name', direction)} /></div></th>
                 <th><div className="deadline-column-header"><span>Mảng</span><SalarySortButton label="Mảng" activeSortDirection={columnSort?.key === 'field' ? columnSort.direction : null} onSort={(direction) => updateColumnSort('field', direction)} /></div></th>
                 <th><div className="deadline-column-header"><span>Tổng lương</span><SalarySortButton label="Tổng lương" activeSortDirection={columnSort?.key === 'totalSalary' ? columnSort.direction : null} onSort={(direction) => updateColumnSort('totalSalary', direction)} /></div></th>
-                <th><div className="deadline-column-header"><span>Bonus / Chuyển QC</span><SalarySortButton label="Bonus / Chuyển QC" activeSortDirection={columnSort?.key === 'bonus' ? columnSort.direction : null} onSort={(direction) => updateColumnSort('bonus', direction)} /></div></th>
+                <th><div className="deadline-column-header"><span>Bonus</span><SalarySortButton label="Bonus" activeSortDirection={columnSort?.key === 'bonus' ? columnSort.direction : null} onSort={(direction) => updateColumnSort('bonus', direction)} /></div></th>
                 <th>Mã QR</th>
               </tr>
             </thead>
@@ -130,7 +130,7 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
                   <td className="strong-cell">{freelancer.name || '—'}</td>
                   <td><span className="field-badge">{getMemberFields(freelancer).join(', ') || '—'}</span></td>
                   <td className="salary-cell">{formatSalary(freelancer.totalSalary ?? freelancer.salary ?? freelancer.luong)}</td>
-                  <td className="salary-cell">{freelancer.isQc ? formatSalary(freelancer.transferredAmount) : (
+                  <td className="salary-cell">{freelancer.isQc ? formatSalary(0) : (
                     <button type="button" className="salary-bonus-button" onClick={() => setSelectedBonus(freelancer)} title="Xem cách tính bonus">
                       {formatSalary(freelancer.bonus)} <IconEye size={15} />
                     </button>
@@ -150,8 +150,8 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
                 <th scope="row" colSpan={3}>Tổng cộng</th>
                 <td className="salary-cell">{isLoading ? 'Đang tải...' : formatSalary(salaryTotals.salaryCents / 100)}</td>
                 <td className="salary-cell" title="Đã được tính trong tổng lương">{isLoading ? 'Đang tải...' : formatSalary(salaryTotals.bonusCents / 100)}</td>
-                <td className="salary-cell salary-combined-total" title="Tổng hai cột hiển thị: Tổng lương + Bonus / Chuyển QC">
-                  {isLoading ? 'Đang tải...' : formatSalary((salaryTotals.salaryCents + salaryTotals.bonusCents) / 100)}
+                <td className="salary-cell salary-combined-total" title="Tổng tiền phải trả, đã bao gồm bonus và tiền chuyển QC">
+                  {isLoading ? 'Đang tải...' : formatSalary(salaryTotals.salaryCents / 100)}
                 </td>
               </tr>
             </tfoot>
@@ -323,7 +323,7 @@ function getSalarySortValue(member, key) {
   if (key === 'id') return member.fId ?? member.fIld ?? member.qcId ?? member.id;
   if (key === 'name') return member.name;
   if (key === 'field') return getMemberFields(member).join(', ');
-  if (key === 'bonus') return member.isQc ? member.transferredAmount : member.bonus;
+  if (key === 'bonus') return member.isQc ? 0 : member.bonus;
   return member.totalSalary ?? member.salary ?? member.luong;
 }
 
