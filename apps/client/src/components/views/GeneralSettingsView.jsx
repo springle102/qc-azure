@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { IconBook, IconEdit, IconFolder, IconPlus, IconRefresh, IconTrash, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 import { api, getUserFacingErrorMessage } from '../../services/api';
+import { TaskRemindersPanel } from './TaskRemindersPanel';
 
 const createChecklistId = () => `checklist-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -241,6 +242,8 @@ export function GeneralSettingsView({ fields = [], generalSettings, isLoading, o
           <IconRefresh size={16} /> {isLoading ? 'Đang tải...' : 'Làm mới'}
         </button>
       </div>
+
+      <TaskRemindersPanel generalSettings={generalSettings} onRefresh={onRefresh} />
 
       <section className="glass-panel general-settings-panel">
         <div className="section-heading">

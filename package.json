@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Hệ thống quản lý QC Webtoon chuyên nghiệp cho Y-COMM Studio (React + Node.js)",
   "scripts": {
+    "gmail:authorize": "node scripts/gmail-authorize.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:client": "cd apps/client && npm run dev",
     "dev:server": "cd apps/server && npm run dev",

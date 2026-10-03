@@ -5966,3 +5966,13 @@
 :root[data-theme='light'] .auth-brand strong {
   color: #0f172a;
 }
+/* Mail reminder settings and task anchors. */
+.task-reminders-panel { margin-bottom: 24px; }
+.task-reminder-pagination { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.task-reminder-error { color: var(--danger, #dc2626); overflow-wrap: anywhere; }
+.task-reminder-details { min-width: 220px; max-width: 380px; white-space: normal; overflow-wrap: anywhere; }
+.task-reminder-table { min-width: 1100px; }
+.task-reminder-table th { white-space: nowrap; }
+.task-reminder-message-id { display: block; overflow-wrap: anywhere; }
+tr[data-reminder-selected="true"] > td { border-top: 2px solid #3b82f6; border-bottom: 2px solid #3b82f6; }
+tr[data-reminder-selected="true"] > td:first-child { border-left: 3px solid #3b82f6; }

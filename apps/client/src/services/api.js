@@ -171,6 +171,7 @@ export const api = {
   }),
   deleteField: (id) => request(`/fields/${id}`, { method: 'DELETE' }),
   getGeneralSettings: () => request('/general-settings'),
+  getTaskReminders: ({ limit = 50, offset = 0 } = {}) => request(`/task-reminders?limit=${limit}&offset=${offset}`, { cache: 'no-store' }),
   updateGeneralSettings: (settings) => request('/general-settings', {
     method: 'PATCH',
     body: JSON.stringify(settings)

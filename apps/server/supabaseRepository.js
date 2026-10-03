@@ -57,9 +57,9 @@ export function createDatabasePoolOptions(
   };
 }
 
-export async function selectRows(collection) {
+export async function selectRows(collection, { fresh = false } = {}) {
   const cached = rowsCache.get(collection);
-  if (cached && Date.now() - cached.createdAt < ROWS_CACHE_TTL_MS) return cached.rows;
+  if (!fresh && cached && Date.now() - cached.createdAt < ROWS_CACHE_TTL_MS) return cached.rows;
 
   let rows;
   if (databaseUrl) {
@@ -71,18 +71,26 @@ export async function selectRows(collection) {
     if (!isSupabaseConfigured()) return [];
 
     const table = tables[collection];
-    const response = await fetch(`${supabaseUrl}/rest/v1/${encodeURIComponent(table)}?select=*`, {
-      headers: {
-        apikey: serviceRoleKey,
-        Authorization: `Bearer ${serviceRoleKey}`
+    rows = [];
+    const order = fresh ? { deadlines: 'seriesId.asc,chapterNumber.asc', freelancers: 'fIld.asc', generalSettings: 'id.asc' }[collection] : null;
+    // Reminder scans must include tasks beyond PostgREST's default page size.
+    do {
+      const response = await fetch(`${supabaseUrl}/rest/v1/${encodeURIComponent(table)}?select=*${order ? `&order=${encodeURIComponent(order)}` : ''}`, {
+        ...(fresh ? { signal: AbortSignal.timeout(15_000) } : {}),
+        headers: {
+          apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`,
+          ...(fresh ? { Range: `${rows.length}-${rows.length + 999}`, Prefer: 'count=exact' } : {})
+        }
+      });
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(`Supabase query failed for ${table}: ${message}`);
       }
-    });
-
-    if (!response.ok) {
-      const message = await response.text();
-      throw new Error(`Supabase query failed for ${table}: ${message}`);
-    }
-    rows = await response.json();
+      const page = await response.json();
+      rows.push(...page);
+      const total = response.headers.get('content-range')?.match(/\/(\d+)$/)?.[1];
+      if (!fresh || page.length === 0 || (total ? rows.length >= Number(total) : page.length < 1000)) break;
+    } while (true);
   }
   rowsCache.set(collection, { createdAt: Date.now(), rows });
   return rows;
@@ -246,6 +254,21 @@ function getPool() {
     pool = new Pool(createDatabasePoolOptions(databaseUrl));
   }
   return pool;
+}
+
+export async function taskReminderStore(action, data = {}) {
+  if (databaseUrl) {
+    const result = await getPool().query('SELECT public.task_reminder_store($1, $2::jsonb) AS result', [action, JSON.stringify(data)]);
+    return result.rows[0].result;
+  }
+  if (!isSupabaseConfigured()) throw new Error('Database chưa được cấu hình.');
+  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/task_reminder_store`, {
+    method: 'POST', signal: AbortSignal.timeout(15_000),
+    headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_action: action, p_data: data })
+  });
+  if (!response.ok) throw new Error('Không thể đọc/ghi lịch sử nhắc task. Kiểm tra migration và kết nối database.');
+  return response.json();
 }
 
 function quoteIdentifier(identifier) {

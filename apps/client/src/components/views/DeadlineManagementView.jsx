@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { IconEdit, IconFilter, IconPlus, IconRefresh, IconSearch, IconTasks, IconTrash, IconX } from '../common/Icons';
 import { showToast } from '../common/ToastContainer';
 import { api } from '../../services/api';
+import { isReminderTarget } from '../../utils/reminderLink.mjs';
 
 const columns = [
   ['endTask', 'Hạn DL'],
@@ -62,7 +63,11 @@ const STATUS_OPTIONS = [
   { value: 'done', label: 'Done', className: 'task-status-done' }
 ];
 
-export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs = [], fields = [], difficultyLevels = [], difficultyPrices = [], currentUser = {}, isLoading, onRefresh, onUpdate, onCreate, onDelete, readOnly = false, title = 'Quản lý deadline' }) {
+export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs = [], fields = [], difficultyLevels = [], difficultyPrices = [], currentUser = {}, isLoading, onRefresh, onUpdate, onCreate, onDelete, reminderTarget = null, readOnly = false, title = 'Quản lý deadline' }) {
+  const reminderRowRef = useRef(null);
+  useEffect(() => {
+    reminderRowRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [deadlines, reminderTarget]);
   const [field, setField] = useState('');
   const [seriesId, setSeriesId] = useState('');
   const [freelancer, setFreelancer] = useState('');
@@ -397,6 +402,8 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
                 return (
                 <tr
                   key={`${item.seriesId || 'series'}-${item.chapterNumber || index}`}
+                  ref={isReminderTarget(item, reminderTarget) ? reminderRowRef : undefined}
+                  data-reminder-selected={isReminderTarget(item, reminderTarget) ? 'true' : undefined}
                   className={overdue ? 'deadline-row-overdue' : undefined}
                 >
                   {visibleColumns.map(([key]) => (

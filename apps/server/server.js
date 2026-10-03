@@ -4,6 +4,8 @@ import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { inflateRawSync } from 'node:zlib';
 import { calculateBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, validateBonusRule } from './bonus.mjs';
+import { getMailConfig, sendEmail } from './mailTransport.mjs';
+import { createTaskReminderWorker, reminderPagination, validateReminderConfiguration, validateReminderStore } from './taskReminderWorker.mjs';
 import {
   deleteRowById,
   deleteRowsByKeys,
@@ -11,6 +13,7 @@ import {
   insertRow,
   isDatabaseConfigured,
   selectRows,
+  taskReminderStore,
   updateRow,
   updateRowById
 } from './supabaseRepository.js';
@@ -634,6 +637,15 @@ app.get('/api/bonus-settings', requireAuth, async (req, res) => {
 app.get('/api/general-settings', requireAuth, async (req, res) => {
   try {
     const settings = await getGeneralSettings();
+    if (req.authUser.role === 'Admin') {
+      try {
+        const mailConfig = validateReminderConfiguration();
+        await validateReminderStore(taskReminderStore, mailConfig);
+        settings.taskReminderConfiguration = { ready: true, message: '' };
+      } catch (error) {
+        settings.taskReminderConfiguration = { ready: false, message: error.message };
+      }
+    }
     if (req.authUser.role === 'Freelancer') {
       res.json({ success: true, data: { ...settings, errorSheetUrls: {} } });
       return;
@@ -647,6 +659,13 @@ app.patch('/api/general-settings', requireAdmin, async (req, res) => {
   try {
     const current = (await getCollection('generalSettings'))[0];
     const updates = {};
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'taskRemindersEnabled')) {
+      if (typeof req.body.taskRemindersEnabled !== 'boolean') throw validationError('taskRemindersEnabled phải là boolean.');
+      if (req.body.taskRemindersEnabled) {
+        await validateReminderStore(taskReminderStore, validateReminderConfiguration());
+      }
+      updates.taskRemindersEnabled = req.body.taskRemindersEnabled;
+    }
     const updatesDriveFolders = Object.prototype.hasOwnProperty.call(req.body || {}, 'googleDriveFolders');
     if (Object.prototype.hasOwnProperty.call(req.body || {}, 'googleSheetUrl')) {
       updates.googleSheetUrl = normalizeGoogleSheetUrl(req.body.googleSheetUrl);
@@ -670,8 +689,8 @@ app.patch('/api/general-settings', requireAdmin, async (req, res) => {
       updates.googleSheetAutoSync = req.body.googleSheetAutoSync === true;
     }
     const data = current
-      ? await updateRow('generalSettings', { id: current.id }, updates, ['googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'errorSheetUrls', 'checklists', 'googleSheetAutoSync'])
-      : await insertRow('generalSettings', { id: 1, ...updates }, ['id', 'googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'errorSheetUrls', 'checklists', 'googleSheetAutoSync']);
+      ? await updateRow('generalSettings', { id: current.id }, updates, ['googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'errorSheetUrls', 'checklists', 'googleSheetAutoSync', 'taskRemindersEnabled'])
+      : await insertRow('generalSettings', { id: 1, ...updates }, ['id', 'googleSheetUrl', 'googleSheetRange', 'googleSheetTabs', 'googleDriveFolders', 'errorSheetUrls', 'checklists', 'googleSheetAutoSync', 'taskRemindersEnabled']);
     if (updatesDriveFolders) googleDriveFolderCache.clear();
     const safeData = { ...data };
     delete safeData.googleDriveRawTransferAuth;
@@ -679,6 +698,15 @@ app.patch('/api/general-settings', requireAdmin, async (req, res) => {
     res.json({ success: true, data: safeData });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
+  }
+});
+app.get('/api/task-reminders', requireAdmin, async (req, res) => {
+  try {
+    const pagination = reminderPagination(req.query);
+    const data = await taskReminderStore('list', pagination);
+    res.json({ success: true, data: { ...data, ...pagination } });
+  } catch (error) {
+    res.status(error.statusCode || 502).json({ success: false, message: error.statusCode === 400 ? error.message : 'Không thể tải lịch sử nhắc task. Kiểm tra migration và kết nối database.' });
   }
 });
 app.post('/api/google-sheet/sync', requireAdmin, async (req, res) => {
@@ -1475,9 +1503,12 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ success: true, data: true });
 });
 
-app.listen(PORT, () => {
+const taskReminderWorker = createTaskReminderWorker({ selectRows, store: taskReminderStore });
+const httpServer = app.listen(PORT, () => {
   console.log(`Webtoon Deadline Management API listening on port ${PORT}`);
+  taskReminderWorker.start();
 });
+httpServer.on('close', () => taskReminderWorker.stop());
 function applyConfiguredPrices(deadlines, prices) {
   return deadlines.map((deadline) => {
     const configuredPrice = prices.find((item) => item.field === deadline.type && item.difficulty === deadline.difficulty);
@@ -1787,6 +1818,7 @@ async function getGeneralSettings() {
     delete settings.googleDriveRawTransfer;
     return {
       ...settings,
+      taskRemindersEnabled: settings.taskRemindersEnabled === true,
       googleSheetTabs: parseGoogleSheetTabs(settings.googleSheetTabs),
       googleDriveFolders: normalizeGoogleDriveFolders(settings.googleDriveFolders),
       errorSheetUrls: normalizeErrorSheetUrls(settings.errorSheetUrls),
@@ -1795,6 +1827,7 @@ async function getGeneralSettings() {
   }
   return {
     id: 1,
+    taskRemindersEnabled: false,
     googleSheetUrl: '',
     googleSheetRange: '',
     googleSheetTabs: {},
@@ -4759,7 +4792,7 @@ function normalizeDeadlineEndOfDayFromParts(year, month, day, label) {
   const monthNumber = Number(month);
   const dayNumber = Number(day);
   const dateText = `${String(yearNumber).padStart(4, '0')}-${String(monthNumber).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`;
-  const date = new Date(`${dateText}T23:59:00${DEADLINE_TIME_ZONE_OFFSET}`);
+  const date = new Date(`${dateText}T23:59:59.999${DEADLINE_TIME_ZONE_OFFSET}`);
   const isValidDate = Number.isFinite(date.getTime())
     && date.getUTCFullYear() === yearNumber
     && date.getUTCMonth() + 1 === monthNumber
@@ -4902,60 +4935,15 @@ function maskEmail(email) {
   return `${visibleStart}${'*'.repeat(Math.max(2, localPart.length - visibleStart.length - visibleEnd.length))}${visibleEnd}@${domain}`;
 }
 
-function getResendConfig() {
-  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
-  const from = String(process.env.RESEND_FROM || '').trim();
-  if (!apiKey || !from) {
-    const error = new Error('Chưa cấu hình RESEND_API_KEY và RESEND_FROM để gửi mã OTP.');
-    error.statusCode = 503;
-    throw error;
-  }
-  return { apiKey, from };
-}
-
 async function sendPasswordResetOtp(email, otp) {
-  const { apiKey, from } = getResendConfig();
+  const config = getMailConfig();
+  const { from } = config;
   const safeOtp = String(otp);
-  let response;
-  try {
-    response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from,
-        to: [email],
-        subject: 'Mã OTP đặt lại mật khẩu - WZ System',
-        text: `Mã OTP đặt lại mật khẩu của bạn là ${safeOtp}. Mã có hiệu lực trong 10 phút và chỉ sử dụng một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này.`,
-        html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033"><h2>Đặt lại mật khẩu WZ System</h2><p>Mã OTP của bạn là:</p><p style="font-size:28px;font-weight:700;letter-spacing:8px;color:#2563eb">${safeOtp}</p><p>Mã có hiệu lực trong 10 phút và chỉ sử dụng một lần.</p><p>Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này.</p></div>`
-      })
-    });
-  } catch (error) {
-    const networkError = new Error(`Không thể kết nối Resend để gửi OTP: ${error.message}`);
-    networkError.statusCode = 502;
-    throw networkError;
-  }
-
-  let payload = null;
-  try {
-    payload = await response.json();
-  } catch {
-    payload = null;
-  }
-  if (!response.ok) {
-    const providerMessage = payload?.message || payload?.error?.message || `Resend từ chối gửi email (HTTP ${response.status}).`;
-    const providerError = new Error(`Resend: ${providerMessage}`);
-    providerError.statusCode = response.status >= 500 ? 502 : 503;
-    throw providerError;
-  }
-
-  if (!payload?.id) {
-    const providerError = new Error('Resend không trả về mã email sau khi gửi OTP.');
-    providerError.statusCode = 502;
-    throw providerError;
-  }
+  await sendEmail({
+    from, to: [email], subject: 'Mã OTP đặt lại mật khẩu - WZ System',
+    text: `Mã OTP đặt lại mật khẩu của bạn là ${safeOtp}. Mã có hiệu lực trong 10 phút và chỉ sử dụng một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này.`,
+    html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033"><h2>Đặt lại mật khẩu WZ System</h2><p>Mã OTP của bạn là:</p><p style="font-size:28px;font-weight:700;letter-spacing:8px;color:#2563eb">${safeOtp}</p><p>Mã có hiệu lực trong 10 phút và chỉ sử dụng một lần.</p><p>Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này.</p></div>`
+  }, { config });
 }
 
 function hasFreelancerAssignment(row) {

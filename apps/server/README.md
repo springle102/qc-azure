@@ -111,9 +111,12 @@ Chạy migration `docs/migrations/20260929_add_account_roles.sql` trước. Trig
 - `SUPABASE_TABLE_FIELDS` (mặc định `Fields`)
 - `SUPABASE_TABLE_GENERAL_SETTINGS` (mặc định `GeneralSettings`)
 - `GOOGLE_SERVICE_ACCOUNT_JSON` hoặc `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` hoặc `GOOGLE_SERVICE_ACCOUNT_FILE` (thông tin Google Service Account; không commit secret)
-- `RESEND_API_KEY`, `RESEND_FROM` (cấu hình Resend API để gửi OTP quên mật khẩu; không commit secret; `RESEND_FROM` phải là địa chỉ thuộc domain đã xác minh trên Resend)
+- `MAIL_PROVIDER=gmail` (mặc định): dùng Gmail API qua HTTPS, không cần tên miền hoặc SMTP.
+- `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`, `GMAIL_SENDER_EMAIL`, `GMAIL_SENDER_NAME` (OAuth Gmail gửi; tên mặc định WZ System). Lấy token bằng `npm run gmail:authorize` từ gốc repo theo [hướng dẫn](../../docs/deployment.md#gmail-api-không-cần-tên-miền). Không dùng mật khẩu Gmail hay Service Account Sheets/Drive.
+- `APP_PUBLIC_URL`: URL frontend để mở task sau đăng nhập.
+- Nếu vẫn dùng Resend: đặt rõ `MAIL_PROVIDER=resend`, `RESEND_API_KEY`, `RESEND_FROM` thuộc domain đã xác minh.
 
-Luồng quên mật khẩu gửi OTP 6 số tới email đang lưu trong `Accounts`. OTP có hiệu lực 10 phút, tối đa 5 lần nhập; sau khi đặt mật khẩu mới, các phiên đăng nhập cũ của account sẽ bị thu hồi. Cần cấu hình `RESEND_API_KEY` và `RESEND_FROM` trên backend/Railway trước khi dùng tính năng này.
+Luồng quên mật khẩu gửi OTP 6 số tới email đang lưu trong `Accounts`, dùng chung Gmail API với mail nhắc deadline. OTP có hiệu lực 10 phút, tối đa 5 lần nhập; sau khi đặt mật khẩu mới, các phiên đăng nhập cũ của account sẽ bị thu hồi. Cần cấu hình Gmail OAuth trên backend/Railway trước khi dùng tính năng này. Mail nhắc hạn cần hai migration trong `docs/migrations/20261003_*reminders.sql`; lượt gửi Gmail bị gián đoạn hoặc chưa rõ kết quả được dừng ở “Cần kiểm tra” để tránh trùng.
 
 Mỗi dòng trong bảng `Fields` có thêm `guideUrl` và `resourceUrl`. Dashboard trả các link theo mảng; Freelancer chỉ nhận link của mảng được gán trong account.
 

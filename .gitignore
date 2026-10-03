@@ -1,2 +1,5 @@
 # Features parked locally are not part of the release source.
 /.local-only/
+.gmail-oauth*.env
+client_secret*.json
+gmail-client.json

@@ -39,7 +39,11 @@ Trong Railway Variables, đặt giá trị thật cho các biến sau; file `app
 | `GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Nội dung file Service Account mã hóa base64 nếu dùng Sheets/Drive |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | Để trống trên Railway; không dùng đường dẫn Windows |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Để trống nếu dùng base64; có thể dùng JSON trực tiếp thay base64 |
-| `RESEND_API_KEY`, `RESEND_FROM` | Khi cần gửi OTP quên mật khẩu |
+| `MAIL_PROVIDER=gmail` | Gửi qua Gmail API bằng HTTPS, không cần tên miền hoặc SMTP |
+| `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` | OAuth client và refresh token cấp quyền Gmail gửi; xem hướng dẫn bên dưới |
+| `GMAIL_SENDER_EMAIL` | Gmail đã cấp quyền, ví dụ `gmail-cua-ban@gmail.com` |
+| `GMAIL_SENDER_NAME=WZ System` | Tên người gửi hiển thị |
+| `APP_PUBLIC_URL` | URL frontend cho link task trong mail, ví dụ `https://qc-manager.pages.dev/` |
 | `GUIDE_URL`, `RESOURCE_URL` | Nếu đang dùng các link toàn cục này |
 
 Không đưa mật khẩu database hoặc các khóa vào Git/Cloudflare. Lấy danh sách biến và mặc định từ `apps/server/.env.example`; không sao chép `PORT=5000` và đường dẫn file Windows một cách máy móc. Trợ lý AI đã tách khỏi source phát hành, không cần biến `GEMINI_*`.
@@ -47,6 +51,49 @@ Không đưa mật khẩu database hoặc các khóa vào Git/Cloudflare. Lấy 
 Trong Railway Settings > Networking, dùng domain public hiện có hoặc tạo domain. Kiểm tra `https://<domain-backend>/api/health` trả HTTP 200. Healthcheck chỉ xác nhận API sống; sau deploy cần đăng nhập và đọc dữ liệu để xác nhận database hoạt động.
 
 Backend hiện lưu phiên đăng nhập trong bộ nhớ. Dùng một replica; redeploy sẽ yêu cầu đăng nhập lại. Không tự chạy thêm migration hoặc tạo database mới trong quá trình build này.
+
+### Nhắc freelancer nộp task qua mail
+
+Trước khi bật tính năng, chạy `docs/migrations/20261003_task_reminders.sql` rồi `docs/migrations/20261003_gmail_reminders.sql` trên database hiện tại. Nếu migration đầu đã chạy thì chỉ chạy migration Gmail mới. Migration đầu thêm cột `taskRemindersEnabled` (mặc định `false`), bảng lịch sử và hàm nhận quyền xử lý nguyên tử; migration Gmail thêm dịch vụ gửi và quy tắc phục hồi an toàn. Lịch sử cũ vẫn mang dịch vụ Resend. Với Supabase REST, migration cấp quyền cho `service_role` và yêu cầu PostgREST tải lại schema; không cấp quyền truy cập lịch sử mail cho trình duyệt. Với PostgreSQL dùng tài khoản backend khác chủ migration, cấp `SELECT, INSERT, UPDATE` trên bảng `TaskReminderDeliveries` và `EXECUTE` trên hàm `task_reminder_store(text, jsonb)` cho đúng role backend; role này cần chính sách RLS tương ứng hoặc quyền bypass RLS.
+
+Cấu hình Gmail theo phần dưới và `APP_PUBLIC_URL` trên Railway. URL frontend không chứa thông tin đăng nhập, query hoặc hash. Sau khi deploy, vào **Cấu hình chung → Nhắc freelancer nộp task qua mail** để bật. Backend cần hoạt động liên tục; tắt chế độ ngủ/serverless của service nếu đang sử dụng để bộ kiểm tra mỗi 60 giây chạy đều. Thiếu biến hoặc migration thì không cho bật; kiểm tra cấu hình không xác nhận OAuth còn hiệu lực, hãy gửi thử trên môi trường thử trước.
+
+Mỗi task chưa nộp được nhắc ở mốc trước 24 giờ, 6 giờ, 3 giờ và một lần quá hạn. Hạn tính 23:59:59.999 theo giờ Việt Nam. Mail gửi riêng tới email hồ sơ freelancer, kể cả ban đêm. Task đã trễ từ trước cũng nhận một mail khi bật; các mốc đã bỏ lỡ không được gửi dồn. Task Submitted/Checking/Fixing/Done không nhận nhắc nộp lần đầu.
+
+Trước khi bật trên dữ liệu thật, kiểm tra trên môi trường thử với hồ sơ dùng hộp thư của đội triển khai. Xác nhận nhận được mail, nút mở đúng task sau đăng nhập và lịch sử không trùng khi khởi động lại. Không thay email freelancer thật để thử nghiệm. “Gmail đã tiếp nhận” chỉ là nhà cung cấp nhận yêu cầu, không xác nhận mail đã vào hộp thư. Gmail không hỗ trợ khóa idempotency: mất kết nối trong lúc gửi, HTTP 5xx, phản hồi thiếu mã mail hoặc backend gián đoạn lúc đang xử lý sẽ chuyển ngay sang “Cần kiểm tra” (sau khi lease hết hạn nếu backend bị gián đoạn). Đối chiếu thư **Đã gửi** trong Gmail theo người nhận, tiêu đề và thời gian trước khi xử lý thủ công. Không có nút tự gửi lại kết quả chưa rõ. Lỗi trước bước gửi (làm mới token) và lỗi giới hạn rõ ràng 429/403 rate limit thử lại tối đa 3 lần sau 1/5/15 phút, tôn trọng Retry-After và hủy khi task đã nộp/đổi mốc. Đổi dịch vụ hoặc địa chỉ gửi khi mail đang chờ cũng dừng để kiểm tra. Tắt công tắc để dừng gửi mới; mail đã được tiếp nhận không thể thu hồi bằng công tắc.
+
+Kiểm thử logic: `node --test apps/server/tests/*.test.mjs apps/client/tests/*.test.mjs`. Kiểm thử database tích hợp yêu cầu `TEST_REMINDER_DATABASE_URL` trỏ tới database **tạm** trên `127.0.0.1`, tên bắt đầu bằng `qc_reminder_test`; test tạo bảng fixture và xóa lịch sử trong database thử này. Không đặt biến đó bằng connection string production.
+
+### Gmail API không cần tên miền
+
+Gửi từ Gmail hiện có, ví dụ `WZ System <gmail-cua-ban@gmail.com>`, qua HTTPS. Không dùng SMTP nên không cần Railway Pro. Tài khoản nhận mail của freelancer vẫn lấy từ database và có thể thuộc bất kỳ dịch vụ email nào. Gmail API có giới hạn gửi của tài khoản; khi bị giới hạn, xem lịch sử thay vì giả định mail đã được giao.
+
+1. Mở [Google Cloud Console](https://console.cloud.google.com/), chọn/tạo project và bật **Gmail API** trong API Library.
+2. Trong **Google Auth Platform**, cấu hình Branding/Audience, chọn External cho Gmail cá nhân. Nếu đang Testing, thêm Gmail gửi vào Test users. Trong Data Access, thêm quyền `https://www.googleapis.com/auth/gmail.send` cùng `openid` và `email` (hai quyền sau dùng kiểm tra đúng tài khoản lúc cấp quyền, không đọc hộp thư).
+3. Tạo OAuth Client loại **Desktop app**, tải JSON về máy. Lưu ngoài repo; đây không phải JSON Service Account của Sheets/Drive.
+4. Từ gốc repo, chạy lệnh bên dưới rồi mở đường dẫn terminal đưa ra, đăng nhập đúng Gmail và cấp đủ quyền. Công cụ dùng callback `127.0.0.1` với port tạm, state và PKCE; chỉ chạy trên máy bạn, không cần cấu hình callback trên Railway.
+
+```powershell
+npm run gmail:authorize -- --credentials "C:\duong-dan\client_secret.json" --email "gmail-cua-ban@gmail.com"
+```
+
+Công cụ tạo `.gmail-oauth.env` trong thư mục hiện tại, không in secret ra terminal và không ghi đè file đã tồn tại. File này đã bị loại khỏi Git. Để cấp quyền lại, dùng `--output ".gmail-oauth-new.env"`; file JSON gốc cần được lưu ngoài repository. Sao chép từng **giá trị** trong file vào Railway Variables (bỏ dấu ngoặc kép bao ngoài):
+
+```dotenv
+MAIL_PROVIDER=gmail
+GMAIL_CLIENT_ID=<OAuth client ID>
+GMAIL_CLIENT_SECRET=<OAuth client secret>
+GMAIL_REFRESH_TOKEN=<refresh token công cụ tạo>
+GMAIL_SENDER_EMAIL=gmail-cua-ban@gmail.com
+GMAIL_SENDER_NAME=WZ System
+APP_PUBLIC_URL=https://qc-manager.pages.dev/
+```
+
+`APP_PUBLIC_URL` thêm riêng, công cụ không tạo biến này. Local: chép các biến vào `apps/server/.env`. Không đưa secret vào `VITE_*`, Git, ảnh chụp màn hình hoặc chat. Redeploy backend sau khi đổi biến. Access token được làm mới tự động và dùng lại trong bộ nhớ; refresh token bị thu hồi/hết hiệu lực cần chạy lại công cụ và cập nhật Railway. Ứng dụng OAuth External ở **Testing** cấp refresh token hết hạn sau 7 ngày; trước khi chạy lâu dài, chuyển Audience sang **In production** và cấp quyền lại, đáp ứng yêu cầu xác minh Google nếu áp dụng. Không coi refresh token là quyền gửi vĩnh viễn.
+
+Nếu tiếp tục dùng Resend, đặt rõ `MAIL_PROVIDER=resend`, `RESEND_API_KEY` và `RESEND_FROM` thuộc domain đã xác minh. Mặc định mới là Gmail; biến Resend cũ không tự chọn dịch vụ. Resend vẫn dùng khóa idempotency/cửa sổ 24 giờ; mail cũ không tự chuyển sang Gmail khi đổi cấu hình.
+
+Tài liệu: [gửi bằng Gmail API](https://developers.google.com/workspace/gmail/api/guides/sending), [OAuth Desktop và loopback](https://developers.google.com/identity/protocols/oauth2/native-app), [vòng đời refresh token](https://developers.google.com/identity/protocols/oauth2#expiration), [Railway và SMTP](https://docs.railway.com/networking/outbound-networking).
 
 ## 2. Database Supabase
 

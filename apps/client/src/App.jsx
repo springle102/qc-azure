@@ -14,6 +14,7 @@ import { ErrorManagementView } from './components/views/ErrorManagementView';
 import { ProfileView } from './components/views/ProfileView';
 import { LoginView } from './components/views/LoginView';
 import { api } from './services/api';
+import { readReminderLink } from './utils/reminderLink.mjs';
 import './App.css';
 
 const EMPTY_DATA = {
@@ -104,7 +105,8 @@ function getResourcesForView(view) {
 }
 
 export function App() {
-  const [currentView, setCurrentView] = useState('dashboard');
+  const [reminderTarget, setReminderTarget] = useState(() => readReminderLink(window.location.search));
+  const [currentView, setCurrentView] = useState(() => readReminderLink(window.location.search) ? 'deadlines' : 'dashboard');
   const [activeRole, setActiveRole] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -341,6 +343,7 @@ export function App() {
       return;
     }
     setCurrentView(view);
+    if (view !== 'deadlines') setReminderTarget(null);
     setIsSidebarOpen(false);
   }, [role]);
 
@@ -361,7 +364,7 @@ export function App() {
     api.setActiveRole(nextRole);
     setActiveRole(nextRole);
     setProfile(normalizedUser);
-    setCurrentView('dashboard');
+    setCurrentView(reminderTarget ? 'deadlines' : 'dashboard');
     setData(EMPTY_DATA);
   };
 
@@ -396,6 +399,7 @@ export function App() {
   }, []);
 
   const page = useMemo(() => {
+    if (!activeProfile) return null;
     const commonProps = {
       isLoading,
       onRefresh: () => loadData()
@@ -415,7 +419,7 @@ export function App() {
       case 'errors':
         return <ErrorManagementView {...commonProps} errors={data.errors} fields={data.fields} freelancers={data.freelancers} generalSettings={data.generalSettings} currentUser={activeProfile} onUpdate={handleUpdateError} onCreate={handleCreateError} onDelete={handleDeleteError} />;
       case 'deadlines':
-        return <DeadlineManagementView {...commonProps} deadlines={data.deadlines} freelancers={data.freelancers} qcs={data.qcs} fields={data.fields} difficultyLevels={data.difficultyLevels} difficultyPrices={data.difficultyPrices} currentUser={activeProfile} onUpdate={handleUpdateDeadline} onCreate={handleCreateDeadline} onDelete={handleDeleteDeadline} readOnly={activeProfile.role === 'Freelancer'} title={activeProfile.role === 'Freelancer' ? 'Deadline của tôi' : 'Quản lý deadline'} />;
+        return <DeadlineManagementView {...commonProps} reminderTarget={reminderTarget} deadlines={data.deadlines} freelancers={data.freelancers} qcs={data.qcs} fields={data.fields} difficultyLevels={data.difficultyLevels} difficultyPrices={data.difficultyPrices} currentUser={activeProfile} onUpdate={handleUpdateDeadline} onCreate={handleCreateDeadline} onDelete={handleDeleteDeadline} readOnly={activeProfile.role === 'Freelancer'} title={activeProfile.role === 'Freelancer' ? 'Deadline của tôi' : 'Quản lý deadline'} />;
       case 'profile':
         return <ProfileView currentUser={activeProfile} onSaveProfile={handleSaveProfile} />;
       case 'dashboard':
@@ -433,7 +437,7 @@ export function App() {
           />
         );
     }
-  }, [activeProfile, currentView, data, handleCreateDeadline, handleCreateDeadlineRegistration, handleCreateError, handleDeleteDeadline, handleDeleteDeadlineRegistration, handleDeleteError, handleNavigate, handleResetAll, handleSaveProfile, handleUpdateDeadline, handleUpdateDeadlineRegistration, handleUpdateError, isLoading, loadData]);
+  }, [activeProfile, currentView, data, handleCreateDeadline, handleCreateDeadlineRegistration, handleCreateError, handleDeleteDeadline, handleDeleteDeadlineRegistration, handleDeleteError, handleNavigate, handleResetAll, handleSaveProfile, handleUpdateDeadline, handleUpdateDeadlineRegistration, handleUpdateError, isLoading, loadData, reminderTarget]);
 
   if (isAuthChecking) {
     return (
