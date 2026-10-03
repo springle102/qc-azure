@@ -1,0 +1,11 @@
+services:
+  server:
+    environment:
+      GOOGLE_SERVICE_ACCOUNT_FILE: /run/secrets/google-service-account.json
+    volumes:
+      - type: bind
+        source: ${GOOGLE_SERVICE_ACCOUNT_HOST_FILE:?Set the host Google service account file path}
+        target: /run/secrets/google-service-account.json
+        read_only: true
+        bind:
+          create_host_path: false

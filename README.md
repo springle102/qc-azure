@@ -4,9 +4,14 @@ Giao diện QC cho việc theo dõi freelancer, deadline, mã QR, lương và gi
 
 ## Kiến trúc
 
-- Frontend: React 19 + Vite
-- Backend: Node.js + Express
-- Database: PostgreSQL local hoặc Supabase PostgreSQL
+- **Frontend (`apps/client`)**: React 19, đóng gói và chạy phát triển bằng Vite. `src/main.jsx` khởi chạy ứng dụng; `src/App.jsx` kết nối các màn hình trong `src/components/`. Các lời gọi HTTP tập trung trong `src/services/api.js`; tiện ích nằm trong `src/utils/`.
+- **Backend (`apps/server`)**: Node.js + Express, khởi chạy từ `server.js` và cung cấp REST API cho client. Các thao tác dữ liệu được tách trong `supabaseRepository.js`; upload/xóa ảnh đại diện, mã QR và ảnh lỗi dùng `supabaseStorage.js`; quy tắc thưởng tháng được đặt trong `bonus.mjs`.
+- **Lưu trữ dữ liệu**: backend ưu tiên PostgreSQL khi có `DATABASE_URL`. Nếu không có, backend dùng Supabase REST khi đã cấu hình `SUPABASE_URL` và service role key; nếu chưa cấu hình nguồn dữ liệu, các collection trả về rỗng. Supabase Storage được dùng cho ảnh khi cấu hình Supabase tương ứng.
+- **Tích hợp ngoài**: backend đồng bộ deadline hai chiều với Google Sheets và tra cứu folder Google Drive để gắn link bộ truyện khi có cấu hình Service Account. Client chỉ gọi API backend, không kết nối trực tiếp tới database hoặc Google API.
+- **Logic dùng chung (`apps/shared`)**: chứa các module nghiệp vụ có bản tương ứng ở client và server; khi sửa logic chung, cần kiểm tra và giữ các bản liên quan đồng bộ.
+- **Tài liệu và database (`docs`)**: chứa schema mẫu, migration SQL, dữ liệu khởi tạo và tài liệu nghiệp vụ. Thay đổi schema cần có migration phù hợp cùng cập nhật tài liệu liên quan.
+
+Luồng chính: trình duyệt → React/Vite → REST API Express → PostgreSQL hoặc Supabase. Tích hợp Google Sheets/Drive và Supabase Storage do backend thực hiện.
 
 ## Giao diện QC
 
@@ -58,12 +63,56 @@ RESOURCE_URL=
 GOOGLE_SERVICE_ACCOUNT_FILE=
 ```
 
+`DATABASE_URL` có thể trỏ tới PostgreSQL local hoặc connection string PostgreSQL của Supabase. Nếu dùng Supabase, lấy connection string ở mục **Connect** trong Supabase Dashboard; backend tự bật TLS và xác minh chứng chỉ cho host Supabase. Khi `DATABASE_URL` được cấu hình, backend dùng kết nối PostgreSQL này trước Supabase REST.
+
 Tài khoản Admin mẫu trong `docs/sample-database.sql`: username `admin`, password `admin123`.
 Khi cấp account role `Freelancer` hoặc `QC`, Admin chọn mảng từ danh sách cấu hình; QC có thể chọn nhiều mảng. Freelancer chỉ được chỉnh status `Doing`/`Submitted`, còn QC/Admin được chỉnh các status còn lại. Khi task chuyển sang `Doing`, hệ thống bắt đầu lưu thời gian làm; khi rời `Doing`, thời gian được chốt vào `workDurationSeconds`.
 
 Đồng bộ Google Sheet riêng tư: tạo Google Service Account, bật Google Sheets API, chia sẻ file cho email `client_email` của Service Account với quyền Editor, rồi đặt file key JSON ngoài Git qua `GOOGLE_SERVICE_ACCOUNT_FILE`. Sau đó Admin nhập link Sheet trong tab Cấu hình chung, khai báo mỗi tab tương ứng một mảng (Japan/Latin/QC) và chọn Đồng bộ ngay hoặc bật tự động đồng bộ. Đồng bộ deadline là hai chiều theo khóa `seriesId` + `chapterNumber`: tạo/sửa/xóa ở Sheet hoặc web sẽ được phản ánh sang bên còn lại. Để tự gắn URL bộ truyện, bật thêm Google Drive API và chia sẻ Drive tổng (hoặc folder tổng) cho cùng email Service Account với quyền Viewer. Khi đồng bộ, hệ thống tìm folder có tên chính xác bằng `seriesId` và điền link folder vào `urlSeries` nếu dòng chưa có URL.
 
 ## Chạy project
+
+### Deploy Supabase + Railway + Cloudflare Pages
+
+Xem [hướng dẫn triển khai](docs/deployment.md) để cấu hình backend bằng `Dockerfile.railway`, frontend bằng `npm run build:cloudflare` và các biến môi trường. Docker Compose dùng cho local. Cloudflare phải có `VITE_API_URL` là URL HTTPS công khai của backend, kết thúc bằng `/api`; địa chỉ Render cũ đã được bỏ khỏi cấu hình production.
+
+### Chạy bằng Docker
+
+Cài và khởi động Docker Desktop (Linux containers), sau đó tạo `apps/server/.env` từ `.env.example` nếu chưa có. Từ thư mục gốc chạy:
+
+```bash
+npm run docker:up
+```
+
+Web mở tại `http://localhost:8080`; máy khác cùng mạng truy cập `http://<IP-máy-chạy-Docker>:8080` nếu firewall cho phép. Backend chỉ mở trong mạng container và được Nginx chuyển tiếp qua `/api`. Docker build luôn dùng `VITE_API_URL=/api`, nên không gọi nhầm `localhost` của máy người xem. Đây là chạy trên máy hiện tại; để truy cập Internet cần triển khai cùng cấu hình lên server và thiết lập domain/HTTPS.
+
+```bash
+npm run docker:status
+npm run docker:logs
+npm run docker:down
+```
+
+`docker:up` build hai image bằng `npm ci` theo lockfile, chạy nền và chờ healthcheck. Chạy lại lệnh này sau khi đổi mã nguồn. Bí mật trong `.env` không được đưa vào image. Script tự tìm Docker Desktop nếu chưa có trong PATH; khi `GOOGLE_SERVICE_ACCOUNT_FILE` đã cấu hình, script gắn đúng file từ máy vào container ở chế độ chỉ đọc bằng `compose.google.yaml`. Máy khác cần có `.env` và file Google riêng ở đường dẫn hợp lệ. JSON/base64 inline cũng được hỗ trợ qua `.env`; với `format: raw`, giữ giá trị không có dấu nháy bao ngoài.
+
+Database vẫn dùng kết nối đang có trong `apps/server/.env`, không tạo database mới hoặc tự chạy migration. Nếu PostgreSQL chạy trên máy host, đổi hostname `localhost` thành `host.docker.internal`. Nếu dùng Supabase, giữ connection string hiện tại. Healthcheck `/api/health` kiểm tra tiến trình API, không kiểm tra kết nối database hay Google. Phiên đăng nhập hiện lưu trong bộ nhớ backend: khởi động lại container sẽ cần đăng nhập lại; cấu hình này dùng một backend.
+
+Có thể đặt `WEB_PORT` để đổi cổng hoặc `WEB_BIND_ADDRESS=127.0.0.1` để chỉ cho phép truy cập trên máy hiện tại. Với server chỉ có Docker/Compose (không cần Node.js trên host):
+
+```bash
+docker compose up -d --build --wait
+```
+
+Nếu dùng file Google, đặt `GOOGLE_SERVICE_ACCOUNT_HOST_FILE` thành đường dẫn tuyệt đối trên host rồi chạy `docker compose -f compose.yaml -f compose.google.yaml up -d --build --wait`. Docker Compose cần phiên bản hỗ trợ `env_file.format: raw` (2.30 trở lên). File `Dockerfile` có hai target `server` và `client`; cả hai base image Node/Nginx khóa bằng SHA-256 digest. Khi phát hành lên nhiều máy, build một lần, đẩy image lên registry rồi chạy cùng image digest để giữ đúng cùng phiên bản. Cập nhật digest base image có chủ đích khi nâng phiên bản hoặc vá bảo mật.
+
+### Chạy frontend và backend cùng lúc
+
+Từ thư mục gốc, chạy một lệnh trong terminal:
+
+```bash
+npm run dev
+```
+
+Frontend mở tại `http://localhost:5173`, backend tại `http://localhost:5000`. Nhấn `Ctrl+C` để dừng cả hai tiến trình. Lệnh này dùng cấu hình phát triển local; cấu hình API dành cho build/deploy trong `.env.production` không được dùng bởi Vite dev server.
 
 ### Frontend
 

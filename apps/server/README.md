@@ -4,6 +4,8 @@ Backend Node.js + Express cung cấp lớp API cho giao diện QC. Backend ưu t
 
 ## Chạy server
 
+Triển khai backend Railway bằng `Dockerfile.railway` ở gốc repository, với Root Directory `/` và biến `RAILWAY_DOCKERFILE_PATH=Dockerfile.railway`. Không dùng Dockerfile frontend mặc định. Các biến database/Google/Storage đặt trong Railway Variables; healthcheck dùng `/api/health`. Xem [hướng dẫn triển khai](../../docs/deployment.md) cho các bước đầy đủ.
+
 ### Bonus theo tháng
 
 Trước khi triển khai bonus mới, chạy `docs/migrations/20260929_monthly_bonus_policy.sql` trong Supabase SQL Editor. Migration chỉ thêm cột JSONB `BonusSettings.bonusPolicy`; không liên quan Supabase Storage. Nếu dùng tên bảng tùy chỉnh, đổi tên bảng trong migration tương ứng.
@@ -87,6 +89,7 @@ Chạy migration `docs/migrations/20260929_add_account_roles.sql` trước. Trig
 
 - `PORT`
 - `DATABASE_URL` (PostgreSQL trực tiếp, được ưu tiên nếu có)
+- `DATABASE_SSL_REJECT_UNAUTHORIZED` (mặc định `true`; chỉ đặt `false` trong `.env` local nếu mạng thay chứng chỉ TLS Supabase. Kết nối vẫn mã hóa nhưng không xác minh danh tính chứng chỉ; production nên dùng CA Supabase để xác minh.)
 - `GUIDE_URL`
 - `RESOURCE_URL`
 - `SUPABASE_URL`

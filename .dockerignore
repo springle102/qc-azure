@@ -1,0 +1,15 @@
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+**/*.log
+.git
+.codex
+.agents
+.local-only
+docker-compose*.yml
+compose*.yaml
+**/*service-account*.json
+**/*credentials*.json
+**/*.pem
+**/*.key

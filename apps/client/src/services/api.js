@@ -1,4 +1,15 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const LOCAL_API_BASE_URL = 'http://localhost:5000/api';
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+const isLocalApp = typeof window !== 'undefined' && LOCAL_HOSTNAMES.has(window.location.hostname);
+
+// A production build can also be run locally with `vite preview`. In that case,
+// prefer the local backend even though VITE_API_URL is set for the deployment.
+// Relative API URLs take precedence so Docker's same-origin proxy also works locally.
+const API_BASE_URL = import.meta.env.VITE_API_URL?.startsWith('/')
+  ? import.meta.env.VITE_API_URL
+  : isLocalApp
+  ? LOCAL_API_BASE_URL
+  : (import.meta.env.VITE_API_URL || LOCAL_API_BASE_URL);
 const SESSION_KEY = 'qc_webtoon_session';
 const REQUEST_TIMEOUT_MS = 15000;
 let activeRole = '';

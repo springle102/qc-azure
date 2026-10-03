@@ -38,6 +38,25 @@ export function getDataSource() {
   return 'empty';
 }
 
+export function createDatabasePoolOptions(
+  connectionString,
+  { rejectUnauthorized = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false' } = {}
+) {
+  let supabasePostgres = false;
+  try {
+    const host = new URL(connectionString).hostname.toLowerCase();
+    supabasePostgres = host.endsWith('.supabase.co') || host.endsWith('.pooler.supabase.com');
+  } catch {
+    // Let pg report malformed connection strings with its normal error.
+  }
+  return {
+    connectionString,
+    // Keep TLS enabled for Supabase. Local networks that intercept TLS can opt
+    // out of certificate verification with DATABASE_SSL_REJECT_UNAUTHORIZED=false.
+    ...(supabasePostgres ? { ssl: { rejectUnauthorized } } : {})
+  };
+}
+
 export async function selectRows(collection) {
   const cached = rowsCache.get(collection);
   if (cached && Date.now() - cached.createdAt < ROWS_CACHE_TTL_MS) return cached.rows;
@@ -224,7 +243,7 @@ export async function deleteRowsByKeys(collection, keys) {
 
 function getPool() {
   if (!pool) {
-    pool = new Pool({ connectionString: databaseUrl });
+    pool = new Pool(createDatabasePoolOptions(databaseUrl));
   }
   return pool;
 }

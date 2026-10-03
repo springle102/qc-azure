@@ -1,0 +1,16 @@
+# syntax=docker/dockerfile:1
+ARG NODE_IMAGE=node:24.16.0-bookworm-slim@sha256:2c87ef9bd3c6a3bd4b472b4bec2ce9d16354b0c574f736c476489d09f560a203
+FROM ${NODE_IMAGE}
+
+ENV NODE_ENV=production
+ENV PORT=5000
+WORKDIR /app/apps/server
+COPY apps/server/package.json apps/server/package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+# Runtime modules only; secrets, parked features and tests are not copied.
+COPY apps/server/*.js apps/server/*.mjs ./
+USER node
+EXPOSE 5000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||5000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "server.js"]

@@ -1,5 +1,11 @@
 # React + Vite
 
+## Deploy Cloudflare Pages
+
+Dùng Root Directory `apps/client`, Build command `npm run build:cloudflare`, Output directory `dist`. File `.node-version` khóa Node.js 24.16.0. Đặt `VITE_API_URL=https://qc-azure-production.up.railway.app/api` trong Cloudflare cho Production và Preview trước khi build. Lệnh build này từ chối URL thiếu, placeholder, localhost hoặc `/api` tương đối. Không đặt khóa database, Supabase service role hay Google trong frontend.
+
+Xem [hướng dẫn triển khai](../../docs/deployment.md). `npm run build` vẫn dùng cho local; Docker local tự cấu hình `/api` thông qua Nginx.
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:

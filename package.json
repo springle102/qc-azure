@@ -3,9 +3,14 @@
   "version": "1.0.0",
   "description": "Hệ thống quản lý QC Webtoon chuyên nghiệp cho Y-COMM Studio (React + Node.js)",
   "scripts": {
+    "dev": "node scripts/dev.mjs",
     "dev:client": "cd apps/client && npm run dev",
     "dev:server": "cd apps/server && npm run dev",
-    "build:client": "cd apps/client && npm run build"
+    "build:client": "cd apps/client && npm run build",
+    "docker:up": "node scripts/docker.mjs up",
+    "docker:down": "node scripts/docker.mjs down",
+    "docker:logs": "node scripts/docker.mjs logs",
+    "docker:status": "node scripts/docker.mjs status"
   },
   "keywords": ["webtoon", "qc", "ycomm", "react", "nodejs"],
   "author": "Y-COMM",
