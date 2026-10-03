@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { showToast } from '../common/ToastContainer';
 
+const PAGE_SIZE = 5;
 const MILESTONES = { '24h': 'Trước 1 ngày', '6h': 'Trước 6 tiếng', '3h': 'Trước 3 tiếng', overdue: 'Quá hạn' };
 const STATUSES = { pending: 'Chờ gửi', processing: 'Đang xử lý', retry: 'Chờ thử lại', sent: 'Đã tiếp nhận', failed: 'Gửi thất bại', skipped: 'Bỏ qua', cancelled: 'Đã hủy', needs_review: 'Cần kiểm tra' };
 const dateLabel = (value) => value ? new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—';
@@ -20,7 +21,7 @@ export function TaskRemindersPanel({ generalSettings, onRefresh }) {
 
   useEffect(() => {
     let active = true;
-    api.getTaskReminders({ limit: 50, offset }).then((result) => {
+    api.getTaskReminders({ limit: PAGE_SIZE, offset }).then((result) => {
       if (active) { setHistory(result); setError(''); }
     }).catch((failure) => {
       if (active) setError(failure.message);
@@ -71,9 +72,9 @@ export function TaskRemindersPanel({ generalSettings, onRefresh }) {
         </div>
       )}
       <div className="task-reminder-pagination">
-        <span>{history.total} bản ghi · Trang {Math.floor(offset / 50) + 1}</span>
-        <button type="button" className="btn btn-outline btn-sm" disabled={loading || offset === 0} onClick={() => setOffset((current) => Math.max(0, current - 50))}>Trước</button>
-        <button type="button" className="btn btn-outline btn-sm" disabled={loading || offset + 50 >= history.total} onClick={() => setOffset((current) => current + 50)}>Sau</button>
+        <span>{history.total} bản ghi · Trang {Math.floor(offset / PAGE_SIZE) + 1}</span>
+        <button type="button" className="btn btn-outline btn-sm" disabled={loading || offset === 0} onClick={() => setOffset((current) => Math.max(0, current - PAGE_SIZE))}>Trước</button>
+        <button type="button" className="btn btn-outline btn-sm" disabled={loading || offset + PAGE_SIZE >= history.total} onClick={() => setOffset((current) => current + PAGE_SIZE)}>Sau</button>
       </div>
     </section>
   );
