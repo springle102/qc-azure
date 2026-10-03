@@ -149,10 +149,12 @@ export function SalaryManagementView({ currentUser = {}, salaries = [], fields =
             </tbody>
             <tfoot>
               <tr className="salary-total-row">
-                <th scope="row" colSpan={3}>Tổng cộng (gồm bonus)</th>
+                <th scope="row" colSpan={3}>Tổng cộng</th>
                 <td className="salary-cell">{isLoading ? 'Đang tải...' : formatSalary(salaryTotals.salaryCents / 100)}</td>
                 <td className="salary-cell" title="Đã được tính trong tổng lương">{isLoading ? 'Đang tải...' : formatSalary(salaryTotals.bonusCents / 100)}</td>
-                <td />
+                <td className="salary-cell salary-combined-total" title="Tổng hai cột hiển thị: Tổng lương + Bonus / Chuyển QC">
+                  {isLoading ? 'Đang tải...' : formatSalary((salaryTotals.salaryCents + salaryTotals.bonusCents) / 100)}
+                </td>
               </tr>
             </tfoot>
           </table>

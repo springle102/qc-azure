@@ -1,5 +1,13 @@
 # React + Vite
 
+## Bảng lương
+
+Dòng cuối bảng giữ tổng từng cột theo các hàng đang được lọc và hiển thị thêm tổng của hai cột tiền ở ô ngoài cùng bên phải. Ô mới là phép cộng hai cột hiển thị, không thay đổi cách tính lương/bonus: `Tổng lương` đã bao gồm bonus nên ô mới không phải số tiền thanh toán thực tế.
+
+## Deadline quá hạn
+
+Dòng deadline được tô đỏ khi đã qua ngày Hạn DL (hết ngày theo múi giờ Việt Nam) và status là Doing hoặc chưa được đặt (Chưa bắt đầu). Submitted/Checking/Fixing/Done không tô đỏ cả dòng theo quy tắc này; cảnh báo Ngày nộp trễ giữ nguyên. Màu dòng dùng status đang hiển thị, kể cả lúc cập nhật status chưa lưu xong.
+
 ## Deploy Cloudflare Pages
 
 Dùng Root Directory `apps/client`, Build command `npm run build:cloudflare`, Output directory `dist`. File `.node-version` khóa Node.js 24.16.0. Đặt `VITE_API_URL=https://qc-azure-production.up.railway.app/api` trong Cloudflare cho Production và Preview trước khi build. Lệnh build này từ chối URL thiếu, placeholder, localhost hoặc `/api` tương đối. Không đặt khóa database, Supabase service role hay Google trong frontend.

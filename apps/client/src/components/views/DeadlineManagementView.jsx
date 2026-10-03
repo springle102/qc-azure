@@ -391,14 +391,13 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
               {filteredDeadlines.length === 0 ? (
                 <tr><td colSpan={visibleColumns.length}><div className="empty-state table-empty"><IconTasks size={24} /><strong>{isLoading ? 'Đang tải dữ liệu...' : 'Chưa có deadline trong hệ thống.'}</strong></div></td></tr>
               ) : filteredDeadlines.map((item, index) => {
-                const overdue = isDeadlineOverdue(item);
+                const overdue = isDeadlineRowOverdue(item, statusOverrides);
                 const doing = isDoingStatus(item, statusOverrides);
-                const overdueDoing = overdue && doing;
                 const submittedLate = !doing && isSubmissionLate(item);
                 return (
                 <tr
                   key={`${item.seriesId || 'series'}-${item.chapterNumber || index}`}
-                  className={overdueDoing ? 'deadline-row-overdue' : undefined}
+                  className={overdue ? 'deadline-row-overdue' : undefined}
                 >
                   {visibleColumns.map(([key]) => (
                     <td key={key} className={`deadline-column deadline-column-${key}${key === 'submittedAt' && submittedLate ? ' deadline-submitted-late' : ''}`}>
@@ -829,6 +828,11 @@ function getDeadlineEndTimestamp(item) {
 
 function isDoingStatus(item, statusOverrides = {}) {
   return String(getStatusDisplayValue(item, statusOverrides) ?? '').trim().toLowerCase() === 'doing';
+}
+
+function isDeadlineRowOverdue(item, statusOverrides = {}) {
+  const status = String(getStatusDisplayValue(item, statusOverrides) ?? '').trim().toLowerCase();
+  return (status === '' || status === 'doing') && isDeadlineOverdue(item);
 }
 
 function getVisibleStatusOptions(readOnly) {

@@ -3119,6 +3119,10 @@
   font-weight: 700;
 }
 
+.salary-table .salary-combined-total {
+  text-align: right;
+}
+
 .salary-cell {
   color: #6ee7b7 !important;
   font-weight: 700;
