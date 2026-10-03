@@ -5966,6 +5966,45 @@
 :root[data-theme='light'] .auth-brand strong {
   color: #0f172a;
 }
+:root[data-theme='light'] .auth-error {
+  color: #9f1239;
+  background: #fff1f2;
+  border-color: #fecdd3;
+}
+:root[data-theme='light'] .auth-success {
+  color: #166534;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+:root[data-theme='light'] .auth-card .form-label {
+  color: #334155;
+}
+:root[data-theme='light'] .auth-card .form-input {
+  color: #0f172a;
+}
+:root[data-theme='light'] .auth-card .form-input::placeholder {
+  color: #64748b;
+  opacity: 1;
+}
+:root[data-theme='light'] .auth-help,
+:root[data-theme='light'] .auth-brand span {
+  color: #475569;
+}
+:root[data-theme='light'] .auth-link,
+:root[data-theme='light'] .auth-card .qc-kicker {
+  color: #1d4ed8;
+}
+:root[data-theme='light'] .auth-link:hover,
+:root[data-theme='light'] .auth-link:focus-visible {
+  color: #1e40af;
+}
+:root[data-theme='light'] .auth-card .btn-primary {
+  color: #ffffff;
+  background: linear-gradient(135deg, #1d4ed8, #4338ca);
+}
+:root[data-theme='light'] .auth-card .btn-primary:hover {
+  background: linear-gradient(135deg, #1e40af, #3730a3);
+}
 /* Mail reminder settings and task anchors. */
 .task-reminders-panel { margin-bottom: 24px; }
 .task-reminder-toggle { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }

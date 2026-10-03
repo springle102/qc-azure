@@ -85,22 +85,22 @@ export function buildReminderEmail(task, freelancer, milestone, { now = Date.now
   const remaining = minutes >= 60 ? `${Math.floor(minutes / 60)} tiếng${minutes % 60 ? ` ${minutes % 60} phút` : ''}` : `${minutes} phút`;
   const variants = {
     '24h': {
-      subject: `👋 Ping nhẹ: ${taskTitle} sắp tới deadline`, button: 'Xem task của bạn',
+      subject: `👋 Pong pong: ${taskTitle} sắp tới deadline`, button: 'Xem task của bạn',
       paragraphs: [
         ['Bên mình ping nhẹ một chiếc deadline: task dưới đây sẽ đến hạn vào ', bold(due), '.'],
-        ['Bạn check tiến độ và dành thời gian hoàn thiện những phần còn lại nhé. Chốt file đúng hạn là cả bạn và team QC cùng có một pha về đích đẹp!'],
-        ['Nếu có đoạn nào đang “kẹt”, bạn báo sớm cho QC/người giao task qua kênh làm việc hiện tại để cùng gỡ nhé.'],
-        ['Cảm ơn bạn, hẹn gặp chiếc task hoàn thiện!']
+        ['Bạn check tiến độ và dành thời gian hoàn thiện những phần còn lại nhé. Chốt file đúng hạn là cả bạn và team mình cùng có một pha về đích tuyệt vời!'],
+        ['Nếu có đoạn nào đang “kẹt”, bạn báo sớm cho QC/người giao task qua kênh làm việc hiện tại để dời lại nhé.'],
+        ['Cảm ơn bạn, hẹn gặp lại bạn cùng chiếc task hoàn thiện!']
       ]
     },
     '6h': {
       subject: `⏳ Bật mode về đích: ${taskTitle} sắp đến hạn`,
       paragraphs: [
         ['Đồng hồ đang đếm ngược: task dưới đây còn khoảng ', bold(remaining), ' trước hạn nộp.'],
-        [bold('Bạn bật mode về đích, ưu tiên hoàn thiện các phần còn lại và kiểm tra file'), ' giúp bên mình nhé. Team QC đang chờ nhận task để tiếp tục theo lịch.'],
-        ['Bàn giao xong, nhớ cập nhật ', bold('Submitted'), ' trên hệ thống để team nhận tín hiệu “đã chốt” từ bạn.'],
+        [bold('Bạn bật mode về đích, ưu tiên hoàn thiện các phần còn lại và kiểm tra file'), ' giúp bên mình nhé. Team đang chờ task của bạn để kịp tiến độ QC đó.'],
+        ['Bàn giao xong, nhớ cập nhật ', bold('Submitted'), ' trên hệ thống để team nhận tín hiệu “đã nộp” từ bạn nha.'],
         ['Nếu thấy khó kịp hạn, bạn báo sớm tình hình và giờ dự kiến nộp cho QC/người giao task nhé.'],
-        ['Cảm ơn bạn, cùng chốt task đúng hẹn nào!']
+        ['Cảm ơn bạn, cùng done task đúng hẹn nào!']
       ]
     },
     '3h': {
@@ -114,7 +114,7 @@ export function buildReminderEmail(task, freelancer, milestone, { now = Date.now
       ]
     },
     overdue: {
-      subject: `📌 ${taskTitle} đã quá hạn: bạn cập nhật tiến độ nhé`,
+      subject: `📌 ${taskTitle} đã quá hạn: bạn mau mau cập nhật tiến độ nhé`,
       paragraphs: [
         ['Deadline ', bold(due), ' đã qua, nhưng hệ thống vẫn chưa nhận được tín hiệu ', bold('Submitted'), ' cho task dưới đây.'],
         ['Bên mình xin bạn một chiếc cập nhật tiến độ nhé. ', bold('Bạn ưu tiên hoàn thiện và bàn giao sớm nhất có thể'), ', vì team QC đang cần task để tiếp tục công việc.'],
