@@ -5968,6 +5968,18 @@
 }
 /* Mail reminder settings and task anchors. */
 .task-reminders-panel { margin-bottom: 24px; }
+.task-reminder-toggle { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.task-reminder-toggle-state { min-width: 30px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.task-reminder-switch { display: inline-flex; align-items: center; justify-content: center; width: 72px; min-height: 44px; padding: 6px; border: 0; border-radius: 999px; background: transparent; cursor: pointer; }
+.task-reminder-switch-track { display: block; width: 60px; height: 32px; padding: 4px; box-sizing: border-box; border-radius: 999px; background: #64748b; transition: background-color 180ms ease; }
+.task-reminder-switch-thumb { display: block; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px #0003; transition: transform 180ms ease; }
+.task-reminder-switch[aria-checked='true'] .task-reminder-switch-track { background: #16a34a; }
+.task-reminder-switch[aria-checked='true'] .task-reminder-switch-thumb { transform: translateX(28px); }
+.task-reminder-switch:focus-visible { outline: 3px solid #3b82f6; outline-offset: 2px; }
+.task-reminder-switch:disabled { opacity: 0.5; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) {
+  .task-reminder-switch-track, .task-reminder-switch-thumb { transition: none; }
+}
 .task-reminder-pagination { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
 .task-reminder-error { color: var(--danger, #dc2626); overflow-wrap: anywhere; }
 .task-reminder-details { min-width: 220px; max-width: 380px; white-space: normal; overflow-wrap: anywhere; }

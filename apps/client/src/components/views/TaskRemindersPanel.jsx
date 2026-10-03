@@ -42,18 +42,18 @@ export function TaskRemindersPanel({ generalSettings, onRefresh }) {
     <section className="glass-panel qc-table-panel task-reminders-panel">
       <div className="section-heading">
         <div><span className="qc-kicker">NHẮC DEADLINE</span><h3>Nhắc freelancer nộp task qua mail</h3></div>
-        <button type="button" className={`btn ${enabled ? 'btn-outline' : 'btn-primary'}`} role="switch" aria-checked={enabled} disabled={saving || !generalSettings || (!enabled && !configuration?.ready)} onClick={toggle}>
-          {saving ? 'Đang lưu...' : enabled ? 'Đang bật · Tắt nhắc mail' : 'Bật nhắc mail'}
-        </button>
+        <div className="task-reminder-toggle">
+          <button type="button" className="task-reminder-switch" role="switch" aria-label="Nhắc task qua mail" aria-checked={enabled} aria-busy={saving} disabled={saving || !generalSettings || (!enabled && !configuration?.ready)} onClick={toggle}>
+            <span className="task-reminder-switch-track" aria-hidden="true"><span className="task-reminder-switch-thumb" /></span>
+          </button>
+          <span className="task-reminder-toggle-state" aria-live="polite">{saving ? 'Đang lưu...' : enabled ? 'ON' : 'OFF'}</span>
+        </div>
       </div>
-      <p>Mỗi task được nhắc trước hạn 1 ngày, 6 tiếng, 3 tiếng và một lần khi quá hạn. Mail gửi riêng tới email trong hồ sơ freelancer, kể cả ban đêm.</p>
-      <p className="form-help">Khi bật, task đã quá hạn và chưa nộp cũng nhận một mail nhắc. Hạn tính cuối ngày theo giờ Việt Nam; chỉ nhắc task chưa bắt đầu hoặc Doing và chưa nộp.</p>
       {configuration?.message && <p role="alert" className="task-reminder-error">{configuration.message}</p>}
       <div className="section-heading">
         <h4>Lịch sử nhắc mail</h4>
         <button type="button" className="btn btn-outline btn-sm" disabled={loading} onClick={() => setRevision((current) => current + 1)}>Làm mới lịch sử</button>
       </div>
-      <p className="form-help">“Đã tiếp nhận” chưa xác nhận mail vào hộp thư. Với Gmail, hãy kiểm tra thư Đã gửi khi có dòng “Cần kiểm tra”; hệ thống không tự gửi lại khi kết quả chưa rõ.</p>
       {!loading && error ? <p role="alert" className="task-reminder-error">{error}</p> : (
         <div className="table-wrapper table-wrapper-flat">
           <table className="custom-table task-reminder-table">
