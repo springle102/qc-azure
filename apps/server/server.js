@@ -480,6 +480,10 @@ app.post('/api/accounts', requireAdmin, async (req, res) => {
   try {
     const payload = validateAccountPayload(req.body);
     await assertConfiguredFields(payload.fields);
+    const accounts = await getCollection('accounts');
+    if (accounts.some((account) => String(account.username).toLowerCase() === payload.username.toLowerCase())) {
+      return res.status(409).json({ success: false, message: 'Username đã tồn tại.' });
+    }
     if (hasAnyRole(payload.roles, ['Freelancer', 'QC']) && payload.freelancerId === null) {
       payload.freelancerId = await ensureFreelancerForAccount(payload);
     }
@@ -584,6 +588,10 @@ app.delete('/api/accounts/:id', requireAdmin, async (req, res) => {
         : linkedFreelancer?.id !== undefined
           ? { id: linkedFreelancer.id }
           : null;
+    let freelancerProfileRetained = Boolean(linkedFreelancer && hasAnotherAccountForFreelancer);
+    if (linkedFreelancer && !hasAnotherAccountForFreelancer) {
+      freelancerProfileRetained = await hasFreelancerHistory(linkedFreelancerId);
+    }
     const linkedQcs = hasAccountRole(current, 'QC') ? await getCollection('qcs') : [];
     const accountName = String(current.displayName || current.username || '').trim().toLowerCase();
     const accountEmail = String(current.email || '').trim().toLowerCase();
@@ -598,13 +606,23 @@ app.delete('/api/accounts/:id', requireAdmin, async (req, res) => {
       })
       .map((qc) => qc.qcId !== undefined ? { qcId: qc.qcId } : qc.id !== undefined ? { id: qc.id } : null)
       .filter(Boolean);
+    const deadlines = qcDeleteKeys.length > 0 ? await getCollection('deadlines') : [];
+    const unusedQcDeleteKeys = qcDeleteKeys.filter((keys) => !deadlines.some((row) => (
+      String(row.qcId ?? '') === String(keys.qcId ?? keys.id)
+    )));
     const data = await deleteRowById('accounts', id);
-    if (!hasAnotherAccountForFreelancer && freelancerDeleteKey) {
-      await deleteRowsByKeys('freelancers', freelancerDeleteKey);
-    }
-    await runWithConcurrency(qcDeleteKeys, async (keys) => deleteRowsByKeys('qcs', keys));
     invalidateAccountSessions(id);
-    res.json({ success: true, data: toPublicAccount(data, await getCollection('freelancers')) });
+    if (!freelancerProfileRetained && freelancerDeleteKey) {
+      try {
+        await deleteRowsByKeys('freelancers', freelancerDeleteKey);
+      } catch (error) {
+        // A task may have been assigned after the history check. Keep its profile.
+        if (error.code !== '23503') throw error;
+        freelancerProfileRetained = true;
+      }
+    }
+    await runWithConcurrency(unusedQcDeleteKeys, async (keys) => deleteRowsByKeys('qcs', keys));
+    res.json({ success: true, data: { ...toPublicAccount(data, await getCollection('freelancers')), freelancerProfileRetained } });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
   }
@@ -5335,6 +5353,18 @@ async function ensureFreelancerForAccount(account) {
   }
 
   const freelancers = await getCollection('freelancers');
+  const email = String(account.email || '').trim().toLowerCase();
+  if (email) {
+    const matches = freelancers.filter((freelancer) => String(freelancer.email || '').trim().toLowerCase() === email);
+    const accounts = await getCollection('accounts');
+    const available = matches.filter((freelancer) => !accounts.some((linked) => (
+      String(linked.freelancerId ?? '') === String(getFreelancerId(freelancer))
+      && String(linked.id) !== String(account.id ?? '')
+    )));
+    if (available.length !== matches.length) throw validationError('Email này đã được liên kết với một account khác.');
+    if (available.length > 1) throw validationError('Email này có nhiều hồ sơ freelancer chưa liên kết. Cần hợp nhất hồ sơ trước khi tạo account.');
+    if (available.length === 1) return getFreelancerId(available[0]);
+  }
   const nextId = freelancers.reduce((maxId, freelancer) => {
     const freelancerId = Number(freelancer.fIld ?? freelancer.fId ?? freelancer.id);
     return Number.isInteger(freelancerId) ? Math.max(maxId, freelancerId) : maxId;
@@ -5354,6 +5384,16 @@ async function ensureFreelancerForAccount(account) {
     ['fIld', 'name', 'email', 'field', 'fields', 'note', 'salary', 'imageQR']
   );
   return created.fIld ?? nextId;
+}
+
+async function hasFreelancerHistory(freelancerId) {
+  const [deadlines, registrations, errors] = await Promise.all([
+    getCollection('deadlines'), getCollection('deadlineRegistrations'), getCollection('errors')
+  ]);
+  const matches = (value) => String(value ?? '') === String(freelancerId);
+  return deadlines.some((row) => matches(row.fIld ?? row.fId ?? row.freelancerId))
+    || registrations.some((row) => matches(row.fIld ?? row.fId ?? row.freelancerId))
+    || errors.some((row) => matches(row.editorFreelancerId));
 }
 
 async function assertFreelancerAccountAvailable(freelancerId, accountId = null) {

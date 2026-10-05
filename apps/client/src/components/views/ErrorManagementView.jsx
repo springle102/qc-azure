@@ -61,7 +61,7 @@ function serializeScreenshotImages(images) {
 
 const MAX_SCREENSHOT_FILE_SIZE = 3 * 1024 * 1024;
 
-function ScreenshotUpload({ value, onChange, onPreview, disabled = false, compact = false, maxImages = 3 }) {
+function ScreenshotUpload({ value, onChange, onPreview, disabled = false, compact = false, maxImages = 3, imageLabel = 'screenshot' }) {
   const [error, setError] = useState('');
   const images = getScreenshotImages(value).slice(0, maxImages);
 
@@ -117,7 +117,7 @@ function ScreenshotUpload({ value, onChange, onPreview, disabled = false, compac
       tabIndex={disabled ? -1 : 0}
       onPasteCapture={disabled ? undefined : handlePaste}
       role="group"
-      aria-label={`Dán screenshot bằng Ctrl + V, tối đa ${maxImages} ảnh`}
+      aria-label={`Dán ${imageLabel} bằng Ctrl + V, tối đa ${maxImages} ảnh`}
       title="Nhấn Ctrl + V để dán ảnh trực tiếp"
     >
       <div
@@ -129,8 +129,8 @@ function ScreenshotUpload({ value, onChange, onPreview, disabled = false, compac
               {images.map((image, index) => (
                 <div className="error-screenshot-upload-preview-item" key={`${image.slice(0, 32)}-${index}`}>
                   {onPreview ? (
-                    <button type="button" className="error-screenshot-upload-preview-trigger" onClick={() => onPreview(images)} title="Xem chi tiết screenshot">
-                      <img className="error-screenshot-upload-preview" src={image} alt={`Xem chi tiết screenshot lỗi ${index + 1}`} />
+                    <button type="button" className="error-screenshot-upload-preview-trigger" onClick={() => onPreview(images)} title={`Xem chi tiết ${imageLabel}`}>
+                      <img className="error-screenshot-upload-preview" src={image} alt={`Xem chi tiết ${imageLabel} lỗi ${index + 1}`} />
                     </button>
                   ) : <img className="error-screenshot-upload-preview" src={image} alt={`Screenshot lỗi ${index + 1}`} />}
                   <button type="button" className="error-screenshot-remove-one" onClick={() => removeImage(index)} disabled={disabled} aria-label={`Xóa screenshot ${index + 1}`} title="Xóa ảnh">×</button>
@@ -152,7 +152,7 @@ function ScreenshotUpload({ value, onChange, onPreview, disabled = false, compac
   );
 }
 
-function NoteEditor({ value, onChange, disabled = false }) {
+function NoteEditor({ value, onChange, onPreview, disabled = false }) {
   const [mode, setMode] = useState(isImageValue(value) ? 'image' : 'text');
   const imageValue = isImageValue(value) ? value : '';
 
@@ -169,7 +169,7 @@ function NoteEditor({ value, onChange, disabled = false }) {
         <button type="button" className={`error-note-format-button${mode === 'image' ? ' active' : ''}`} onClick={() => changeMode('image')} disabled={disabled}>Ảnh</button>
       </div>
       {mode === 'image' ? (
-        <ScreenshotUpload compact value={imageValue} onChange={onChange} disabled={disabled} maxImages={1} />
+        <ScreenshotUpload compact value={imageValue} onChange={onChange} onPreview={onPreview} disabled={disabled} maxImages={1} imageLabel="Note" />
       ) : (
         <textarea className="error-note-inline-textarea" value={isImageValue(value) ? '' : (value || '')} onChange={(event) => onChange?.(event.target.value)} disabled={disabled} placeholder="Ghi chú..." />
       )}
@@ -415,6 +415,10 @@ export function ErrorManagementView({
   const pendingFixChecks = useRef(new Set());
   const errorMutationVersion = useRef(0);
   const hasPendingFixChecks = Object.keys(fixCheckOverrides).length > 0;
+
+  const handlePreviewNote = (row) => {
+    setSelectedScreenshot({ ...row, screenshot: row.note, imageLabel: 'Note' });
+  };
 
   useEffect(() => {
     setLocalErrors(errors);
@@ -778,7 +782,7 @@ export function ErrorManagementView({
                   <div className="form-group error-entry-screenshot-group"><label className="form-label">Screenshot</label><ScreenshotUpload value={newError.screenshot} onChange={(value) => setNewError((current) => ({ ...current, screenshot: value }))} disabled={isSaving} /></div>
                   <div className="form-group error-entry-editor"><label className="form-label" htmlFor="error-editor">Editor</label><select id="error-editor" className="form-select" value={newError.editorFreelancerId} onChange={(event) => setNewError((current) => ({ ...current, editorFreelancerId: event.target.value }))} disabled={isSaving} required><option value="">Chọn freelancer</option>{editorOptions.map((freelancer) => <option value={getFreelancerId(freelancer)} key={getFreelancerId(freelancer)}>{freelancer.name || freelancer.email}</option>)}</select></div>
                   <div className="form-group form-group-full"><label className="form-label" htmlFor="error-description">Error</label><textarea id="error-description" className="form-textarea" value={newError.error} onChange={(event) => setNewError((current) => ({ ...current, error: event.target.value }))} disabled={isSaving} required /></div>
-                  <div className="form-group form-group-full"><label className="form-label">Note của FL hoặc QC</label><NoteEditor value={newError.note} onChange={(value) => setNewError((current) => ({ ...current, note: value }))} disabled={isSaving} /></div>
+                  <div className="form-group form-group-full"><label className="form-label">Note của FL hoặc QC</label><NoteEditor value={newError.note} onChange={(value) => setNewError((current) => ({ ...current, note: value }))} onPreview={() => handlePreviewNote(newError)} disabled={isSaving} /></div>
                   <div className="error-entry-actions"><button type="submit" className="btn btn-primary" disabled={isSaving}><IconPlus size={16} /> Thêm lỗi</button></div>
                 </div>
               </form>
@@ -811,7 +815,7 @@ export function ErrorManagementView({
                       <td><ErrorTypeControl value={inlineErrorRow.errorType} onChange={(value) => setInlineErrorRow((current) => ({ ...current, errorType: value }))} disabled={savingRowId === 'inline-new'} ariaLabel="Error Type cho hàng mới" /></td>
                       <td className="error-screenshot-cell"><ScreenshotUpload compact value={inlineErrorRow.screenshot} onChange={(value) => setInlineErrorRow((current) => ({ ...current, screenshot: value }))} onPreview={() => setSelectedScreenshot({ ...inlineErrorRow, field: activeField, title: inlineErrorRow.title || 'Lỗi mới' })} disabled={savingRowId === 'inline-new'} /></td>
                       <td><textarea className="error-inline-textarea" value={inlineErrorRow.error} onChange={(event) => setInlineErrorRow((current) => ({ ...current, error: event.target.value }))} placeholder="Nhập nội dung lỗi" /></td>
-                      <td className="error-note-cell"><NoteEditor value={inlineErrorRow.note} onChange={(value) => setInlineErrorRow((current) => ({ ...current, note: value }))} disabled={savingRowId === 'inline-new'} /></td>
+                      <td className="error-note-cell"><NoteEditor value={inlineErrorRow.note} onChange={(value) => setInlineErrorRow((current) => ({ ...current, note: value }))} onPreview={() => handlePreviewNote(inlineErrorRow)} disabled={savingRowId === 'inline-new'} /></td>
                       <td><select className="error-inline-select" value={inlineErrorRow.editorFreelancerId} onChange={(event) => setInlineErrorRow((current) => ({ ...current, editorFreelancerId: event.target.value }))} disabled={savingRowId === 'inline-new'}><option value="">Chọn freelancer</option>{editorOptions.map((freelancer) => <option value={getFreelancerId(freelancer)} key={getFreelancerId(freelancer)}>{freelancer.name || freelancer.email}</option>)}</select></td>
                       <td className="error-check-cell"><span className="error-inline-muted">Sau khi lưu</span></td>
                       <td><div className="error-row-actions"><button type="button" className="btn btn-primary btn-sm" onClick={handleSaveInlineRow} disabled={savingRowId === 'inline-new'}><IconCheck size={14} /> Lưu</button><button type="button" className="btn btn-outline btn-sm" onClick={() => setInlineErrorRow(null)} disabled={savingRowId === 'inline-new'}>Hủy</button></div></td>
@@ -833,7 +837,7 @@ export function ErrorManagementView({
                       </td>
                       <td className="error-screenshot-cell">{canManage ? <ScreenshotUpload compact value={rowDraft.screenshot} onChange={(value) => updateRowDraft(row, 'screenshot', value)} onPreview={() => setSelectedScreenshot({ ...row, ...rowDraft })} disabled={isRowSaving} /> : getScreenshotImages(row.screenshot).length > 0 ? <button type="button" className="error-screenshot-preview-button" onClick={() => setSelectedScreenshot(row)} title="Xem chi tiết screenshot"><span className="error-screenshot-preview-grid">{getScreenshotImages(row.screenshot).map((image, index) => <img src={image} alt={`Screenshot ${index + 1} cho ${row.title}`} key={`${image.slice(0, 32)}-${index}`} />)}</span></button> : <span className="error-screenshot-empty">—</span>}</td>
                       <td className="error-description-cell">{canManage ? <textarea className="error-inline-textarea" value={rowDraft.error || ''} onChange={(event) => updateRowDraft(row, 'error', event.target.value)} disabled={isRowSaving} /> : row.error}</td>
-                      <td className="error-note-cell">{canManage ? <NoteEditor value={rowDraft.note || ''} onChange={(value) => updateRowDraft(row, 'note', value)} disabled={isRowSaving} /> : <div className="error-note-readonly">{isImageValue(row.note) ? <img className="error-note-readonly-image" src={row.note} alt={`Note cho ${row.title}`} /> : (row.note || '—')}</div>}</td>
+                      <td className="error-note-cell">{canManage ? <NoteEditor value={rowDraft.note || ''} onChange={(value) => updateRowDraft(row, 'note', value)} onPreview={() => handlePreviewNote({ ...row, ...rowDraft })} disabled={isRowSaving} /> : <div className="error-note-readonly">{isImageValue(row.note) ? <button type="button" className="error-screenshot-upload-preview-trigger" onClick={() => handlePreviewNote(row)} title="Xem chi tiết Note"><img className="error-note-readonly-image" src={row.note} alt={`Note cho ${row.title}`} /></button> : (row.note || '—')}</div>}</td>
                       <td>{canManage ? <select className="error-inline-select" value={rowDraft.editorFreelancerId || ''} onChange={(event) => updateRowDraft(row, 'editorFreelancerId', event.target.value)} disabled={isRowSaving}><option value="">Chọn freelancer</option>{editorOptions.map((freelancer) => <option value={getFreelancerId(freelancer)} key={getFreelancerId(freelancer)}>{freelancer.name || freelancer.email}</option>)}</select> : <span className="error-editor-badge">{row.editor || 'Chưa gán'}</span>}</td>
                       <td className="error-check-cell"><label className="error-check-control"><input type="checkbox" checked={fixCheck} onChange={(event) => handleCheck(row, event.target.checked)} disabled={isLoading || isSaving || isRowSaving} aria-busy={isCheckPending} /><span>{isCheckPending ? 'Đang lưu...' : fixCheck ? 'Đã xem' : 'Chưa xem'}</span></label></td>
                       {canManage && <td><div className="error-row-actions"><button type="button" className="btn btn-primary btn-sm" onClick={() => handleSaveRowDraft(row)} disabled={isRowSaving || !isRowDirty}><IconCheck size={14} /> Lưu</button><button type="button" className="btn btn-danger btn-sm" onClick={() => handleDelete(row)} disabled={isRowSaving}><IconTrash size={14} /> Xóa</button></div></td>}
@@ -851,8 +855,8 @@ export function ErrorManagementView({
           <div className="modal-content error-screenshot-preview-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="error-screenshot-preview-title">
             <div className="modal-header">
               <div>
-                <span className="qc-kicker">CHI TIẾT LỖI</span>
-                <div className="modal-title" id="error-screenshot-preview-title">{selectedScreenshot.title || 'Screenshot lỗi'}</div>
+                <span className="qc-kicker">{selectedScreenshot.imageLabel === 'Note' ? 'NOTE CỦA FL HOẶC QC' : 'CHI TIẾT LỖI'}</span>
+                <div className="modal-title" id="error-screenshot-preview-title">{selectedScreenshot.title || `${selectedScreenshot.imageLabel || 'Screenshot'} lỗi`}</div>
               </div>
               <button type="button" className="icon-button" onClick={() => setSelectedScreenshot(null)} title="Đóng">
                 <IconX size={18} />
@@ -861,7 +865,7 @@ export function ErrorManagementView({
             <div className="modal-body error-screenshot-preview-body">
               <div className="error-screenshot-preview-images">
                 {getScreenshotImages(selectedScreenshot.screenshot).map((image, index) => (
-                  <img src={image} alt={`Screenshot chi tiết ${index + 1} cho ${selectedScreenshot.title || 'lỗi'}`} key={`${image.slice(0, 32)}-${index}`} />
+                  <img src={image} alt={`${selectedScreenshot.imageLabel || 'Screenshot'} chi tiết ${index + 1} cho ${selectedScreenshot.title || 'lỗi'}`} key={`${image.slice(0, 32)}-${index}`} />
                 ))}
               </div>
               <div className="error-screenshot-preview-meta">

@@ -151,14 +151,14 @@ export function AccountManagementView({ accounts = [], freelancers = [], fields 
   const deleteAccount = async (account) => {
     const accountLabel = account.displayName || account.username || 'này';
     const linkedProfileText = account.freelancerId !== null && account.freelancerId !== undefined && account.freelancerId !== ''
-      ? ' và hồ sơ freelancer liên kết'
+      ? ' Hồ sơ freelancer có lịch sử công việc sẽ được giữ lại.'
       : '';
-    if (!window.confirm(`Bạn có chắc muốn xóa account "${accountLabel}"${linkedProfileText}? Hành động này không thể hoàn tác.`)) return;
+    if (!window.confirm(`Bạn có chắc muốn xóa account "${accountLabel}"?${linkedProfileText} Hành động này không thể hoàn tác.`)) return;
 
     setIsSaving(true);
     try {
-      await api.deleteAccount(account.id);
-      showToast(linkedProfileText ? 'Đã xóa account và hồ sơ freelancer liên kết.' : 'Đã xóa account.', 'success');
+      const result = await api.deleteAccount(account.id);
+      showToast(result.freelancerProfileRetained ? 'Đã xóa account; giữ hồ sơ freelancer và lịch sử công việc.' : 'Đã xóa account.', 'success');
       await onRefresh?.();
     } catch (error) {
       showToast(error.message || 'Không thể xóa account.', 'error');

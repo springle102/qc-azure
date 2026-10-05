@@ -35,7 +35,7 @@ Các bảng giao diện bám theo schema trong `docs/database diagram.png` và s
 - `DifficultyPricing`: giá theo mảng và độ khó do người dùng tự định nghĩa cho từng mảng
 - `Fields`: danh sách mảng dùng chung cho account, freelancer, deadline, giá tiền và link Guide/Tài nguyên theo từng mảng
 - `GeneralSettings`: cấu hình deadline mặc định theo giờ và kết nối Google Sheet
-- `Accounts`: username, mật khẩu hash, role, mảng và `freelancerId`; account role Freelancer hoặc QC tự sinh đúng một hồ sơ thành viên mới, không tạo hồ sơ rời
+- `Accounts`: username, mật khẩu hash, role, mảng và `freelancerId`; account role Freelancer hoặc QC tái sử dụng hồ sơ chưa liên kết có cùng email, hoặc tạo một hồ sơ mới nếu chưa có
 
 Deadline công ty và bảng `Companies` đã được loại bỏ khỏi giao diện, API và database.
 

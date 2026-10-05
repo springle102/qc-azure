@@ -47,8 +47,9 @@ Mặc định server chạy tại `http://localhost:5000`.
 - `GET /api/auth/me`
 - `POST /api/auth/logout`
 - `GET /api/accounts` (Admin)
-- `POST /api/accounts` (Admin; role Freelancer/QC bắt buộc chọn ít nhất một `field` đang cấu hình và tự tạo hồ sơ thành viên)
+- `POST /api/accounts` (Admin; role Freelancer/QC bắt buộc chọn ít nhất một `field` đang cấu hình; tái sử dụng hồ sơ chưa liên kết theo email hoặc tạo hồ sơ mới)
 - `PATCH /api/accounts/:id` (Admin)
+- `DELETE /api/accounts/:id` (Admin; giữ hồ sơ được task, đăng ký deadline hoặc lỗi tham chiếu để bảo toàn lịch sử và lương; thu hồi phiên đăng nhập)
 - `GET /api/deadlines`
 - `POST /api/deadlines`
 - `PATCH /api/deadlines/:seriesId/:chapterNumber`
@@ -64,6 +65,8 @@ Mặc định server chạy tại `http://localhost:5000`.
 ### Account có hai role
 
 Mặc định mỗi account có một role. Role thứ hai chỉ được cấp bằng SQL trong bảng `Accounts`; giao diện vẫn chỉ cấp hoặc đổi một role. Hệ thống luôn dùng role có quyền cao nhất theo thứ tự `Admin > QC > Freelancer`.
+
+Khi tạo lại account, backend tìm hồ sơ freelancer chưa liên kết bằng email không rỗng (không phân biệt hoa thường). Không tự ghép bằng họ tên. Nếu có nhiều hồ sơ cùng email hoặc hồ sơ đang liên kết account khác, thao tác dừng để tránh gán nhầm lịch sử. Chạy migration `docs/migrations/20261005_reuse_account_freelancer.sql` để trigger cấp account bằng SQL cũng dùng cùng quy tắc. Migration này không tự xóa hồ sơ trùng đã có.
 
 ```sql
 UPDATE public."Accounts"

@@ -207,7 +207,9 @@ export async function deleteRowById(collection, id) {
   });
   if (!response.ok) {
     const message = await response.text();
-    throw new Error(`Supabase delete failed for ${table}: ${message}`);
+    const error = new Error(`Supabase delete failed for ${table}: ${message}`);
+    try { error.code = JSON.parse(message).code; } catch { /* Non-JSON response. */ }
+    throw error;
   }
   const rows = await response.json();
   if (!rows.length) throw new Error('Không tìm thấy mức giá cần xóa.');
@@ -244,7 +246,9 @@ export async function deleteRowsByKeys(collection, keys) {
   });
   if (!response.ok) {
     const message = await response.text();
-    throw new Error(`Supabase delete failed for ${table}: ${message}`);
+    const error = new Error(`Supabase delete failed for ${table}: ${message}`);
+    try { error.code = JSON.parse(message).code; } catch { /* Non-JSON response. */ }
+    throw error;
   }
   return response.json();
 }
