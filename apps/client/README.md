@@ -8,6 +8,8 @@ Trang production phải dùng HTTPS. iPhone/iPad từ iOS 16.4 cần thêm trang
 
 Xem [cấu hình backend và kiểm thử](../../docs/deployment.md#web-push-thông-báo-trên-thiết-bị).
 
+Khi đã bật, backend gửi các mục hiện có trong chuông lên thiết bị: lỗi cần sửa, lỗi cần kiểm tra, đã có raw, hạn hôm nay và deadline được giao (Freelancer). Admin/QC hiện chưa có mục trong chuông. Quy tắc nằm chung trong `apps/shared/bellNotifications.mjs`, được cả Header và worker sử dụng; đổi role cập nhật đăng ký, các thao tác đăng ký/hủy được nối tiếp để tránh lần cập nhật cũ tắt nhầm lần mới. Bấm push mở trang deadline đúng task hoặc Quản lý lỗi, kể cả khi cần đăng nhập lại. Worker kiểm tra mỗi phút, không gửi lại cùng phiên bản nội dung; các nhắc 24h/6h/3h/quá hạn vẫn hoạt động riêng.
+
 ## Bảng lương
 
 Dòng cuối bảng giữ tổng từng cột theo các hàng đang được lọc và hiển thị thêm tổng của hai cột tiền ở ô ngoài cùng bên phải. Ô mới là phép cộng hai cột hiển thị, không thay đổi cách tính lương/bonus: `Tổng lương` đã bao gồm bonus nên ô mới không phải số tiền thanh toán thực tế.

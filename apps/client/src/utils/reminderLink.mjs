@@ -10,3 +10,11 @@ export function readReminderLink(search = '') {
 export function isReminderTarget(task, target) {
   return Boolean(target) && String(task.seriesId) === target.seriesId && String(task.chapterNumber) === target.chapterNumber;
 }
+
+export function readNotificationView(search = '') {
+  if (readReminderLink(search)) return 'deadlines';
+  const params = new URLSearchParams(search);
+  const errorId = params.get('errorId');
+  if (params.get('view') === 'errors' && errorId?.trim() && errorId.length <= 255) return 'errors';
+  return 'dashboard';
+}

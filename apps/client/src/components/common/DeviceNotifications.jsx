@@ -15,7 +15,7 @@ export function DeviceNotificationSettings({ controller }) {
       <strong>Thông báo trên thiết bị</strong>
       <p>{state.loading ? 'Đang kiểm tra...' : SUPPORT_MESSAGES[state.support]
         || (state.permission === 'denied' ? 'Bạn đã chặn thông báo. Mở cài đặt quyền của trang web trong trình duyệt, đổi Thông báo thành Cho phép rồi tải lại trang.'
-          : state.enabled ? 'Đang nhận nhắc deadline trên thiết bị này.' : 'Bật thông báo để nhận nhắc deadline cả khi không mở web.')}</p>
+          : state.enabled ? 'Đang nhận thông báo trên thiết bị này.' : 'Bật để nhận các thông báo trong chuông và nhắc deadline cả khi không mở web.')}</p>
       {state.support === 'supported' && state.permission !== 'denied' && !state.loading && state.ready && (
         <div className="device-notification-actions">
           {state.enabled ? <>
@@ -44,7 +44,7 @@ export function DeviceNotificationPrompt({ controller }) {
       <span className="device-notification-prompt-icon"><IconBell size={22} /></span>
       <div className="device-notification-prompt-content">
         <strong id="device-notification-title">Bạn muốn cho phép trang web này gửi thông báo cho bạn không?</strong>
-        <p id="device-notification-description">{SUPPORT_MESSAGES[state.support] || 'Nhận nhắc deadline từ WZ System ngay trên thiết bị, cả khi không mở web.'}</p>
+        <p id="device-notification-description">{SUPPORT_MESSAGES[state.support] || 'Nhận thông báo công việc và nhắc deadline từ WZ System ngay trên thiết bị, cả khi không mở web.'}</p>
         <div className="device-notification-actions">
           <button type="button" className="btn btn-outline btn-sm" onClick={state.dismiss}>{state.support === 'install' ? 'Để sau' : 'Không cho phép'}</button>
           {state.support === 'supported' && <button type="button" className="btn btn-primary btn-sm" disabled={state.busy} onClick={state.enable}>Cho phép</button>}

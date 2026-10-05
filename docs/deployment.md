@@ -149,14 +149,20 @@ Docker local vẫn chạy bằng `npm run docker:up` tại `http://localhost:808
 
 Kênh Web Push không qua Gmail và không phụ thuộc công tắc nhắc mail. Sau khi cấu hình, lời mời bật thông báo xuất hiện sau đăng nhập; người dùng bấm **Cho phép** rồi xác nhận hộp thoại của trình duyệt. Từ chối lời mời không hỏi lại tự động; bật lại trong menu chuông. Nếu Chặn ở hộp thoại trình duyệt, phải thay đổi quyền trong cài đặt trang web.
 
-1. Chạy `docs/migrations/20261005_web_push.sql` trong SQL Editor của database đang dùng. Migration không phụ thuộc hai migration mail, không sửa bảng mail hoặc dữ liệu task.
+1. Chạy `docs/migrations/20261005_web_push.sql`, rồi `docs/migrations/20261005_web_push_bell_notifications.sql` trong SQL Editor của database đang dùng. Nếu đã chạy migration đầu, chỉ cần chạy migration thứ hai. Các migration không phụ thuộc hai migration mail, không sửa bảng mail hoặc dữ liệu task; migration thứ hai giữ đăng ký và lịch sử gửi hiện có.
 2. Trong `apps/server`, chạy `npm run push:keys`. Lưu cặp khóa sinh ra vào Railway Variables: `WEB_PUSH_VAPID_PUBLIC_KEY` và `WEB_PUSH_VAPID_PRIVATE_KEY`. Đây là cặp khóa lâu dài; không sinh lại mỗi lần deploy và không đưa private key vào frontend/Git.
 3. Đặt `WEB_PUSH_VAPID_SUBJECT=mailto:<email-liên-hệ-thật>`, `WEB_PUSH_ENABLED=true`, `APP_PUBLIC_URL=https://<domain-frontend>/`. Khóa VAPID không cần đăng ký Firebase hay chứng chỉ APNs. Chỉ frontend HTTPS (hoặc localhost khi phát triển) dùng được thông báo.
 4. Deploy backend với dependency `web-push`, rồi frontend với manifest/service worker mới. Nếu frontend chạy trên Cloudflare, giữ `_headers` để service worker không bị cache lâu.
-5. Đăng nhập trên thiết bị, chọn **Cho phép**. Mở chuông → **Gửi thử**, kiểm tra trung tâm thông báo. Bấm thông báo deadline mở đúng task. Thử **Không cho phép**, tải lại và kiểm tra không hỏi lại; thử đăng xuất để xác nhận ngừng nhận trên thiết bị.
+5. Đăng nhập trên thiết bị, chọn **Cho phép**. Mở chuông → **Gửi thử**, kiểm tra trung tâm thông báo. Bấm thông báo deadline mở đúng task; thông báo lỗi mở Quản lý lỗi. Thử **Không cho phép**, tải lại và kiểm tra không hỏi lại; thử đăng xuất để xác nhận ngừng nhận trên thiết bị.
 6. iPhone/iPad từ iOS/iPadOS 16.4: Safari → Chia sẻ → Thêm vào Màn hình chính → mở biểu tượng WZ System → bật thông báo. Android dùng trình duyệt hỗ trợ Web Push như Chrome. Kiểm tra cả cài đặt thông báo của trình duyệt/hệ điều hành và chế độ Không làm phiền.
 
 Worker chạy trên backend liên tục, quét mỗi phút và áp dụng cùng bốn cửa sổ nhắc như mail (24h/6h/3h/quá hạn), không gửi bù tất cả mốc đã bỏ lỡ khi máy chủ ngừng chạy. Mỗi tài khoản có thể bật nhiều thiết bị; mỗi thiết bị nhận một lượt cho từng task/hạn/mốc. Task nộp, đổi người nhận hoặc đổi hạn được kiểm tra lại trước khi gửi. Nếu thay khóa VAPID, người dùng cần mở lại web để client tạo đăng ký mới.
+
+Worker còn gửi các thông báo hiện có trong chuông theo quy tắc chung tại `apps/shared/bellNotifications.mjs`: Freelancer có lỗi cần sửa (Fixing/feedback), lỗi chưa tick Fix/Check, đã có raw, hạn trong hôm nay và deadline được giao. Admin/QC hiện không có mục thông báo trong chuông nên không phát sinh push nghiệp vụ cho hai role này. Thiết bị theo role đang chọn lần gần nhất trên web; đổi role cập nhật đăng ký mà không xin quyền lại. Đăng ký cũ chưa lưu role dùng role mặc định của account đến khi người dùng mở lại web.
+
+Mỗi thông báo trong chuông được gửi một lần cho từng thiết bị/role/phiên bản nội dung, kể cả sau khi backend khởi động lại. Sửa feedback/nội dung hoặc thông báo biến mất rồi xuất hiện lại giữa các lượt quét sẽ tạo phiên bản mới; chỉ đổi `updatedAt` không gửi lại. Khi bật lần đầu, những mục đang có trong chuông cũng được gửi. Trạng thái đã đọc trong giao diện không phải điều kiện nhận push. Các nhắc 24h/6h/3h/quá hạn là lượt riêng nên có thể cùng xuất hiện với thông báo trong chuông.
+
+Để cập nhật hệ thống đã bật Web Push: chạy migration thứ hai, deploy lại backend Railway và frontend Cloudflare, rồi mở lại web trên thiết bị. Giữ nguyên khóa VAPID và các biến môi trường đã cấu hình; không cần thêm biến mới.
 
 Cho phép nhận là quyền của từng trình duyệt/origin, không thể tự bật ở mọi thiết bị. Push service tiếp nhận không bảo đảm người dùng đã nhìn thấy banner; cách hiện, âm thanh và thời gian nhận phụ thuộc thiết bị, kết nối và quyền hệ điều hành.
 

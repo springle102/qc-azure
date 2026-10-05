@@ -7,6 +7,7 @@ WORKDIR /build/apps/client
 COPY apps/client/package.json apps/client/package-lock.json ./
 RUN npm ci
 COPY apps/client/ ./
+COPY apps/shared/bellNotifications.mjs /build/apps/shared/bellNotifications.mjs
 # The browser calls the API through the same host as the frontend.
 ENV VITE_API_URL=/api
 RUN npm run build
@@ -18,6 +19,7 @@ WORKDIR /app/apps/server
 COPY apps/server/package.json apps/server/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY apps/server/ ./
+COPY apps/shared/bellNotifications.mjs /app/apps/shared/bellNotifications.mjs
 ENV NODE_EXTRA_CA_CERTS=/app/apps/server/certs/supabase-ca.crt
 USER node
 EXPOSE 5000

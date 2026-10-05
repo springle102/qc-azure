@@ -83,3 +83,48 @@ test('notification clicks cannot open external URLs or a different account', asy
   await worker.dispatch('notificationclick', { notification: { data: { accountId: '7', url: 'https://evil.test/' }, close: () => {} } });
   assert.equal(worker.opened[0], 'https://example.com/');
 });
+
+test('role changes serialize device registration so old cleanup cannot disable the new context', async () => {
+  const source = readFileSync(new URL('../src/services/devicePush.js', import.meta.url), 'utf8')
+    .replace(/^import .*;\r?\n/gm, '').replace(/export /g, '');
+  const storage = new Map();
+  const events = [];
+  let currentSubscription = null;
+  let active = true;
+  let started;
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  const saving = new Promise((resolve) => { started = resolve; });
+  let saves = 0;
+  const worker = { pushManager: {
+    getSubscription: async () => currentSubscription,
+    subscribe: async () => {
+      const subscription = { options: {}, toJSON: () => ({ endpoint: 'test' }), unsubscribe: async () => { events.push('unsubscribe'); currentSubscription = null; } };
+      currentSubscription = subscription;
+      return subscription;
+    }
+  } };
+  const api = {
+    subscribePush: async () => { saves += 1; events.push('save'); if (saves === 1) { started(); await pending; } },
+    unsubscribePush: async () => events.push('remove')
+  };
+  const scope = {
+    api, Uint8Array, applicationServerKey: () => new Uint8Array([1]),
+    bindNotificationAccount: async (_, accountId) => events.push(`bind:${accountId}`),
+    prepareNotificationWorker: async () => worker,
+    navigator: { serviceWorker: { getRegistration: async () => worker } },
+    localStorage: { getItem: (key) => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: (key) => storage.delete(key) }
+  };
+  const service = runInNewContext(`${source}\n({enableDevicePush, disableDevicePush});`, scope);
+  const previous = service.enableDevicePush('7', 'key', worker, () => active);
+  await saving;
+  active = false;
+  const next = service.enableDevicePush('7', 'key', worker);
+  release();
+  await Promise.all([previous, next]);
+  assert.equal(storage.get('wz-notification-account'), '7');
+  assert.ok(currentSubscription);
+  assert.deepEqual(events, ['bind:7', 'save', 'bind:null', 'unsubscribe', 'remove', 'bind:7', 'save']);
+  await service.disableDevicePush();
+  assert.equal(currentSubscription, null);
+});

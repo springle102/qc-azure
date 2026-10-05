@@ -3,7 +3,7 @@ import { api } from '../../services/api';
 import { deviceAccountOwner, disableDevicePush, enableDevicePush, getNotificationChoice, setNotificationChoice } from '../../services/devicePush';
 import { notificationSupport, prepareNotificationWorker, requestBrowserNotificationPermission } from '../../utils/deviceNotifications.mjs';
 
-export function useDeviceNotifications(accountId) {
+export function useDeviceNotifications(accountId, role) {
   const [state, setState] = useState({ loading: true, ready: false, support: notificationSupport(), permission: globalThis.Notification?.permission || 'default', enabled: false, busy: false, prompt: false, message: '' });
   const workerRef = useRef(null);
   const configRef = useRef(null);
@@ -53,7 +53,7 @@ export function useDeviceNotifications(accountId) {
     };
     window.addEventListener('focus', refresh);
     return () => { context.active = false; window.removeEventListener('focus', refresh); };
-  }, [accountId]);
+  }, [accountId, role]);
 
   const dismiss = () => {
     setNotificationChoice(accountId, 'dismissed');
@@ -72,7 +72,7 @@ export function useDeviceNotifications(accountId) {
       setState((current) => ({ ...current, permission }));
       if (permission !== 'granted') { setNotificationChoice(accountId, 'dismissed'); return; }
       const subscription = await enableDevicePush(accountId, configRef.current.publicKey, workerRef.current, () => context.active);
-      if (context.active) setState((current) => ({ ...current, enabled: Boolean(subscription), message: 'Đã bật nhắc deadline trên thiết bị này.' }));
+      if (context.active) setState((current) => ({ ...current, enabled: Boolean(subscription), message: 'Đã bật thông báo trên thiết bị này.' }));
     } catch {
       if (context.active) setState((current) => ({ ...current, enabled: false, message: 'Chưa bật được thông báo. Vui lòng thử lại và kiểm tra kết nối mạng.' }));
     } finally {
@@ -86,7 +86,7 @@ export function useDeviceNotifications(accountId) {
     setNotificationChoice(accountId, 'disabled');
     try {
       await disableDevicePush();
-      if (context.active) setState((current) => ({ ...current, enabled: false, message: 'Đã tắt nhắc deadline trên thiết bị này.' }));
+      if (context.active) setState((current) => ({ ...current, enabled: false, message: 'Đã tắt thông báo trên thiết bị này.' }));
     } catch {
       if (context.active) setState((current) => ({ ...current, enabled: false, message: 'Đã ngừng nhận trên thiết bị. Chưa xác nhận được với máy chủ; bạn có thể Chặn thông báo trong cài đặt trang web.' }));
     } finally {
@@ -109,4 +109,3 @@ export function useDeviceNotifications(accountId) {
 
   return { ...state, dismiss, enable, disable, test };
 }
-

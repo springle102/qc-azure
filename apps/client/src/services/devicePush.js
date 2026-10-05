@@ -3,6 +3,12 @@ import { applicationServerKey, bindNotificationAccount, prepareNotificationWorke
 
 const OWNER_KEY = 'wz-notification-account';
 const preferenceKey = (accountId) => `wz-notification-choice:${accountId}`;
+let deviceOperation = Promise.resolve();
+function queueDeviceOperation(operation) {
+  const next = deviceOperation.then(operation, operation);
+  deviceOperation = next.catch(() => {});
+  return next;
+}
 export function getNotificationChoice(accountId) {
   try { return localStorage.getItem(preferenceKey(accountId)); } catch { return null; }
 }
@@ -10,7 +16,11 @@ export function setNotificationChoice(accountId, choice) {
   try { localStorage.setItem(preferenceKey(accountId), choice); } catch { /* The choice still applies until this page closes. */ }
 }
 
-export async function enableDevicePush(accountId, publicKey, registration, isCurrent = () => true) {
+export function enableDevicePush(accountId, publicKey, registration, isCurrent = () => true) {
+  return queueDeviceOperation(() => registerDevicePush(accountId, publicKey, registration, isCurrent));
+}
+
+async function registerDevicePush(accountId, publicKey, registration, isCurrent) {
   const worker = registration || await prepareNotificationWorker();
   if (!isCurrent()) return;
   let subscription = await worker.pushManager.getSubscription();
@@ -26,7 +36,7 @@ export async function enableDevicePush(accountId, publicKey, registration, isCur
   await bindNotificationAccount(worker, accountId);
   try {
     await api.subscribePush(subscription.toJSON());
-    if (!isCurrent()) { await disableDevicePush(); return; }
+    if (!isCurrent()) { await removeDevicePush(); return; }
     try { localStorage.setItem(OWNER_KEY, String(accountId)); } catch { /* Worker binding remains active for this session. */ }
     setNotificationChoice(accountId, 'enabled');
     return subscription;
@@ -37,7 +47,11 @@ export async function enableDevicePush(accountId, publicKey, registration, isCur
   }
 }
 
-export async function disableDevicePush({ forgetChoice = false } = {}) {
+export function disableDevicePush(options = {}) {
+  return queueDeviceOperation(() => removeDevicePush(options));
+}
+
+async function removeDevicePush({ forgetChoice = false } = {}) {
   let owner;
   try { owner = localStorage.getItem(OWNER_KEY); localStorage.removeItem(OWNER_KEY); } catch { /* Storage may be disabled. */ }
   if (forgetChoice && owner) setNotificationChoice(owner, 'disabled');

@@ -1,6 +1,7 @@
 import { createHash, createECDH, randomUUID } from 'node:crypto';
 import webPush from 'web-push';
 import { eligibleReminderTask, reminderAppUrl, reminderDueAt, reminderIdentity, reminderMilestone } from './taskReminderEmail.mjs';
+import { buildBellNotifications } from '../shared/bellNotifications.mjs';
 
 const invalid = (message) => Object.assign(new Error(message), { statusCode: 400 });
 const pushHosts = ['fcm.googleapis.com', 'updates.push.services.mozilla.com'];
@@ -41,9 +42,9 @@ export function getWebPushConfig(env = process.env) {
 
 export async function validateWebPushStore(store) {
   try {
-    if ((await store('capabilities'))?.version !== 1) throw new Error();
+    if ((await store('capabilities'))?.version !== 2) throw new Error();
   } catch {
-    throw Object.assign(new Error('Chưa sẵn sàng lưu đăng ký thông báo. Chạy migration 20261005_web_push.sql.'), { statusCode: 503 });
+    throw Object.assign(new Error('Chưa sẵn sàng lưu thông báo. Chạy migration 20261005_web_push.sql rồi 20261005_web_push_bell_notifications.sql.'), { statusCode: 503 });
   }
 }
 
@@ -68,6 +69,40 @@ export function sendWebPush(subscription, payload, config, { ttl = 3600 } = {}) 
   });
 }
 
+export function deviceNotificationRole(account, device) {
+  if (!account || account.isActive === false) return null;
+  const roles = Array.isArray(account.roles) && account.roles.length ? account.roles : [account.role];
+  const role = device.notificationRole || ['Admin', 'QC', 'Freelancer'].find((value) => roles.includes(value));
+  return roles.includes(role) ? role : null;
+}
+
+export function accountBellNotifications(account, role, tasks, errors, now) {
+  // Use the same error scope as /api/errors, in addition to the shared bell rules.
+  const userId = account.freelancerId;
+  const scopedErrors = userId === null || userId === undefined || userId === '' ? []
+    : errors.filter((row) => String(row.editorFreelancerId ?? '') === String(userId));
+  const user = { ...account, role, name: account.name || account.displayName || account.username || '' };
+  return buildBellNotifications(tasks, scopedErrors, user, now);
+}
+
+export function bellNotificationFingerprint(notification) {
+  // Generic updatedAt and display timestamps change during unrelated edits/syncs.
+  return createHash('sha256').update(JSON.stringify([
+    notification.id, notification.title, notification.message, notification.view, notification.target, notification.revision
+  ])).digest('hex');
+}
+
+export function buildBellPush(notification, accountId, appUrl) {
+  const url = reminderAppUrl(appUrl);
+  url.searchParams.set('view', notification.view);
+  for (const [name, value] of Object.entries(notification.target || {})) url.searchParams.set(name, value);
+  return {
+    title: `WZ System — ${notification.title}`, body: notification.message.slice(0, 600),
+    tag: `bell-${createHash('sha256').update(notification.id).digest('hex')}`,
+    url: url.href, accountId: String(accountId)
+  };
+}
+
 export function createWebPushWorker({ selectRows, store, send = sendWebPush, config = getWebPushConfig, now = Date.now, onError = (error) => console.error('Web Push:', error.message) }) {
   let running = false;
   let stopped = false;
@@ -81,9 +116,54 @@ export function createWebPushWorker({ selectRows, store, send = sendWebPush, con
       const subscriptions = await store('subscriptions');
       if (!subscriptions.length) return;
       const [tasks, accounts] = await Promise.all([selectRows('deadlines', { fresh: true }), selectRows('accounts', { fresh: true })]);
+      const errors = await selectRows('errors', { fresh: true });
+      const eventStates = new Map();
       for (const device of subscriptions) {
         const account = accounts.find((row) => String(row.id) === device.accountId && row.isActive !== false);
-        if (!account || account.freelancerId === null || account.freelancerId === undefined) continue;
+        const role = deviceNotificationRole(account, device);
+        if (!role) continue;
+        const bell = accountBellNotifications(account, role, tasks, errors, now());
+        const accountScope = JSON.stringify([device.accountId, role]);
+        if (!eventStates.has(accountScope)) {
+          eventStates.set(accountScope, await store('sync_notifications', {
+            accountId: device.accountId, role,
+            notifications: bell.map((notification) => ({ eventId: notification.id, fingerprint: bellNotificationFingerprint(notification) }))
+          }));
+        }
+        let expired = false;
+        for (const notification of bell) {
+          if (stopped) return;
+          const eventState = eventStates.get(accountScope).find((row) => row.eventId === notification.id);
+          if (!eventState) continue;
+          const deliveryKey = createHash('sha256').update(JSON.stringify([device.id, device.accountId, role, notification.id, eventState.version])).digest('hex');
+          const leaseToken = randomUUID();
+          if (!await store('claim', { deliveryKey, subscriptionId: device.id, accountId: device.accountId, leaseToken })) continue;
+          const finish = (status) => store('finish', { deliveryKey, leaseToken, status });
+          try {
+            const [currentTasks, currentErrors, currentAccounts, consent, currentState] = await Promise.all([
+              selectRows('deadlines', { fresh: true }), selectRows('errors', { fresh: true }), selectRows('accounts', { fresh: true }),
+              store('get', { subscriptionId: device.id, accountId: device.accountId }),
+              store('notification_state', { accountId: device.accountId, role, eventId: notification.id })
+            ]);
+            const currentAccount = currentAccounts.find((row) => String(row.id) === device.accountId);
+            const currentNotification = currentAccount && accountBellNotifications(currentAccount, role, currentTasks, currentErrors, now()).find((row) => row.id === notification.id);
+            if (stopped || !consent || deviceNotificationRole(currentAccount, consent) !== role || !currentNotification
+              || !currentState?.active || currentState.version !== eventState.version
+              || bellNotificationFingerprint(currentNotification) !== eventState.fingerprint) {
+              await finish('cancelled'); continue;
+            }
+            await send(consent.subscription, buildBellPush(currentNotification, device.accountId, settings.appUrl), settings);
+            await finish('sent');
+          } catch (error) {
+            if ([404, 410].includes(error.statusCode)) {
+              await store('remove', { subscriptionId: device.id, accountId: device.accountId });
+              expired = true; break;
+            }
+            await finish(error.statusCode === 429 ? 'retry' : 'failed');
+            onError(new Error(`Không gửi được thông báo (mã ${Number(error.statusCode) || 'kết nối'}).`));
+          }
+        }
+        if (expired || role !== 'Freelancer' || account.freelancerId === null || account.freelancerId === undefined) continue;
         for (const task of tasks) {
           if (stopped) return;
           if (!eligibleReminderTask(task) || String(task.fIld) !== String(account.freelancerId)) continue;
@@ -105,7 +185,7 @@ export function createWebPushWorker({ selectRows, store, send = sendWebPush, con
             ]);
             const currentTask = currentTasks.find((row) => String(row.seriesId) === identity.seriesId && String(row.chapterNumber) === identity.chapterNumber);
             const currentAccount = currentAccounts.find((row) => String(row.id) === device.accountId && row.isActive !== false);
-            if (!consent || !currentAccount || !currentTask || !eligibleReminderTask(currentTask)
+            if (stopped || !consent || deviceNotificationRole(currentAccount, consent) !== role || !currentTask || !eligibleReminderTask(currentTask)
               || String(currentAccount.freelancerId ?? '') !== identity.freelancerId || String(currentTask.fIld) !== identity.freelancerId
               || reminderDueAt(currentTask.endTask) !== dueAt || reminderMilestone(dueAt, now()) !== milestone) {
               await finish('cancelled');

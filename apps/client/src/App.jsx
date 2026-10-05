@@ -15,7 +15,7 @@ import { ProfileView } from './components/views/ProfileView';
 import { LoginView } from './components/views/LoginView';
 import { api } from './services/api';
 import { disableDevicePush } from './services/devicePush';
-import { readReminderLink } from './utils/reminderLink.mjs';
+import { readNotificationView, readReminderLink } from './utils/reminderLink.mjs';
 import './App.css';
 
 const EMPTY_DATA = {
@@ -107,7 +107,7 @@ function getResourcesForView(view) {
 
 export function App() {
   const [reminderTarget, setReminderTarget] = useState(() => readReminderLink(window.location.search));
-  const [currentView, setCurrentView] = useState(() => readReminderLink(window.location.search) ? 'deadlines' : 'dashboard');
+  const [currentView, setCurrentView] = useState(() => readNotificationView(window.location.search));
   const [activeRole, setActiveRole] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -365,7 +365,7 @@ export function App() {
     api.setActiveRole(nextRole);
     setActiveRole(nextRole);
     setProfile(normalizedUser);
-    setCurrentView(reminderTarget ? 'deadlines' : 'dashboard');
+    setCurrentView(readNotificationView(window.location.search));
     setData(EMPTY_DATA);
   };
 

@@ -282,7 +282,7 @@ export async function webPushStore(action, data = {}) {
     headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ p_action: action, p_data: data })
   });
-  if (!response.ok) throw new Error('Không thể lưu đăng ký thông báo. Kiểm tra migration 20261005_web_push.sql và database.');
+  if (!response.ok) throw new Error('Không thể lưu thông báo. Kiểm tra migration 20261005_web_push.sql, 20261005_web_push_bell_notifications.sql và database.');
   return response.json();
 }
 

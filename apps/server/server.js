@@ -1513,7 +1513,7 @@ app.post('/api/push/subscriptions', requireAuth, async (req, res) => {
   try {
     getWebPushConfig();
     const subscription = validatePushSubscription(req.body?.subscription);
-    await webPushStore('subscribe', { subscriptionId: pushSubscriptionId(subscription), accountId: String(req.authUser.id), subscription });
+    await webPushStore('subscribe', { subscriptionId: pushSubscriptionId(subscription), accountId: String(req.authUser.id), notificationRole: req.authUser.role, subscription });
     res.json({ success: true, data: { enabled: true } });
   } catch (error) {
     res.status(error.statusCode || 503).json({ success: false, message: error.statusCode ? error.message : 'Không thể lưu đăng ký thông báo. Vui lòng thử lại.' });

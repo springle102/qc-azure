@@ -19,9 +19,12 @@ test('Web Push migration, consent ownership, atomic claims and authenticated API
   await db.query(readFileSync(new URL('../../../docs/migrations/20261005_web_push.sql', import.meta.url), 'utf8'));
   // Migration is safe to reapply, including the stored function and grants.
   await db.query(readFileSync(new URL('../../../docs/migrations/20261005_web_push.sql', import.meta.url), 'utf8'));
+  await db.query(readFileSync(new URL('../../../docs/migrations/20261005_web_push_bell_notifications.sql', import.meta.url), 'utf8'));
+  await db.query(readFileSync(new URL('../../../docs/migrations/20261005_web_push_bell_notifications.sql', import.meta.url), 'utf8'));
   await db.query('TRUNCATE public."WebPushSubscriptions" CASCADE');
+  await db.query('TRUNCATE public."WebPushNotificationState"');
   const call = async (action, data = {}) => (await db.query('SELECT public.web_push_store($1, $2::jsonb) AS result', [action, JSON.stringify(data)])).rows[0].result;
-  assert.deepEqual(await call('capabilities'), { version: 1 });
+  assert.deepEqual(await call('capabilities'), { version: 2 });
   const device = createECDH('prime256v1'); device.generateKeys();
   const subscription = { endpoint: 'https://fcm.googleapis.com/fcm/send/unit-test-device', keys: { p256dh: device.getPublicKey().toString('base64url'), auth: randomBytes(16).toString('base64url') } };
   const subscriptionId = pushSubscriptionId(subscription);
@@ -51,6 +54,23 @@ test('Web Push migration, consent ownership, atomic claims and authenticated API
     assert.ok(await call('claim', { ...values, leaseToken: randomUUID() }));
   });
 
+  await t.test('bell state persists revisions atomically and isolates accounts and roles', async () => {
+    const scope = { accountId: '101', role: 'Freelancer' };
+    const snapshot = { ...scope, notifications: [{ eventId: 'error-10', fingerprint: 'first' }] };
+    assert.equal((await call('sync_notifications', snapshot))[0].version, 1);
+    const concurrent = await Promise.all(Array.from({ length: 10 }, () => call('sync_notifications', snapshot)));
+    assert.ok(concurrent.every((rows) => rows[0].version === 1));
+    const changed = { ...scope, notifications: [{ eventId: 'error-10', fingerprint: 'changed' }] };
+    assert.equal((await call('sync_notifications', changed))[0].version, 2);
+    await call('sync_notifications', { ...scope, notifications: [] });
+    assert.equal((await call('notification_state', { ...scope, eventId: 'error-10' })).active, false);
+    assert.equal((await call('sync_notifications', changed))[0].version, 3);
+    await call('sync_notifications', { accountId: '101', role: 'Admin', notifications: [] });
+    assert.equal((await call('notification_state', { ...scope, eventId: 'error-10' })).active, true);
+    assert.equal(await call('notification_state', { ...scope, accountId: '102', eventId: 'error-10' }), null);
+    assert.equal((await db.query('SELECT relrowsecurity FROM pg_class WHERE oid = \'public."WebPushNotificationState"\'::regclass')).rows[0].relrowsecurity, true);
+  });
+
   const salt = randomBytes(16).toString('hex');
   const password = 'fixture-password-only';
   const passwordHash = scryptSync(password, salt, 64).toString('hex');
@@ -58,8 +78,10 @@ test('Web Push migration, consent ownership, atomic claims and authenticated API
     CREATE TABLE IF NOT EXISTS public."Accounts" (id integer PRIMARY KEY, username text, "passwordHash" text, "passwordSalt" text, role text, roles jsonb, "displayName" text, email text, "freelancerId" integer, "isActive" boolean);
     CREATE TABLE IF NOT EXISTS public."Freelancer" ("fIld" integer PRIMARY KEY, name text, email text, field text);
     CREATE TABLE IF NOT EXISTS public."SeriesList" ("seriesId" integer, "chapterNumber" text, "seriesName" text, "fIld" integer, "endTask" timestamptz, status text, "submittedAt" timestamptz);
+    CREATE TABLE IF NOT EXISTS public."Errors" (id integer PRIMARY KEY, title text, chapter text, error text, "editorFreelancerId" integer, "fixCheck" boolean);
   `);
   await db.query('INSERT INTO public."Accounts" (id, username, "passwordHash", "passwordSalt", role, roles, "displayName", "isActive") VALUES (101, $1, $2, $3, \'Freelancer\', \'["Freelancer"]\', \'Push Fixture\', true) ON CONFLICT (id) DO UPDATE SET "passwordHash" = EXCLUDED."passwordHash", "passwordSalt" = EXCLUDED."passwordSalt"', ['push-fixture', passwordHash, salt]);
+  await db.query('INSERT INTO public."Accounts" (id, username, "passwordHash", "passwordSalt", role, roles, "displayName", "isActive") VALUES (102, $1, $2, $3, \'QC\', \'["QC", "Freelancer"]\', \'Multi Role Fixture\', true) ON CONFLICT (id) DO UPDATE SET "passwordHash" = EXCLUDED."passwordHash", "passwordSalt" = EXCLUDED."passwordSalt"', ['multi-fixture', passwordHash, salt]);
 
   // Reserve a local port without touching the running application's port.
   const portProbe = createServer(); portProbe.listen(0, '127.0.0.1'); await once(portProbe, 'listening');
@@ -90,10 +112,25 @@ test('Web Push migration, consent ownership, atomic claims and authenticated API
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` };
   const settings = (await (await fetch(`${base}/push/config`, { headers })).json()).data;
   assert.deepEqual(settings, { ready: true, publicKey: vapid.publicKey });
-  const saved = await fetch(`${base}/push/subscriptions`, { method: 'POST', headers, body: JSON.stringify({ accountId: '102', subscription }) });
+  const saved = await fetch(`${base}/push/subscriptions`, { method: 'POST', headers, body: JSON.stringify({ accountId: '102', notificationRole: 'Admin', subscription }) });
   assert.equal(saved.status, 200);
-  assert.ok(await call('get', { subscriptionId, accountId: '101' }));
+  assert.equal((await call('get', { subscriptionId, accountId: '101' })).notificationRole, 'Freelancer');
   assert.equal(await call('get', { subscriptionId, accountId: '102' }), null);
+  await t.test('the API stores the authorized selected role and ignores body or header role spoofing', async () => {
+    const loginResponse = await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'multi-fixture', password }) });
+    assert.equal(loginResponse.status, 200);
+    const token = (await loginResponse.json()).data.token;
+    for (const [requested, expected] of [['Freelancer', 'Freelancer'], ['QC', 'QC'], ['Admin', 'QC']]) {
+      const response = await fetch(`${base}/push/subscriptions`, {
+        method: 'POST', headers: { ...headers, Authorization: `Bearer ${token}`, 'X-Active-Role': requested },
+        body: JSON.stringify({ accountId: '101', notificationRole: 'Admin', subscription })
+      });
+      assert.equal(response.status, 200);
+      assert.equal((await call('get', { subscriptionId, accountId: '102' })).notificationRole, expected);
+      assert.equal(await call('get', { subscriptionId, accountId: '101' }), null);
+    }
+    assert.equal((await fetch(`${base}/push/subscriptions`, { method: 'POST', headers, body: JSON.stringify({ subscription }) })).status, 200);
+  });
   const invalid = await fetch(`${base}/push/subscriptions`, { method: 'POST', headers, body: JSON.stringify({ subscription: { ...subscription, endpoint: 'https://127.0.0.1/admin' } }) });
   assert.equal(invalid.status, 400);
   const removed = await fetch(`${base}/push/subscriptions`, { method: 'DELETE', headers, body: JSON.stringify({ subscription }) });
