@@ -6,6 +6,7 @@ import { inflateRawSync } from 'node:zlib';
 import { calculateBonus, getSalaryMonth, isSalaryMonth, resolveBonusRule, validateBonusRule } from './bonus.mjs';
 import { getMailConfig, sendEmail } from './mailTransport.mjs';
 import { createTaskReminderWorker, reminderPagination, validateReminderConfiguration, validateReminderStore } from './taskReminderWorker.mjs';
+import { createWebPushWorker, getWebPushConfig, pushSubscriptionId, sendWebPush, validatePushSubscription, validateWebPushStore } from './webPush.mjs';
 import {
   deleteRowById,
   deleteRowsByKeys,
@@ -14,6 +15,7 @@ import {
   isDatabaseConfigured,
   selectRows,
   taskReminderStore,
+  webPushStore,
   updateRow,
   updateRowById
 } from './supabaseRepository.js';
@@ -1497,6 +1499,54 @@ app.post('/api/auth/heartbeat', requireAuth, (req, res) => {
   res.json({ success: true, data: { online: true } });
 });
 
+app.get('/api/push/config', requireAuth, async (req, res) => {
+  try {
+    const config = getWebPushConfig();
+    await validateWebPushStore(webPushStore);
+    res.json({ success: true, data: { ready: true, publicKey: config.publicKey } });
+  } catch (error) {
+    res.json({ success: true, data: { ready: false, message: error.message } });
+  }
+});
+
+app.post('/api/push/subscriptions', requireAuth, async (req, res) => {
+  try {
+    getWebPushConfig();
+    const subscription = validatePushSubscription(req.body?.subscription);
+    await webPushStore('subscribe', { subscriptionId: pushSubscriptionId(subscription), accountId: String(req.authUser.id), subscription });
+    res.json({ success: true, data: { enabled: true } });
+  } catch (error) {
+    res.status(error.statusCode || 503).json({ success: false, message: error.statusCode ? error.message : 'Không thể lưu đăng ký thông báo. Vui lòng thử lại.' });
+  }
+});
+
+app.delete('/api/push/subscriptions', requireAuth, async (req, res) => {
+  try {
+    const subscription = validatePushSubscription(req.body?.subscription);
+    await webPushStore('remove', { subscriptionId: pushSubscriptionId(subscription), accountId: String(req.authUser.id) });
+    res.json({ success: true, data: { enabled: false } });
+  } catch (error) {
+    res.status(error.statusCode || 503).json({ success: false, message: error.statusCode ? error.message : 'Không thể tắt thông báo trên máy chủ. Vui lòng thử lại.' });
+  }
+});
+
+const pushTestRequests = new Map();
+app.post('/api/push/test', requireAuth, async (req, res) => {
+  try {
+    const accountId = String(req.authUser.id);
+    if (Date.now() - (pushTestRequests.get(accountId) || 0) < 60_000) return res.status(429).json({ success: false, message: 'Vui lòng chờ 1 phút trước khi gửi thử tiếp.' });
+    const config = getWebPushConfig();
+    const subscription = validatePushSubscription(req.body?.subscription);
+    const device = await webPushStore('get', { subscriptionId: pushSubscriptionId(subscription), accountId });
+    if (!device) return res.status(404).json({ success: false, message: 'Thiết bị chưa bật thông báo cho tài khoản này.' });
+    pushTestRequests.set(accountId, Date.now());
+    await sendWebPush(device.subscription, { title: 'WZ System — Đã bật thông báo', body: 'Thiết bị này đã sẵn sàng nhận nhắc deadline.', url: config.appUrl, tag: 'wz-push-test', accountId }, config);
+    res.json({ success: true, data: { sent: true } });
+  } catch (error) {
+    res.status(error.statusCode === 400 ? 400 : 503).json({ success: false, message: 'Không gửi được thông báo thử. Kiểm tra quyền thông báo hoặc thử bật lại.' });
+  }
+});
+
 app.post('/api/auth/logout', (req, res) => {
   const token = getBearerToken(req);
   if (token) sessions.delete(token);
@@ -1504,11 +1554,13 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 const taskReminderWorker = createTaskReminderWorker({ selectRows, store: taskReminderStore });
+const webPushWorker = createWebPushWorker({ selectRows, store: webPushStore });
 const httpServer = app.listen(PORT, () => {
   console.log(`Webtoon Deadline Management API listening on port ${PORT}`);
   taskReminderWorker.start();
+  if (process.env.WEB_PUSH_ENABLED === 'true') webPushWorker.start();
 });
-httpServer.on('close', () => taskReminderWorker.stop());
+httpServer.on('close', () => { taskReminderWorker.stop(); webPushWorker.stop(); });
 function applyConfiguredPrices(deadlines, prices) {
   return deadlines.map((deadline) => {
     const configuredPrice = prices.find((item) => item.field === deadline.type && item.difficulty === deadline.difficulty);

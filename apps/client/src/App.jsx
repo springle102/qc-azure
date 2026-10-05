@@ -14,6 +14,7 @@ import { ErrorManagementView } from './components/views/ErrorManagementView';
 import { ProfileView } from './components/views/ProfileView';
 import { LoginView } from './components/views/LoginView';
 import { api } from './services/api';
+import { disableDevicePush } from './services/devicePush';
 import { readReminderLink } from './utils/reminderLink.mjs';
 import './App.css';
 
@@ -128,7 +129,7 @@ export function App() {
 
   useEffect(() => {
     if (!api.hasSession()) {
-      setIsAuthChecking(false);
+      void disableDevicePush().catch(() => {}).finally(() => setIsAuthChecking(false));
       return;
     }
 
@@ -139,7 +140,7 @@ export function App() {
         setActiveRole(normalizedUser.role);
         api.setActiveRole(normalizedUser.role);
       })
-      .catch(() => api.clearSession())
+      .catch(async () => { await disableDevicePush().catch(() => {}); api.clearSession(); })
       .finally(() => setIsAuthChecking(false));
   }, []);
 
@@ -369,6 +370,8 @@ export function App() {
   };
 
   const handleLogout = async () => {
+    setIsAuthChecking(true);
+    await disableDevicePush().catch(() => {});
     try {
       await api.logout();
     } catch {
@@ -380,6 +383,7 @@ export function App() {
     setData(EMPTY_DATA);
     setCurrentView('dashboard');
     setIsSidebarOpen(false);
+    setIsAuthChecking(false);
   };
 
   const handleSaveProfile = useCallback(async (updates, { silent = false } = {}) => {
@@ -474,6 +478,7 @@ export function App() {
 
       <div className="main-wrapper">
         <Header
+          key={activeProfile.id}
           currentUser={activeProfile}
           deadlines={data.deadlines}
           errors={data.errors}

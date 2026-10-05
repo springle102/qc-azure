@@ -74,6 +74,8 @@ Khi cấp account role `Freelancer` hoặc `QC`, Admin chọn mảng từ danh s
 
 Nhắc freelancer nộp task qua mail: chạy migration `docs/migrations/20261003_task_reminders.sql` rồi `docs/migrations/20261003_gmail_reminders.sql`, cấu hình Gmail API và `APP_PUBLIC_URL`, rồi bật trong **Cấu hình chung**. Dùng được Gmail thường, không cần tên miền hay SMTP. Tính năng mặc định tắt, nhắc trước 1 ngày/6 tiếng/3 tiếng và một lần khi quá hạn. Chạy `npm run gmail:authorize` để cấp quyền cục bộ; xem [cách cấu hình và kiểm thử](docs/deployment.md#gmail-api-không-cần-tên-miền).
 
+Nhắc deadline trực tiếp trên thiết bị qua Web Push: chạy `docs/migrations/20261005_web_push.sql`, cấu hình các biến `WEB_PUSH_*` trên backend và deploy frontend/backend. Sau đăng nhập, người dùng chọn **Cho phép** trong lời mời để mở hộp thoại quyền chính thức của trình duyệt; chọn **Không cho phép** sẽ lưu lựa chọn và không hỏi lại tự động. Menu chuông có nút bật/tắt và gửi thử. Kênh này hoạt động độc lập với email, theo cùng bốn mốc nhắc; xem [cấu hình Web Push](docs/deployment.md#web-push-thông-báo-trên-thiết-bị).
+
 ### Deploy Supabase + Railway + Cloudflare Pages
 
 Xem [hướng dẫn triển khai](docs/deployment.md) để cấu hình backend bằng `Dockerfile.railway`, frontend bằng `npm run build:cloudflare` và các biến môi trường. Docker Compose dùng cho local. Cloudflare phải có `VITE_API_URL` là URL HTTPS công khai của backend, kết thúc bằng `/api`; địa chỉ Render cũ đã được bỏ khỏi cấu hình production.

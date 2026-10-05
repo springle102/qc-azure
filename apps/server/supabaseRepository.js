@@ -271,6 +271,21 @@ export async function taskReminderStore(action, data = {}) {
   return response.json();
 }
 
+export async function webPushStore(action, data = {}) {
+  if (databaseUrl) {
+    const result = await getPool().query('SELECT public.web_push_store($1, $2::jsonb) AS result', [action, JSON.stringify(data)]);
+    return result.rows[0].result;
+  }
+  if (!isSupabaseConfigured()) throw new Error('Database chưa được cấu hình.');
+  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/web_push_store`, {
+    method: 'POST', signal: AbortSignal.timeout(15_000),
+    headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_action: action, p_data: data })
+  });
+  if (!response.ok) throw new Error('Không thể lưu đăng ký thông báo. Kiểm tra migration 20261005_web_push.sql và database.');
+  return response.json();
+}
+
 function quoteIdentifier(identifier) {
   return `"${identifier.replace(/"/g, '""')}"`;
 }

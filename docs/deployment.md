@@ -145,6 +145,23 @@ Gắn domain frontend trong Pages > Custom domains. Pages có fallback SPA mặc
 
 Docker local vẫn chạy bằng `npm run docker:up` tại `http://localhost:8080`. Chuẩn bị source không tự push hoặc deploy lên các tài khoản cloud.
 
+## Web Push: thông báo trên thiết bị
+
+Kênh Web Push không qua Gmail và không phụ thuộc công tắc nhắc mail. Sau khi cấu hình, lời mời bật thông báo xuất hiện sau đăng nhập; người dùng bấm **Cho phép** rồi xác nhận hộp thoại của trình duyệt. Từ chối lời mời không hỏi lại tự động; bật lại trong menu chuông. Nếu Chặn ở hộp thoại trình duyệt, phải thay đổi quyền trong cài đặt trang web.
+
+1. Chạy `docs/migrations/20261005_web_push.sql` trong SQL Editor của database đang dùng. Migration không phụ thuộc hai migration mail, không sửa bảng mail hoặc dữ liệu task.
+2. Trong `apps/server`, chạy `npm run push:keys`. Lưu cặp khóa sinh ra vào Railway Variables: `WEB_PUSH_VAPID_PUBLIC_KEY` và `WEB_PUSH_VAPID_PRIVATE_KEY`. Đây là cặp khóa lâu dài; không sinh lại mỗi lần deploy và không đưa private key vào frontend/Git.
+3. Đặt `WEB_PUSH_VAPID_SUBJECT=mailto:<email-liên-hệ-thật>`, `WEB_PUSH_ENABLED=true`, `APP_PUBLIC_URL=https://<domain-frontend>/`. Khóa VAPID không cần đăng ký Firebase hay chứng chỉ APNs. Chỉ frontend HTTPS (hoặc localhost khi phát triển) dùng được thông báo.
+4. Deploy backend với dependency `web-push`, rồi frontend với manifest/service worker mới. Nếu frontend chạy trên Cloudflare, giữ `_headers` để service worker không bị cache lâu.
+5. Đăng nhập trên thiết bị, chọn **Cho phép**. Mở chuông → **Gửi thử**, kiểm tra trung tâm thông báo. Bấm thông báo deadline mở đúng task. Thử **Không cho phép**, tải lại và kiểm tra không hỏi lại; thử đăng xuất để xác nhận ngừng nhận trên thiết bị.
+6. iPhone/iPad từ iOS/iPadOS 16.4: Safari → Chia sẻ → Thêm vào Màn hình chính → mở biểu tượng WZ System → bật thông báo. Android dùng trình duyệt hỗ trợ Web Push như Chrome. Kiểm tra cả cài đặt thông báo của trình duyệt/hệ điều hành và chế độ Không làm phiền.
+
+Worker chạy trên backend liên tục, quét mỗi phút và áp dụng cùng bốn cửa sổ nhắc như mail (24h/6h/3h/quá hạn), không gửi bù tất cả mốc đã bỏ lỡ khi máy chủ ngừng chạy. Mỗi tài khoản có thể bật nhiều thiết bị; mỗi thiết bị nhận một lượt cho từng task/hạn/mốc. Task nộp, đổi người nhận hoặc đổi hạn được kiểm tra lại trước khi gửi. Nếu thay khóa VAPID, người dùng cần mở lại web để client tạo đăng ký mới.
+
+Cho phép nhận là quyền của từng trình duyệt/origin, không thể tự bật ở mọi thiết bị. Push service tiếp nhận không bảo đảm người dùng đã nhìn thấy banner; cách hiện, âm thanh và thời gian nhận phụ thuộc thiết bị, kết nối và quyền hệ điều hành.
+
+Nguồn: [MDN Push API](https://developer.mozilla.org/en-US/docs/Web/API/Push_API), [MDN yêu cầu quyền](https://developer.mozilla.org/en-US/docs/Web/API/Notification/requestPermission_static), [WebKit Web Push trên iOS](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/), [web-push](https://github.com/web-push-libs/web-push).
+
 ## Tài liệu nền tảng
 
 - [Railway Dockerfiles](https://docs.railway.com/builds/dockerfiles)

@@ -1,5 +1,13 @@
 # React + Vite
 
+## Thông báo trên thiết bị
+
+Khi backend Web Push sẵn sàng, lời mời **Bạn muốn cho phép trang web này gửi thông báo cho bạn không?** xuất hiện sau đăng nhập. Chỉ khi bấm **Cho phép**, client mới gọi `Notification.requestPermission()` trực tiếp trong thao tác bấm; trình duyệt quyết định câu chữ và cách hiển thị hộp thoại. **Không cho phép** ghi nhớ lựa chọn trên thiết bị, không mở quyền và không hỏi lại tự động. Có thể bật lại, tắt hoặc gửi thử từ menu chuông. Nếu đã Chặn ở trình duyệt, cần sửa quyền trang web rồi tải lại.
+
+Trang production phải dùng HTTPS. iPhone/iPad từ iOS 16.4 cần thêm trang vào màn hình chính và mở từ biểu tượng đó; lời mời có hướng dẫn khi chưa cài. Manifest và icon được đóng gói trong `public/`; `notification-sw.js` chỉ xử lý push và click, không cache hay chặn request trang/API. Quyền gắn theo origin, đăng ký gắn theo tài khoản và từng thiết bị. Đăng xuất xóa binding trong service worker, đóng thông báo cũ và hủy đăng ký của thiết bị; đăng nhập lại có thể khôi phục lựa chọn đã bật mà không xin quyền lại. Không tự đăng ký cho tài khoản khác chỉ vì trình duyệt đã cấp quyền.
+
+Xem [cấu hình backend và kiểm thử](../../docs/deployment.md#web-push-thông-báo-trên-thiết-bị).
+
 ## Bảng lương
 
 Dòng cuối bảng giữ tổng từng cột theo các hàng đang được lọc và hiển thị thêm tổng của hai cột tiền ở ô ngoài cùng bên phải. Ô mới là phép cộng hai cột hiển thị, không thay đổi cách tính lương/bonus: `Tổng lương` đã bao gồm bonus nên ô mới không phải số tiền thanh toán thực tế.

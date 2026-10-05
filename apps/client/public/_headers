@@ -6,3 +6,10 @@
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+/notification-sw.js
+  Cache-Control: no-cache
+  Service-Worker-Allowed: /
+
+/manifest.webmanifest
+  Cache-Control: no-cache

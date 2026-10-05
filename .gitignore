@@ -3,3 +3,4 @@
 .gmail-oauth*.env
 client_secret*.json
 gmail-client.json
+**/.npm-cache/

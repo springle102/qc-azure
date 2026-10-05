@@ -114,9 +114,14 @@ Chạy migration `docs/migrations/20260929_add_account_roles.sql` trước. Trig
 - `MAIL_PROVIDER=gmail` (mặc định): dùng Gmail API qua HTTPS, không cần tên miền hoặc SMTP.
 - `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`, `GMAIL_SENDER_EMAIL`, `GMAIL_SENDER_NAME` (OAuth Gmail gửi; tên mặc định WZ System). Lấy token bằng `npm run gmail:authorize` từ gốc repo theo [hướng dẫn](../../docs/deployment.md#gmail-api-không-cần-tên-miền). Không dùng mật khẩu Gmail hay Service Account Sheets/Drive.
 - `APP_PUBLIC_URL`: URL frontend để mở task sau đăng nhập.
+- `WEB_PUSH_ENABLED=true`, `WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_VAPID_PRIVATE_KEY`, `WEB_PUSH_VAPID_SUBJECT`: bật Web Push độc lập với email. Sinh cặp khóa một lần bằng `npm run push:keys` trong `apps/server`, giữ private key ở secret store backend và chạy migration `20261005_web_push.sql`. `APP_PUBLIC_URL` phải là HTTPS (localhost được dùng cho phát triển).
 - Nếu vẫn dùng Resend: đặt rõ `MAIL_PROVIDER=resend`, `RESEND_API_KEY`, `RESEND_FROM` thuộc domain đã xác minh.
 
 Luồng quên mật khẩu gửi OTP 6 số tới email đang lưu trong `Accounts`, dùng chung Gmail API với mail nhắc deadline. OTP có hiệu lực 10 phút, tối đa 5 lần nhập; sau khi đặt mật khẩu mới, các phiên đăng nhập cũ của account sẽ bị thu hồi. Cần cấu hình Gmail OAuth trên backend/Railway trước khi dùng tính năng này. Mail nhắc hạn cần hai migration trong `docs/migrations/20261003_*reminders.sql`; lượt gửi Gmail bị gián đoạn hoặc chưa rõ kết quả được dừng ở “Cần kiểm tra” để tránh trùng.
+
+Web Push dùng `/api/push/config`, POST/DELETE `/api/push/subscriptions` và POST `/api/push/test`; tất cả yêu cầu đăng nhập. Config chỉ trả public key và trạng thái sẵn sàng. Thiết bị gửi `PushSubscription` của trình duyệt, backend lấy account từ session thay vì nhận ID người dùng trong body. Endpoint chỉ chấp nhận dịch vụ Google/Mozilla/Apple/Windows qua HTTPS để tránh truy cập địa chỉ tùy ý. Các bảng `WebPushSubscriptions` và `WebPushDeliveries` bật RLS, không cho anon/authenticated truy cập trực tiếp.
+
+Worker kiểm tra mỗi phút và nhắc từng thiết bị theo hạn cuối ngày Việt Nam: trước 24h, 6h, 3h, quá hạn. Chỉ task Doing/Chưa bắt đầu, chưa nộp và đúng freelancer của account đang hoạt động; kiểm tra lại task, account và consent trước khi gửi. Atomic claim chống trùng giữa các backend replica; timeout/crash không gửi lại lượt chưa rõ kết quả. Chỉ phản hồi 429 được thử lại sau 5 phút, tối đa 4 lần; 404/410 xóa đăng ký hết hạn. Thông báo có tag để gom trùng trên thiết bị, TTL tối đa 1h và không vượt deadline với thông báo trước hạn. Menu chuông có gửi thử giới hạn 1 lần/phút/account. Xem [triển khai](../../docs/deployment.md#web-push-thông-báo-trên-thiết-bị).
 
 Mỗi dòng trong bảng `Fields` có thêm `guideUrl` và `resourceUrl`. Dashboard trả các link theo mảng; Freelancer chỉ nhận link của mảng được gán trong account.
 

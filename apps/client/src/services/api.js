@@ -108,6 +108,10 @@ export const api = {
   }),
   getCurrentUser: () => request('/auth/me'),
   heartbeat: () => request('/auth/heartbeat', { method: 'POST' }),
+  getPushConfiguration: () => request('/push/config', { cache: 'no-store' }),
+  subscribePush: (subscription) => request('/push/subscriptions', { method: 'POST', body: JSON.stringify({ subscription }) }),
+  unsubscribePush: (subscription) => request('/push/subscriptions', { method: 'DELETE', body: JSON.stringify({ subscription }) }),
+  testPush: (subscription) => request('/push/test', { method: 'POST', body: JSON.stringify({ subscription }) }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   getAccounts: () => request('/accounts'),
   createAccount: (account) => request('/accounts', {

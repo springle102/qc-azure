@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { IconAlertTriangle, IconBell, IconCheckCircle, IconChevronRight, IconClock, IconMenu, IconMoon, IconSun, IconUser } from '../common/Icons';
+import { DeviceNotificationPrompt, DeviceNotificationSettings } from '../common/DeviceNotifications';
+import { useDeviceNotifications } from '../common/useDeviceNotifications';
 
 export function Header({ currentUser, deadlines = [], errors = [], onNavigate, onOpenProfile, onToggleSidebar, onOpenNotifications, isDarkMode = true, onToggleTheme }) {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [readNotificationIds, setReadNotificationIds] = useState([]);
   const notificationRef = useRef(null);
+  const deviceNotifications = useDeviceNotifications(currentUser?.id);
   const notifications = useMemo(() => buildNotifications(deadlines, errors, currentUser), [currentUser, deadlines, errors]);
   const unreadCount = notifications.filter((notification) => !readNotificationIds.includes(notification.id)).length;
   const ThemeIcon = isDarkMode ? IconSun : IconMoon;
@@ -91,6 +94,7 @@ export function Header({ currentUser, deadlines = [], errors = [], onNavigate, o
                 </div>
                 {unreadCount > 0 && <button type="button" className="qc-notification-mark-read" onClick={markAllNotificationsRead}>Đánh dấu đã đọc</button>}
               </div>
+              <DeviceNotificationSettings controller={deviceNotifications} />
               <div className="qc-notification-list">
                 {notifications.length === 0 ? (
                   <div className="qc-notification-empty">
@@ -143,6 +147,7 @@ export function Header({ currentUser, deadlines = [], errors = [], onNavigate, o
           </span>
         </button>
       </div>
+      <DeviceNotificationPrompt controller={deviceNotifications} />
     </header>
   );
 }
