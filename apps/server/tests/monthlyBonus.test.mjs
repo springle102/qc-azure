@@ -296,6 +296,65 @@ test('salary merges a legacy QC and their account while retaining earnings under
   assert.equal(res.payload.data.some((row) => !row.isQc && row.fIld === 8), false);
 });
 
+test('QC salaries expose the QR saved in their linked profile for QC and Admin viewers', async () => {
+  for (const roles of [['QC'], ['Admin', 'QC']]) {
+    const qcData = {
+      qcs: [],
+      accounts: [{ id: 22, role: roles[0], roles, displayName: 'QC', freelancerId: 8 }],
+      freelancers: [{ fIld: 7, name: 'A', imageQR: 'other-qr' }, { fIld: 8, name: 'QC', imageQR: 'uploaded-qr' }]
+    };
+    for (const role of ['QC', 'Admin']) {
+      const res = await salaryResponse(chapters(1), { id: 22, role, freelancerId: 8 }, null, qcData);
+      assert.equal(res.code, 200);
+      const qcRows = res.payload.data.filter((row) => row.isQc);
+      assert.equal(qcRows.length, 1);
+      assert.equal(qcRows[0].qcId, 22);
+      assert.equal(qcRows[0].imageQR, 'uploaded-qr');
+      assert.equal(res.payload.data.some((row) => !row.isQc && row.fIld === 8), false);
+    }
+  }
+});
+
+test('QC salary QR follows profile replacement and removal on subsequent requests', async () => {
+  const profile = { fIld: 8, name: 'QC', imageQR: 'first-qr' };
+  const qcData = {
+    qcs: [],
+    accounts: [{ id: 22, role: 'QC', freelancerId: '8' }],
+    freelancers: [profile]
+  };
+  for (const imageQR of ['first-qr', 'replacement-qr', null, '']) {
+    profile.imageQR = imageQR;
+    const res = await salaryResponse(chapters(1), { role: 'QC' }, null, qcData);
+    assert.equal(res.code, 200);
+    assert.equal(res.payload.data.find((row) => row.isQc).imageQR, imageQR || null);
+  }
+});
+
+test('linked QC profile QR takes priority over a legacy QC QR', async () => {
+  const qcData = {
+    qcs: [{ qcId: 2, name: 'QC', freelancerId: 8, imageQR: 'legacy-qr' }],
+    accounts: [{ id: 22, role: 'QC', displayName: 'QC', freelancerId: 8 }],
+    freelancers: [{ fIld: 8, name: 'QC', imageQR: 'uploaded-qr' }]
+  };
+  const res = await salaryResponse(chapters(1), { role: 'QC' }, null, qcData);
+  assert.equal(res.code, 200);
+  const qcRows = res.payload.data.filter((row) => row.isQc);
+  assert.equal(qcRows.length, 1);
+  assert.equal(qcRows[0].imageQR, 'uploaded-qr');
+});
+
+test('QC without a linked profile never inherits another member QR', async () => {
+  for (const freelancerId of [null, 99]) {
+    const res = await salaryResponse(chapters(1), { role: 'QC' }, null, {
+      qcs: [],
+      accounts: [{ id: 8, role: 'QC', freelancerId }],
+      freelancers: [{ fIld: 8, name: 'Other member', imageQR: 'other-qr' }]
+    });
+    assert.equal(res.code, 200);
+    assert.equal(res.payload.data.find((row) => row.isQc).imageQR, null);
+  }
+});
+
 test('QC identity uses linked profile or email, and keeps conflicting or ambiguous names separate', async () => {
   const account = { id: 22, role: 'QC', displayName: 'Dương', email: 'duong@example.com', freelancerId: 8 };
   const qcCount = async (qcs, accounts = [account]) => {

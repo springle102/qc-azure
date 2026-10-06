@@ -1,7 +1,7 @@
 {
-  "name": "qc-webtoon-ycomm",
+  "name": "qc-manager",
   "version": "1.0.0",
-  "description": "Hệ thống quản lý QC Webtoon chuyên nghiệp cho Y-COMM Studio (React + Node.js)",
+  "description": "Hệ thống quản lý QC Webtoon chuyên nghiệp cho WZ System (React + Node.js)",
   "scripts": {
     "gmail:authorize": "node scripts/gmail-authorize.mjs",
     "dev": "node scripts/dev.mjs",
@@ -13,7 +13,7 @@
     "docker:logs": "node scripts/docker.mjs logs",
     "docker:status": "node scripts/docker.mjs status"
   },
-  "keywords": ["webtoon", "qc", "ycomm", "react", "nodejs"],
-  "author": "Y-COMM",
+  "keywords": ["webtoon", "qc", "wzsystem", "react", "nodejs"],
+  "author": "WZ System",
   "license": "ISC"
 }

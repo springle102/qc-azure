@@ -1,0 +1,1821 @@
+{
+  "source": "information_schema (read-only)",
+  "asOf": "2026-10-06",
+  "columns": [
+    {
+      "table_name": "Accounts",
+      "column_name": "id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "Accounts",
+      "column_name": "username",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "Accounts",
+      "column_name": "passwordHash",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "Accounts",
+      "column_name": "passwordSalt",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "Accounts",
+      "column_name": "role",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "Accounts",
+      "column_name": "displayName",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "Accounts",
+      "column_name": "email",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Accounts",
+      "column_name": "field",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Accounts",
+      "column_name": "fields",
+      "data_type": "ARRAY",
+      "udt_name": "_text",
+      "is_nullable": "NO",
+      "column_default": "ARRAY[]::text[]"
+    },
+    {
+      "table_name": "Accounts",
+      "column_name": "freelancerId",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Accounts",
+      "column_name": "isActive",
+      "data_type": "boolean",
+      "udt_name": "bool",
+      "is_nullable": "NO",
+      "column_default": "true"
+    },
+    {
+      "table_name": "Accounts",
+      "column_name": "createdAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "Accounts",
+      "column_name": "avatar",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Accounts",
+      "column_name": "roles",
+      "data_type": "ARRAY",
+      "udt_name": "_text",
+      "is_nullable": "NO",
+      "column_default": "ARRAY[]::text[]"
+    },
+    {
+      "table_name": "BonusSettings",
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "BonusSettings",
+      "column_name": "taskThreshold",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "20"
+    },
+    {
+      "table_name": "BonusSettings",
+      "column_name": "bonusPerTask",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "NO",
+      "column_default": "10000"
+    },
+    {
+      "table_name": "BonusSettings",
+      "column_name": "qcDefaultPrice",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "BonusSettings",
+      "column_name": "field",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "BonusSettings",
+      "column_name": "bonusPolicy",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "NO",
+      "column_default": "'{\"versions\": []}'::jsonb"
+    },
+    {
+      "table_name": "DeadlineRegistrations",
+      "column_name": "id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "DeadlineRegistrations",
+      "column_name": "fIld",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "DeadlineRegistrations",
+      "column_name": "name",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "DeadlineRegistrations",
+      "column_name": "chaptersPerWeek",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "DeadlineRegistrations",
+      "column_name": "chaptersPerMonth",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "DeadlineRegistrations",
+      "column_name": "stability",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "DeadlineRegistrations",
+      "column_name": "note",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "DeadlineRegistrations",
+      "column_name": "createdAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "DeadlineRegistrations",
+      "column_name": "updatedAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "DifficultyLevels",
+      "column_name": "id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "DifficultyLevels",
+      "column_name": "field",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "DifficultyLevels",
+      "column_name": "difficulty",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "DifficultyLevels",
+      "column_name": "color",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": "'#64748B'::character varying"
+    },
+    {
+      "table_name": "DifficultyLevels",
+      "column_name": "textColor",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": "'#FFFFFF'::character varying"
+    },
+    {
+      "table_name": "DifficultyPricing",
+      "column_name": "id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "DifficultyPricing",
+      "column_name": "field",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "DifficultyPricing",
+      "column_name": "difficulty",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "DifficultyPricing",
+      "column_name": "price",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "Errors",
+      "column_name": "id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "Errors",
+      "column_name": "field",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "Errors",
+      "column_name": "title",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "Errors",
+      "column_name": "chapter",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "Errors",
+      "column_name": "errorType",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Errors",
+      "column_name": "error",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "Errors",
+      "column_name": "note",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Errors",
+      "column_name": "editor",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Errors",
+      "column_name": "editorFreelancerId",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Errors",
+      "column_name": "fixCheck",
+      "data_type": "boolean",
+      "udt_name": "bool",
+      "is_nullable": "NO",
+      "column_default": "false"
+    },
+    {
+      "table_name": "Errors",
+      "column_name": "sourceRow",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Errors",
+      "column_name": "sourceUrl",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Errors",
+      "column_name": "createdAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "Errors",
+      "column_name": "updatedAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "Errors",
+      "column_name": "screenshot",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Fields",
+      "column_name": "id",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "Fields",
+      "column_name": "name",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "Fields",
+      "column_name": "guideUrl",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Fields",
+      "column_name": "resourceUrl",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Fields",
+      "column_name": "createdAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "Freelancer",
+      "column_name": "fIld",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "Freelancer",
+      "column_name": "name",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "Freelancer",
+      "column_name": "email",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Freelancer",
+      "column_name": "field",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Freelancer",
+      "column_name": "fields",
+      "data_type": "ARRAY",
+      "udt_name": "_text",
+      "is_nullable": "NO",
+      "column_default": "ARRAY[]::text[]"
+    },
+    {
+      "table_name": "Freelancer",
+      "column_name": "note",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Freelancer",
+      "column_name": "salary",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "Freelancer",
+      "column_name": "imageQR",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "GeneralSettings",
+      "column_name": "id",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "GeneralSettings",
+      "column_name": "googleSheetUrl",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "GeneralSettings",
+      "column_name": "googleSheetRange",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "GeneralSettings",
+      "column_name": "googleSheetTabs",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "GeneralSettings",
+      "column_name": "googleSheetAutoSync",
+      "data_type": "boolean",
+      "udt_name": "bool",
+      "is_nullable": "NO",
+      "column_default": "false"
+    },
+    {
+      "table_name": "GeneralSettings",
+      "column_name": "googleSheetLastSyncedAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "GeneralSettings",
+      "column_name": "googleSheetLastSyncCount",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "GeneralSettings",
+      "column_name": "googleSheetLastSyncError",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "GeneralSettings",
+      "column_name": "googleDriveFolders",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "GeneralSettings",
+      "column_name": "errorSheetUrls",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "GeneralSettings",
+      "column_name": "checklists",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "GeneralSettings",
+      "column_name": "googleDriveRawTransfer",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "NO",
+      "column_default": "'{\"enabled\": false, \"mappings\": {}}'::jsonb"
+    },
+    {
+      "table_name": "GeneralSettings",
+      "column_name": "googleDriveRawTransferAuth",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "GeneralSettings",
+      "column_name": "taskRemindersEnabled",
+      "data_type": "boolean",
+      "udt_name": "bool",
+      "is_nullable": "NO",
+      "column_default": "false"
+    },
+    {
+      "table_name": "QC",
+      "column_name": "qcId",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "QC",
+      "column_name": "name",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "QC",
+      "column_name": "email",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "QC",
+      "column_name": "imageQR",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "seriesId",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "chapterNumber",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "seriesName",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "type",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "statusRaw",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "status",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "doingStartedAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "workDurationSeconds",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "urlSeries",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "fIld",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "qcId",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "difficulty",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "price",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "receivePrice",
+      "data_type": "numeric",
+      "udt_name": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "feedback",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "task",
+      "data_type": "character varying",
+      "udt_name": "varchar",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "endTask",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "submittedAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "completionPercent",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "100"
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "paymentApproved",
+      "data_type": "boolean",
+      "udt_name": "bool",
+      "is_nullable": "NO",
+      "column_default": "false"
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "late",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": "'≤0h'::text"
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "assignedAdminId",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "assignedAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "deadlineSetAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "SeriesList",
+      "column_name": "receivedAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "deliveryKey",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "seriesId",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "chapterNumber",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "freelancerId",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "dueAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "milestone",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "email",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": "''::text"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "payload",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "status",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": "'pending'::text"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "attemptCount",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "createdAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "firstAttemptAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "nextAttemptAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "leaseToken",
+      "data_type": "uuid",
+      "udt_name": "uuid",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "leaseUntil",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "sentAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "providerMessageId",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "lastError",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": "''::text"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "uncertain",
+      "data_type": "boolean",
+      "udt_name": "bool",
+      "is_nullable": "NO",
+      "column_default": "false"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "column_name": "provider",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": "'resend'::text"
+    },
+    {
+      "table_name": "WebPushDeliveries",
+      "column_name": "deliveryKey",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "WebPushDeliveries",
+      "column_name": "subscriptionId",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "WebPushDeliveries",
+      "column_name": "accountId",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "WebPushDeliveries",
+      "column_name": "status",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "WebPushDeliveries",
+      "column_name": "attemptCount",
+      "data_type": "integer",
+      "udt_name": "int4",
+      "is_nullable": "NO",
+      "column_default": "1"
+    },
+    {
+      "table_name": "WebPushDeliveries",
+      "column_name": "leaseToken",
+      "data_type": "uuid",
+      "udt_name": "uuid",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "WebPushDeliveries",
+      "column_name": "leaseUntil",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_name": "WebPushDeliveries",
+      "column_name": "nextAttemptAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "WebPushDeliveries",
+      "column_name": "createdAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "WebPushNotificationState",
+      "column_name": "accountId",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "WebPushNotificationState",
+      "column_name": "role",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "WebPushNotificationState",
+      "column_name": "eventId",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "WebPushNotificationState",
+      "column_name": "fingerprint",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "WebPushNotificationState",
+      "column_name": "version",
+      "data_type": "bigint",
+      "udt_name": "int8",
+      "is_nullable": "NO",
+      "column_default": "1"
+    },
+    {
+      "table_name": "WebPushNotificationState",
+      "column_name": "active",
+      "data_type": "boolean",
+      "udt_name": "bool",
+      "is_nullable": "NO",
+      "column_default": "true"
+    },
+    {
+      "table_name": "WebPushSubscriptions",
+      "column_name": "id",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "WebPushSubscriptions",
+      "column_name": "accountId",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "WebPushSubscriptions",
+      "column_name": "subscription",
+      "data_type": "jsonb",
+      "udt_name": "jsonb",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_name": "WebPushSubscriptions",
+      "column_name": "updatedAt",
+      "data_type": "timestamp with time zone",
+      "udt_name": "timestamptz",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_name": "WebPushSubscriptions",
+      "column_name": "notificationRole",
+      "data_type": "text",
+      "udt_name": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    }
+  ],
+  "constraints": [
+    {
+      "table_name": "Accounts",
+      "constraint_name": "Accounts_freelancer_fkey",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "freelancerId",
+      "ordinal_position": 1,
+      "foreign_table_name": "Freelancer",
+      "foreign_column_name": "fIld"
+    },
+    {
+      "table_name": "Accounts",
+      "constraint_name": "Accounts_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id",
+      "ordinal_position": 1,
+      "foreign_table_name": "Accounts",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "Accounts",
+      "constraint_name": "Accounts_username_key",
+      "constraint_type": "UNIQUE",
+      "column_name": "username",
+      "ordinal_position": 1,
+      "foreign_table_name": "Accounts",
+      "foreign_column_name": "username"
+    },
+    {
+      "table_name": "BonusSettings",
+      "constraint_name": "BonusSettings_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id",
+      "ordinal_position": 1,
+      "foreign_table_name": "BonusSettings",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "DeadlineRegistrations",
+      "constraint_name": "DeadlineRegistrations_freelancer_fkey",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "fIld",
+      "ordinal_position": 1,
+      "foreign_table_name": "Freelancer",
+      "foreign_column_name": "fIld"
+    },
+    {
+      "table_name": "DeadlineRegistrations",
+      "constraint_name": "DeadlineRegistrations_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id",
+      "ordinal_position": 1,
+      "foreign_table_name": "DeadlineRegistrations",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "DifficultyLevels",
+      "constraint_name": "DifficultyLevels_field_difficulty_key",
+      "constraint_type": "UNIQUE",
+      "column_name": "field",
+      "ordinal_position": 1,
+      "foreign_table_name": "DifficultyLevels",
+      "foreign_column_name": "difficulty"
+    },
+    {
+      "table_name": "DifficultyLevels",
+      "constraint_name": "DifficultyLevels_field_difficulty_key",
+      "constraint_type": "UNIQUE",
+      "column_name": "field",
+      "ordinal_position": 1,
+      "foreign_table_name": "DifficultyLevels",
+      "foreign_column_name": "field"
+    },
+    {
+      "table_name": "DifficultyLevels",
+      "constraint_name": "DifficultyLevels_field_difficulty_key",
+      "constraint_type": "UNIQUE",
+      "column_name": "difficulty",
+      "ordinal_position": 2,
+      "foreign_table_name": "DifficultyLevels",
+      "foreign_column_name": "difficulty"
+    },
+    {
+      "table_name": "DifficultyLevels",
+      "constraint_name": "DifficultyLevels_field_difficulty_key",
+      "constraint_type": "UNIQUE",
+      "column_name": "difficulty",
+      "ordinal_position": 2,
+      "foreign_table_name": "DifficultyLevels",
+      "foreign_column_name": "field"
+    },
+    {
+      "table_name": "DifficultyLevels",
+      "constraint_name": "DifficultyLevels_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id",
+      "ordinal_position": 1,
+      "foreign_table_name": "DifficultyLevels",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "DifficultyPricing",
+      "constraint_name": "DifficultyPricing_field_difficulty_key",
+      "constraint_type": "UNIQUE",
+      "column_name": "field",
+      "ordinal_position": 1,
+      "foreign_table_name": "DifficultyPricing",
+      "foreign_column_name": "difficulty"
+    },
+    {
+      "table_name": "DifficultyPricing",
+      "constraint_name": "DifficultyPricing_field_difficulty_key",
+      "constraint_type": "UNIQUE",
+      "column_name": "field",
+      "ordinal_position": 1,
+      "foreign_table_name": "DifficultyPricing",
+      "foreign_column_name": "field"
+    },
+    {
+      "table_name": "DifficultyPricing",
+      "constraint_name": "DifficultyPricing_field_difficulty_key",
+      "constraint_type": "UNIQUE",
+      "column_name": "difficulty",
+      "ordinal_position": 2,
+      "foreign_table_name": "DifficultyPricing",
+      "foreign_column_name": "field"
+    },
+    {
+      "table_name": "DifficultyPricing",
+      "constraint_name": "DifficultyPricing_field_difficulty_key",
+      "constraint_type": "UNIQUE",
+      "column_name": "difficulty",
+      "ordinal_position": 2,
+      "foreign_table_name": "DifficultyPricing",
+      "foreign_column_name": "difficulty"
+    },
+    {
+      "table_name": "DifficultyPricing",
+      "constraint_name": "DifficultyPricing_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id",
+      "ordinal_position": 1,
+      "foreign_table_name": "DifficultyPricing",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "Errors",
+      "constraint_name": "Errors_editor_fkey",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "editorFreelancerId",
+      "ordinal_position": 1,
+      "foreign_table_name": "Freelancer",
+      "foreign_column_name": "fIld"
+    },
+    {
+      "table_name": "Errors",
+      "constraint_name": "Errors_field_fkey",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "field",
+      "ordinal_position": 1,
+      "foreign_table_name": "Fields",
+      "foreign_column_name": "name"
+    },
+    {
+      "table_name": "Errors",
+      "constraint_name": "Errors_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id",
+      "ordinal_position": 1,
+      "foreign_table_name": "Errors",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "Fields",
+      "constraint_name": "Fields_name_key",
+      "constraint_type": "UNIQUE",
+      "column_name": "name",
+      "ordinal_position": 1,
+      "foreign_table_name": "Fields",
+      "foreign_column_name": "name"
+    },
+    {
+      "table_name": "Fields",
+      "constraint_name": "Fields_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id",
+      "ordinal_position": 1,
+      "foreign_table_name": "Fields",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "Freelancer",
+      "constraint_name": "Freelancer_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "fIld",
+      "ordinal_position": 1,
+      "foreign_table_name": "Freelancer",
+      "foreign_column_name": "fIld"
+    },
+    {
+      "table_name": "GeneralSettings",
+      "constraint_name": "GeneralSettings_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id",
+      "ordinal_position": 1,
+      "foreign_table_name": "GeneralSettings",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "QC",
+      "constraint_name": "QC_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "qcId",
+      "ordinal_position": 1,
+      "foreign_table_name": "QC",
+      "foreign_column_name": "qcId"
+    },
+    {
+      "table_name": "SeriesList",
+      "constraint_name": "SeriesList_admin_fkey",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "assignedAdminId",
+      "ordinal_position": 1,
+      "foreign_table_name": "Accounts",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "SeriesList",
+      "constraint_name": "SeriesList_freelancer_fkey",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "fIld",
+      "ordinal_position": 1,
+      "foreign_table_name": "Freelancer",
+      "foreign_column_name": "fIld"
+    },
+    {
+      "table_name": "SeriesList",
+      "constraint_name": "SeriesList_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "seriesId",
+      "ordinal_position": 1,
+      "foreign_table_name": "SeriesList",
+      "foreign_column_name": "seriesId"
+    },
+    {
+      "table_name": "SeriesList",
+      "constraint_name": "SeriesList_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "seriesId",
+      "ordinal_position": 1,
+      "foreign_table_name": "SeriesList",
+      "foreign_column_name": "chapterNumber"
+    },
+    {
+      "table_name": "SeriesList",
+      "constraint_name": "SeriesList_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "chapterNumber",
+      "ordinal_position": 2,
+      "foreign_table_name": "SeriesList",
+      "foreign_column_name": "seriesId"
+    },
+    {
+      "table_name": "SeriesList",
+      "constraint_name": "SeriesList_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "chapterNumber",
+      "ordinal_position": 2,
+      "foreign_table_name": "SeriesList",
+      "foreign_column_name": "chapterNumber"
+    },
+    {
+      "table_name": "SeriesList",
+      "constraint_name": "SeriesList_qc_fkey",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "qcId",
+      "ordinal_position": 1,
+      "foreign_table_name": "QC",
+      "foreign_column_name": "qcId"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "deliveryKey",
+      "ordinal_position": 1,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "deliveryKey"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "seriesId",
+      "ordinal_position": 1,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "freelancerId"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "seriesId",
+      "ordinal_position": 1,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "chapterNumber"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "seriesId",
+      "ordinal_position": 1,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "dueAt"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "seriesId",
+      "ordinal_position": 1,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "milestone"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "seriesId",
+      "ordinal_position": 1,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "seriesId"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "chapterNumber",
+      "ordinal_position": 2,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "dueAt"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "chapterNumber",
+      "ordinal_position": 2,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "chapterNumber"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "chapterNumber",
+      "ordinal_position": 2,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "freelancerId"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "chapterNumber",
+      "ordinal_position": 2,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "milestone"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "chapterNumber",
+      "ordinal_position": 2,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "seriesId"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "freelancerId",
+      "ordinal_position": 3,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "chapterNumber"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "freelancerId",
+      "ordinal_position": 3,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "dueAt"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "freelancerId",
+      "ordinal_position": 3,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "freelancerId"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "freelancerId",
+      "ordinal_position": 3,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "milestone"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "freelancerId",
+      "ordinal_position": 3,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "seriesId"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "dueAt",
+      "ordinal_position": 4,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "chapterNumber"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "dueAt",
+      "ordinal_position": 4,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "dueAt"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "dueAt",
+      "ordinal_position": 4,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "freelancerId"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "dueAt",
+      "ordinal_position": 4,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "milestone"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "dueAt",
+      "ordinal_position": 4,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "seriesId"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "milestone",
+      "ordinal_position": 5,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "dueAt"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "milestone",
+      "ordinal_position": 5,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "chapterNumber"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "milestone",
+      "ordinal_position": 5,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "freelancerId"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "milestone",
+      "ordinal_position": 5,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "milestone"
+    },
+    {
+      "table_name": "TaskReminderDeliveries",
+      "constraint_name": "TaskReminderDeliveries_seriesId_chapterNumber_freelancerId__key",
+      "constraint_type": "UNIQUE",
+      "column_name": "milestone",
+      "ordinal_position": 5,
+      "foreign_table_name": "TaskReminderDeliveries",
+      "foreign_column_name": "seriesId"
+    },
+    {
+      "table_name": "WebPushDeliveries",
+      "constraint_name": "WebPushDeliveries_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "deliveryKey",
+      "ordinal_position": 1,
+      "foreign_table_name": "WebPushDeliveries",
+      "foreign_column_name": "deliveryKey"
+    },
+    {
+      "table_name": "WebPushDeliveries",
+      "constraint_name": "WebPushDeliveries_subscriptionId_fkey",
+      "constraint_type": "FOREIGN KEY",
+      "column_name": "subscriptionId",
+      "ordinal_position": 1,
+      "foreign_table_name": "WebPushSubscriptions",
+      "foreign_column_name": "id"
+    },
+    {
+      "table_name": "WebPushNotificationState",
+      "constraint_name": "WebPushNotificationState_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "accountId",
+      "ordinal_position": 1,
+      "foreign_table_name": "WebPushNotificationState",
+      "foreign_column_name": "role"
+    },
+    {
+      "table_name": "WebPushNotificationState",
+      "constraint_name": "WebPushNotificationState_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "accountId",
+      "ordinal_position": 1,
+      "foreign_table_name": "WebPushNotificationState",
+      "foreign_column_name": "accountId"
+    },
+    {
+      "table_name": "WebPushNotificationState",
+      "constraint_name": "WebPushNotificationState_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "accountId",
+      "ordinal_position": 1,
+      "foreign_table_name": "WebPushNotificationState",
+      "foreign_column_name": "eventId"
+    },
+    {
+      "table_name": "WebPushNotificationState",
+      "constraint_name": "WebPushNotificationState_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "role",
+      "ordinal_position": 2,
+      "foreign_table_name": "WebPushNotificationState",
+      "foreign_column_name": "eventId"
+    },
+    {
+      "table_name": "WebPushNotificationState",
+      "constraint_name": "WebPushNotificationState_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "role",
+      "ordinal_position": 2,
+      "foreign_table_name": "WebPushNotificationState",
+      "foreign_column_name": "accountId"
+    },
+    {
+      "table_name": "WebPushNotificationState",
+      "constraint_name": "WebPushNotificationState_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "role",
+      "ordinal_position": 2,
+      "foreign_table_name": "WebPushNotificationState",
+      "foreign_column_name": "role"
+    },
+    {
+      "table_name": "WebPushNotificationState",
+      "constraint_name": "WebPushNotificationState_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "eventId",
+      "ordinal_position": 3,
+      "foreign_table_name": "WebPushNotificationState",
+      "foreign_column_name": "role"
+    },
+    {
+      "table_name": "WebPushNotificationState",
+      "constraint_name": "WebPushNotificationState_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "eventId",
+      "ordinal_position": 3,
+      "foreign_table_name": "WebPushNotificationState",
+      "foreign_column_name": "accountId"
+    },
+    {
+      "table_name": "WebPushNotificationState",
+      "constraint_name": "WebPushNotificationState_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "eventId",
+      "ordinal_position": 3,
+      "foreign_table_name": "WebPushNotificationState",
+      "foreign_column_name": "eventId"
+    },
+    {
+      "table_name": "WebPushSubscriptions",
+      "constraint_name": "WebPushSubscriptions_pkey",
+      "constraint_type": "PRIMARY KEY",
+      "column_name": "id",
+      "ordinal_position": 1,
+      "foreign_table_name": "WebPushSubscriptions",
+      "foreign_column_name": "id"
+    }
+  ]
+}

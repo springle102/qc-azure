@@ -368,22 +368,28 @@ app.patch('/api/freelancers/:id', requireManager, async (req, res) => {
 });
 
 async function getMergedQCs() {
-  const [qcs, accounts] = await Promise.all([
+  const [qcs, accounts, freelancers] = await Promise.all([
     getCollection('qcs'),
-    getCollection('accounts')
+    getCollection('accounts'),
+    getCollection('freelancers')
   ]);
   const accountQcs = accounts
     .filter((account) => hasAccountRole(account, 'QC'))
-    .map((account) => ({
-      qcId: account.id,
-      accountId: account.id,
-      freelancerId: account.freelancerId ?? null,
-      name: account.displayName || account.username,
-      email: account.email || null,
-      imageQR: null,
-      field: account.field || null,
-      fields: account.fields || (account.field ? [account.field] : [])
-    }));
+    .map((account) => {
+      const linkedFreelancer = freelancers.find((freelancer) => (
+        String(freelancer.fIld ?? freelancer.fId ?? freelancer.id) === String(account.freelancerId ?? '')
+      ));
+      return {
+        qcId: account.id,
+        accountId: account.id,
+        freelancerId: account.freelancerId ?? null,
+        name: account.displayName || account.username,
+        email: account.email || null,
+        imageQR: linkedFreelancer?.imageQR || null,
+        field: account.field || null,
+        fields: account.fields || (account.field ? [account.field] : [])
+      };
+    });
   return [...qcs, ...accountQcs].reduce((rows, row) => {
     const id = row.qcId ?? row.id;
     const existingIndex = rows.findIndex((item) => String(item.qcId ?? item.id) === String(id));
