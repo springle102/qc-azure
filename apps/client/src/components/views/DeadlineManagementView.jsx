@@ -163,7 +163,7 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
       const next = { ...current, [key]: value };
       if (key === 'difficulty') {
         next.price = getConfiguredPrice(current.type, value, difficultyPrices) ?? '';
-        next.receivePrice = calculateReceivePrice(next.price, next.completionPercent);
+        next.receivePrice = calculateReceivePrice(next.price, next.completionPercent, next.late);
       }
       if (key === 'type') {
         const availableLevels = getDifficultyOptions(value, difficultyLevels, difficultyPrices);
@@ -172,10 +172,10 @@ export function DeadlineManagementView({ deadlines = [], freelancers = [], qcs =
           : '';
         next.difficulty = nextDifficulty;
         next.price = getConfiguredPrice(value, nextDifficulty, difficultyPrices) ?? '';
-        next.receivePrice = calculateReceivePrice(next.price, next.completionPercent);
+        next.receivePrice = calculateReceivePrice(next.price, next.completionPercent, next.late);
       }
-      if (key === 'completionPercent') {
-        next.receivePrice = calculateReceivePrice(next.price, value);
+      if (key === 'completionPercent' || key === 'late') {
+        next.receivePrice = calculateReceivePrice(next.price, next.completionPercent, next.late);
       }
       return next;
     });
@@ -1149,11 +1149,13 @@ function getConfiguredPrice(field, difficulty, difficultyPrices) {
   return priceRow?.price;
 }
 
-function calculateReceivePrice(price, completionPercent) {
+function calculateReceivePrice(price, completionPercent, late) {
+  if (price === null || price === undefined || price === '') return '';
   const numericPrice = Number(price);
   const numericPercent = Number(completionPercent);
   if (!Number.isFinite(numericPrice) || !Number.isFinite(numericPercent)) return '';
-  return (numericPrice * numericPercent / 100).toFixed(2);
+  const lateRate = { '≤0h': 1, '1~3h': 0.9, '3~6h': 0.7, '6~10h': 0.5, '>10h': 0 }[normalizeLateValue(late)];
+  return (numericPrice * numericPercent / 100 * lateRate).toFixed(2);
 }
 
 function getDifficultyOptions(field, difficultyLevels, difficultyPrices) {
@@ -1205,7 +1207,7 @@ function createEditState(deadline, difficultyPrices) {
     difficulty: deadline.difficulty ?? '',
     qcId: deadline.qcId ?? '',
     price: deadline.price ?? getConfiguredPrice(deadline.type, deadline.difficulty, difficultyPrices) ?? '',
-    receivePrice: calculateReceivePrice(deadline.price ?? getConfiguredPrice(deadline.type, deadline.difficulty, difficultyPrices), deadline.completionPercent ?? 100),
+    receivePrice: calculateReceivePrice(deadline.price ?? getConfiguredPrice(deadline.type, deadline.difficulty, difficultyPrices), deadline.completionPercent ?? 100, deadline.late),
     feedback: deadline.feedback ?? '',
     late: normalizeLateValue(deadline.late)
   };

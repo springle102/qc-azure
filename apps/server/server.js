@@ -972,7 +972,7 @@ app.post('/api/deadlines', requireManager, async (req, res) => {
 
     payload.price = configuredPrice?.price ?? null;
     payload.receivePrice = configuredPrice
-      ? calculateReceivePrice(payload.price, payload.completionPercent)
+      ? calculateReceivePrice(payload.price, payload.completionPercent, payload.late)
       : null;
     const data = await insertDeadlineAndGoogleSheet(
       payload,
@@ -1113,7 +1113,8 @@ app.patch('/api/deadlines/:seriesId/:chapterNumber', requireAuth, async (req, re
     if (!needsReprice || configuredPrice) {
       const nextPrice = Object.prototype.hasOwnProperty.call(updates, 'price') ? updates.price : current.price;
       const nextCompletionPercent = updates.completionPercent ?? current.completionPercent ?? 100;
-      const calculatedReceivePrice = calculateReceivePrice(nextPrice, nextCompletionPercent);
+      const nextLate = updates.late ?? current.late;
+      const calculatedReceivePrice = calculateReceivePrice(nextPrice, nextCompletionPercent, nextLate);
       if (calculatedReceivePrice === null) {
         delete updates.receivePrice;
       } else {
@@ -1583,7 +1584,7 @@ function applyConfiguredPrices(deadlines, prices) {
   return deadlines.map((deadline) => {
     const configuredPrice = prices.find((item) => item.field === deadline.type && item.difficulty === deadline.difficulty);
     const price = configuredPrice?.price ?? deadline.price;
-    const receivePrice = calculateReceivePrice(price, deadline.completionPercent ?? 100);
+    const receivePrice = calculateReceivePrice(price, deadline.completionPercent ?? 100, deadline.late);
     const updated = receivePrice === null
       ? (configuredPrice ? { ...deadline, price } : deadline)
       : { ...deadline, price, receivePrice };
@@ -2860,7 +2861,7 @@ function buildImportedDeadline(row, headerIndex, fields, prices, freelancers, qc
     ...(lateHeaderIndex === undefined ? {} : { late: normalizeLateValue(getSheetValue(row, headerIndex, 'late')) }),
     completionPercent,
     price,
-    receivePrice: calculateReceivePrice(price, completionPercent),
+    receivePrice: calculateReceivePrice(price, completionPercent, getSheetValue(row, headerIndex, 'late')),
     ...(paymentHeaderIndex === undefined
       ? {}
       : { paymentApproved: parseImportedBoolean(getSheetValue(row, headerIndex, 'paymentApproved')) })
@@ -3506,8 +3507,16 @@ async function syncGoogleSheet() {
           : getGoogleSheetHeaderIndex(headerIndex, column, fieldOverride) !== undefined;
         return hasColumn && Object.prototype.hasOwnProperty.call(synchronizedRow, column);
       });
+      const effectivePricing = {
+        ...(current ?? row),
+        ...Object.fromEntries(rowAllowedColumns.map((column) => [column, synchronizedRow[column]]))
+      };
+      synchronizedRow.receivePrice = calculateReceivePrice(
+        effectivePricing.price, effectivePricing.completionPercent ?? 100, effectivePricing.late
+      );
       const writeColumns = [...new Set([
         ...rowAllowedColumns,
+        'receivePrice',
         'doingStartedAt',
         'workDurationSeconds',
         'submittedAt'
@@ -4395,11 +4404,13 @@ function buildImportedTimingTransition(current, nextStatus) {
   return buildStatusTransition(current, nextStatus);
 }
 
-function calculateReceivePrice(price, completionPercent) {
+function calculateReceivePrice(price, completionPercent, late) {
+  if (price === null || price === undefined || price === '') return null;
   const numericPrice = Number(price);
   const numericPercent = Number(completionPercent);
   if (!Number.isFinite(numericPrice) || !Number.isFinite(numericPercent)) return null;
-  return (numericPrice * numericPercent / 100).toFixed(2);
+  const lateRate = { '≤0h': 1, '1~3h': 0.9, '3~6h': 0.7, '6~10h': 0.5, '>10h': 0 }[normalizeLateValue(late)];
+  return (numericPrice * numericPercent / 100 * lateRate).toFixed(2);
 }
 
 function validatePricingPayload(payload, partial = false) {
@@ -4601,14 +4612,11 @@ function buildQCSalaryRows(qcs, deadlines, bonusSettings, month = null) {
 }
 
 function getDeadlineEarning(deadline) {
-  const receivePrice = Number(deadline.receivePrice);
+  const receivePrice = deadline.receivePrice === null || deadline.receivePrice === undefined || deadline.receivePrice === ''
+    ? NaN : Number(deadline.receivePrice);
   if (Number.isFinite(receivePrice)) return receivePrice;
 
-  const price = Number(deadline.price);
-  const completionPercent = Number(deadline.completionPercent ?? 100);
-  return Number.isFinite(price) && Number.isFinite(completionPercent)
-    ? price * completionPercent / 100
-    : 0;
+  return Number(calculateReceivePrice(deadline.price, deadline.completionPercent ?? 100, deadline.late) ?? 0);
 }
 
 function getIncompleteCompletionTransfer(deadline) {
