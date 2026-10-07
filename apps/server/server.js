@@ -753,7 +753,8 @@ app.get('/api/errors', requireAuth, async (req, res) => {
     const rows = filterErrorRowsForUser(await getCollection('errors'), req.authUser);
     const data = rows.map((row) => {
       if (req.authUser.role === 'Freelancer') {
-        const { sourceSheetUrl, sourceUrl, sourceRow, ...visibleRow } = row;
+        // Omit Sheet source metadata from the Freelancer response.
+        const { sourceSheetUrl: _sourceSheetUrl, sourceUrl: _sourceUrl, sourceRow: _sourceRow, ...visibleRow } = row;
         return visibleRow;
       }
       return {
@@ -1163,12 +1164,8 @@ app.delete('/api/deadlines/:seriesId/:chapterNumber', requireManager, async (req
     const current = currentRows.find((item) => Number(item.seriesId) === seriesId && String(item.chapterNumber ?? '').trim() === chapterNumber);
     if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy deadline cần xóa.' });
 
-    try {
-      const deletedRows = await deleteRowsByKeys('deadlines', { seriesId, chapterNumber });
-      res.json({ success: true, data: deletedRows[0] || current });
-    } catch (error) {
-      throw error;
-    }
+    const deletedRows = await deleteRowsByKeys('deadlines', { seriesId, chapterNumber });
+    res.json({ success: true, data: deletedRows[0] || current });
   } catch (error) {
     res.status(error.statusCode || 502).json({ success: false, message: error.message });
   }
@@ -3280,54 +3277,6 @@ async function syncDeadlineWithGoogleSheet(row, { action = 'append', columns = n
   return { inserted: true };
 }
 
-async function deleteDeadlinesFromGoogleSheet(rows) {
-  if (rows.length === 0) return;
-  const settings = await getGeneralSettings();
-  const sheetUrl = normalizeGoogleSheetUrl(settings.googleSheetUrl);
-  if (!sheetUrl) return;
-  const { spreadsheetId } = parseGoogleSheetReference(sheetUrl);
-  const [fields, sheetReadResult] = await Promise.all([
-    getConfiguredFields(),
-    readGoogleSheetTabs({ ...settings, googleSheetUrl: sheetUrl })
-  ]);
-  const missingFields = new Set((sheetReadResult.missingTabs || []).map(({ field }) => String(field ?? '').trim().toLowerCase()).filter(Boolean));
-  if (rows.some((row) => missingFields.has(String(row.type ?? '').trim().toLowerCase()))) {
-    throw new Error(`Không thể đồng bộ hai chiều vì thiếu tab Google Sheet: ${sheetReadResult.missingTabs.map(({ field, missingTab }) => `${field} → "${missingTab}"`).join(', ')}.`);
-  }
-  const tabs = sheetReadResult.tabs.map((tab) => getGoogleSheetTabSnapshot(tab, fields));
-  const keys = new Set(rows.map((row) => `${Number(row.seriesId)}:${String(row.chapterNumber ?? '').trim()}`));
-  const requests = [];
-  tabs.forEach((tab) => {
-    for (let index = tab.headerRowIndex + 1; index < tab.values.length; index += 1) {
-      const row = tab.values[index] || [];
-      if (isDecorativeGoogleSheetRow(row, tab.headerIndex, tab.fieldOverride)) continue;
-      const key = `${Number(getSheetValue(row, tab.headerIndex, 'seriesId', tab.fieldOverride))}:${String(getSheetValue(row, tab.headerIndex, 'chapterNumber')).trim()}`;
-      if (!keys.has(key)) continue;
-      requests.push({
-        deleteDimension: {
-          range: {
-            sheetId: Number(tab.sheetId),
-            dimension: 'ROWS',
-            startIndex: tab.startRow + index,
-            endIndex: tab.startRow + index + 1
-          }
-        }
-      });
-    }
-  });
-  if (requests.length === 0) return;
-  requests.sort((left, right) => {
-    const leftRange = left.deleteDimension.range;
-    const rightRange = right.deleteDimension.range;
-    if (leftRange.sheetId !== rightRange.sheetId) return rightRange.sheetId - leftRange.sheetId;
-    return rightRange.startIndex - leftRange.startIndex;
-  });
-  return googleSheetsRequest(`spreadsheets/${encodeURIComponent(spreadsheetId)}:batchUpdate`, {
-    method: 'POST',
-    body: { requests }
-  });
-}
-
 function queueDeadlineSheetSync(row, columns) {
   const key = `${row.seriesId}:${row.chapterNumber}`;
   const previous = pendingStatusSheetSyncs.get(key) || Promise.resolve();
@@ -3881,7 +3830,6 @@ function resolveZipPath(basePath, target) {
 function parseZipEntries(buffer) {
   const endOfCentralDirectorySignature = Buffer.from([0x50, 0x4b, 0x05, 0x06]);
   const centralDirectorySignature = 0x02014b50;
-  const localFileSignature = 0x04034b50;
   const endOfCentralDirectoryOffset = buffer.lastIndexOf(endOfCentralDirectorySignature);
   if (endOfCentralDirectoryOffset < 0) throw new Error('File xuất Google Sheet không phải ZIP/XLSX hợp lệ.');
 

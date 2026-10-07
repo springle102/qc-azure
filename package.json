@@ -8,6 +8,8 @@
     "dev:client": "cd apps/client && npm run dev",
     "dev:server": "cd apps/server && npm run dev",
     "build:client": "cd apps/client && npm run build",
+    "test": "node --test apps/client/tests/*.test.mjs apps/server/tests/*.test.mjs",
+    "lint": "node apps/client/node_modules/oxlint/bin/oxlint apps scripts",
     "docker:up": "node scripts/docker.mjs up",
     "docker:down": "node scripts/docker.mjs down",
     "docker:logs": "node scripts/docker.mjs logs",

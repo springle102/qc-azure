@@ -1,6 +1,6 @@
 # Hướng dẫn cho agent
 
-Tài liệu này áp dụng cho toàn bộ repository QC Webtoon. Trước khi sửa, hãy đọc phần liên quan trong `README.md`, README của ứng dụng con, `docs/use-case.md` và các migration/schema hiện có để giữ thay đổi nhất quán với hành vi và dữ liệu của dự án.
+Tài liệu này áp dụng cho toàn bộ repository QC Webtoon. Trước khi sửa, hãy đọc phần liên quan trong `README.md`, README của ứng dụng con, `docs/diagrams/README.md` và các migration/metadata schema hiện có để giữ thay đổi nhất quán với hành vi và dữ liệu của dự án.
 
 ## Kiến trúc repository
 
@@ -30,9 +30,13 @@ Frontend mặc định gọi API tại `http://localhost:5000/api`; có thể c�
 Các lệnh kiểm tra hiện có:
 
 ```bash
+npm test
+npm run lint
 cd apps/client && npm run lint
 cd apps/client && npm run build
 ```
+
+Chạy `npm test` và `npm run lint` từ thư mục gốc sau khi đã cài dependencies của client và server. Các test database chỉ chạy khi có biến `TEST_*_DATABASE_URL` tương ứng trỏ tới database kiểm thử riêng.
 
 Chạy một bài test backend từ thư mục gốc bằng Node.js test runner:
 
@@ -40,7 +44,7 @@ Chạy một bài test backend từ thư mục gốc bằng Node.js test runner:
 node --test apps/server/tests/<ten-file>.test.mjs
 ```
 
-Có thể chạy toàn bộ test backend bằng `node --test apps/server/tests/*.test.mjs` trong môi trường hỗ trợ glob của shell hiện tại. Kiểm tra các script trong `package.json` trước khi giả định có lệnh lint, build hoặc test ở cấp root/server.
+Có thể chạy toàn bộ test backend bằng `node --test apps/server/tests/*.test.mjs`; Node.js 24 hỗ trợ glob của test runner. Kiểm tra các script trong `package.json` trước khi giả định có lệnh lint, build hoặc test ở cấp server.
 
 ## Quy tắc khi thay đổi
 

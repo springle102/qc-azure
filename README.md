@@ -26,7 +26,7 @@ Sidebar hiện gồm:
 - Lương
 - Hồ sơ cá nhân
 
-Các bảng giao diện bám theo schema trong `docs/database diagram.png` và schema mẫu:
+Các bảng giao diện bám theo [sơ đồ database và use case](docs/diagrams/README.md), cùng snapshot schema trong `docs/diagrams/schema-metadata.json`:
 
 - `Freelancer`: `fIld`, `name`, `email`, `field`, `note`, `salary`, `imageQR`
 - `DeadlineRegistrations`: `fIld`, `name`, số chapter nhận theo tuần/tháng, độ ổn định và note
@@ -39,7 +39,7 @@ Các bảng giao diện bám theo schema trong `docs/database diagram.png` và s
 
 Deadline công ty và bảng `Companies` đã được loại bỏ khỏi giao diện, API và database.
 
-File PostgreSQL mẫu để tạo schema và dữ liệu test: `docs/sample-database.sql`. Nếu database đã tồn tại từ trước, chạy các migration trong `docs/migrations/` trong SQL Editor để thêm đăng ký deadline, cột màu chữ, mapping folder Drive, sao chép raw từ Drive và bảng Quản lý lỗi. Sheet lỗi gốc cần có các cột `Title`, `Chapter`, `Error Type`, `Error`, `Note`, `Editor`, `Fix/Check`; Service Account cần quyền Editor trên từng Sheet. `Error Type` gồm: `TR`, `File`, `Censor`, `Exposure`, `Logo/Credit`, `Text`, `SFX`, `Image`, `Bubble`, `Aesthetics`, `RD`.
+Repository hiện có snapshot schema và các migration trong `docs/migrations/`, chưa có script khởi tạo đầy đủ cho database mới. Snapshot dùng để đối chiếu cấu trúc, không phải SQL khởi tạo; với database đã tồn tại, xem yêu cầu và thứ tự áp dụng trong từng migration cùng [hướng dẫn triển khai](docs/deployment.md). Sheet lỗi gốc cần có các cột `Title`, `Chapter`, `Error Type`, `Error`, `Note`, `Editor`, `Fix/Check`; Service Account cần quyền Editor trên từng Sheet. `Error Type` gồm: `TR`, `File`, `Censor`, `Exposure`, `Logo/Credit`, `Text`, `SFX`, `Image`, `Bubble`, `Aesthetics`, `RD`.
 
 ## Cấu hình dữ liệu
 
@@ -65,7 +65,6 @@ GOOGLE_SERVICE_ACCOUNT_FILE=
 
 `DATABASE_URL` có thể trỏ tới PostgreSQL local hoặc connection string PostgreSQL của Supabase. Nếu dùng Supabase, lấy connection string ở mục **Connect** trong Supabase Dashboard; backend tự bật TLS và xác minh chứng chỉ cho host Supabase. Khi `DATABASE_URL` được cấu hình, backend dùng kết nối PostgreSQL này trước Supabase REST.
 
-Tài khoản Admin mẫu trong `docs/sample-database.sql`: username `admin`, password `admin123`.
 Khi cấp account role `Freelancer` hoặc `QC`, Admin chọn mảng từ danh sách cấu hình; QC có thể chọn nhiều mảng. Freelancer chỉ được chỉnh status `Doing`/`Submitted`, còn QC/Admin được chỉnh các status còn lại. Khi task chuyển sang `Doing`, hệ thống bắt đầu lưu thời gian làm; khi rời `Doing`, thời gian được chốt vào `workDurationSeconds`.
 
 Đồng bộ Google Sheet riêng tư: tạo Google Service Account, bật Google Sheets API, chia sẻ file cho email `client_email` của Service Account với quyền Editor, rồi đặt file key JSON ngoài Git qua `GOOGLE_SERVICE_ACCOUNT_FILE`. Sau đó Admin nhập link Sheet trong tab Cấu hình chung, khai báo mỗi tab tương ứng một mảng (Japan/Latin/QC) và chọn Đồng bộ ngay hoặc bật tự động đồng bộ. Đồng bộ deadline là hai chiều theo khóa `seriesId` + `chapterNumber`: tạo/sửa/xóa ở Sheet hoặc web sẽ được phản ánh sang bên còn lại. Để tự gắn URL bộ truyện, bật thêm Google Drive API và chia sẻ Drive tổng (hoặc folder tổng) cho cùng email Service Account với quyền Viewer. Khi đồng bộ, hệ thống tìm folder có tên chính xác bằng `seriesId` và điền link folder vào `urlSeries` nếu dòng chưa có URL.
@@ -135,3 +134,15 @@ npm run dev
 ```
 
 Frontend mặc định gọi API tại `http://localhost:5000/api`. Có thể đổi bằng `VITE_API_URL`.
+
+## Kiểm tra code
+
+Sau khi cài dependencies cho cả hai ứng dụng, chạy từ thư mục gốc:
+
+```bash
+npm test
+npm run lint
+npm run build:client
+```
+
+`npm test` chạy test client và server; các test PostgreSQL cần biến `TEST_*_DATABASE_URL` trỏ tới database kiểm thử riêng và sẽ được bỏ qua khi chưa cấu hình. `npm run lint` dùng oxlint đã cài trong client để kiểm tra `apps/` và `scripts/`.
