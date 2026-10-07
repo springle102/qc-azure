@@ -395,6 +395,10 @@ export function ErrorManagementView({
   onDelete
 }) {
   const canManage = ['Admin', 'QC'].includes(currentUser.role);
+  const canEditNotes = canManage || currentUser.role === 'Freelancer';
+  const editableRowFields = canManage
+    ? ['title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editorFreelancerId']
+    : ['note'];
   const [activeField, setActiveField] = useState(fields[0]?.name || '');
   const [sort, setSort] = useState({ column: 'title', direction: null });
   const [errorTypeFilter, setErrorTypeFilter] = useState(null);
@@ -503,7 +507,7 @@ export function ErrorManagementView({
     }));
   };
 
-  const hasRowDraftChanges = (row, draft) => ['title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editorFreelancerId']
+  const hasRowDraftChanges = (row, draft) => editableRowFields
     .some((key) => String(draft[key] ?? '') !== String(row[key] ?? ''));
 
   const handleStartInlineRow = () => {
@@ -554,7 +558,7 @@ export function ErrorManagementView({
     const draft = draftRows[row.id];
     if (!draft || !hasRowDraftChanges(row, draft)) return;
     const updates = {};
-    ['title', 'chapter', 'errorType', 'screenshot', 'error', 'note', 'editorFreelancerId'].forEach((key) => {
+    editableRowFields.forEach((key) => {
       if (String(draft[key] ?? '') !== String(row[key] ?? '')) updates[key] = draft[key];
     });
     const updated = await handleUpdate(row, updates);
@@ -804,7 +808,7 @@ export function ErrorManagementView({
                     <th><div className="error-column-header"><span>Note của FL hoặc QC</span></div></th>
                     <th><div className="error-column-header"><span>Editor</span><ErrorColumnFilterButton label="Editor" values={editorFilterOptions} activeValues={editorFilter} activeSortDirection={sort.column === 'editor' ? sort.direction : null} onApply={setEditorFilter} onSort={(direction) => updateSort('editor', direction)} /></div></th>
                     <th><div className="error-column-header"><span>Fix/Check</span></div></th>
-                    {canManage && <th><div className="error-column-header"><span>Thao tác</span></div></th>}
+                    {canEditNotes && <th><div className="error-column-header"><span>Thao tác</span></div></th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -821,12 +825,12 @@ export function ErrorManagementView({
                       <td><div className="error-row-actions"><button type="button" className="btn btn-primary btn-sm" onClick={handleSaveInlineRow} disabled={savingRowId === 'inline-new'}><IconCheck size={14} /> Lưu</button><button type="button" className="btn btn-outline btn-sm" onClick={() => setInlineErrorRow(null)} disabled={savingRowId === 'inline-new'}>Hủy</button></div></td>
                     </tr>
                   )}
-                  {activeErrors.length === 0 && !inlineErrorRow ? <tr><td colSpan={canManage ? 9 : 8} className="table-empty">{Array.isArray(editorFilter) || Array.isArray(errorTypeFilter) ? 'Không có lỗi phù hợp với bộ lọc.' : 'Chưa có lỗi trong mảng này.'}</td></tr> : activeErrors.map((row) => {
+                  {activeErrors.length === 0 && !inlineErrorRow ? <tr><td colSpan={canEditNotes ? 9 : 8} className="table-empty">{Array.isArray(editorFilter) || Array.isArray(errorTypeFilter) ? 'Không có lỗi phù hợp với bộ lọc.' : 'Chưa có lỗi trong mảng này.'}</td></tr> : activeErrors.map((row) => {
                     const rowDraft = getRowDraft(row);
                     const isCheckPending = Object.prototype.hasOwnProperty.call(fixCheckOverrides, String(row.id));
                     const fixCheck = isCheckPending ? fixCheckOverrides[String(row.id)] : Boolean(row.fixCheck);
                     const isRowSaving = savingRowId === row.id || isCheckPending;
-                    const isRowDirty = canManage && hasRowDraftChanges(row, rowDraft);
+                    const isRowDirty = canEditNotes && hasRowDraftChanges(row, rowDraft);
                     return <tr key={row.id} className={fixCheck ? 'error-row-checked' : ''}>
                       <td className="error-title-cell">{canManage ? <input className="error-inline-input" value={rowDraft.title || ''} onChange={(event) => updateRowDraft(row, 'title', event.target.value)} disabled={isRowSaving} /> : <strong>{row.title}</strong>}</td>
                       <td>{canManage ? <input className="error-inline-input" value={rowDraft.chapter || ''} onChange={(event) => updateRowDraft(row, 'chapter', event.target.value)} disabled={isRowSaving} /> : row.chapter}</td>
@@ -837,10 +841,10 @@ export function ErrorManagementView({
                       </td>
                       <td className="error-screenshot-cell">{canManage ? <ScreenshotUpload compact value={rowDraft.screenshot} onChange={(value) => updateRowDraft(row, 'screenshot', value)} onPreview={() => setSelectedScreenshot({ ...row, ...rowDraft })} disabled={isRowSaving} /> : getScreenshotImages(row.screenshot).length > 0 ? <button type="button" className="error-screenshot-preview-button" onClick={() => setSelectedScreenshot(row)} title="Xem chi tiết screenshot"><span className="error-screenshot-preview-grid">{getScreenshotImages(row.screenshot).map((image, index) => <img src={image} alt={`Screenshot ${index + 1} cho ${row.title}`} key={`${image.slice(0, 32)}-${index}`} />)}</span></button> : <span className="error-screenshot-empty">—</span>}</td>
                       <td className="error-description-cell">{canManage ? <textarea className="error-inline-textarea" value={rowDraft.error || ''} onChange={(event) => updateRowDraft(row, 'error', event.target.value)} disabled={isRowSaving} /> : row.error}</td>
-                      <td className="error-note-cell">{canManage ? <NoteEditor value={rowDraft.note || ''} onChange={(value) => updateRowDraft(row, 'note', value)} onPreview={() => handlePreviewNote({ ...row, ...rowDraft })} disabled={isRowSaving} /> : <div className="error-note-readonly">{isImageValue(row.note) ? <button type="button" className="error-screenshot-upload-preview-trigger" onClick={() => handlePreviewNote(row)} title="Xem chi tiết Note"><img className="error-note-readonly-image" src={row.note} alt={`Note cho ${row.title}`} /></button> : (row.note || '—')}</div>}</td>
+                      <td className="error-note-cell">{canEditNotes ? <NoteEditor value={rowDraft.note || ''} onChange={(value) => updateRowDraft(row, 'note', value)} onPreview={() => handlePreviewNote({ ...row, ...rowDraft })} disabled={isRowSaving} /> : <div className="error-note-readonly">{isImageValue(row.note) ? <button type="button" className="error-screenshot-upload-preview-trigger" onClick={() => handlePreviewNote(row)} title="Xem chi tiết Note"><img className="error-note-readonly-image" src={row.note} alt={`Note cho ${row.title}`} /></button> : (row.note || '—')}</div>}</td>
                       <td>{canManage ? <select className="error-inline-select" value={rowDraft.editorFreelancerId || ''} onChange={(event) => updateRowDraft(row, 'editorFreelancerId', event.target.value)} disabled={isRowSaving}><option value="">Chọn freelancer</option>{editorOptions.map((freelancer) => <option value={getFreelancerId(freelancer)} key={getFreelancerId(freelancer)}>{freelancer.name || freelancer.email}</option>)}</select> : <span className="error-editor-badge">{row.editor || 'Chưa gán'}</span>}</td>
                       <td className="error-check-cell"><label className="error-check-control"><input type="checkbox" checked={fixCheck} onChange={(event) => handleCheck(row, event.target.checked)} disabled={isLoading || isSaving || isRowSaving} aria-busy={isCheckPending} /><span>{isCheckPending ? 'Đang lưu...' : fixCheck ? 'Đã xem' : 'Chưa xem'}</span></label></td>
-                      {canManage && <td><div className="error-row-actions"><button type="button" className="btn btn-primary btn-sm" onClick={() => handleSaveRowDraft(row)} disabled={isRowSaving || !isRowDirty}><IconCheck size={14} /> Lưu</button><button type="button" className="btn btn-danger btn-sm" onClick={() => handleDelete(row)} disabled={isRowSaving}><IconTrash size={14} /> Xóa</button></div></td>}
+                      {canEditNotes && <td><div className="error-row-actions"><button type="button" className="btn btn-primary btn-sm" onClick={() => handleSaveRowDraft(row)} disabled={isRowSaving || !isRowDirty}><IconCheck size={14} /> Lưu</button>{canManage && <button type="button" className="btn btn-danger btn-sm" onClick={() => handleDelete(row)} disabled={isRowSaving}><IconTrash size={14} /> Xóa</button>}</div></td>}
                     </tr>;
                   })}
                 </tbody>

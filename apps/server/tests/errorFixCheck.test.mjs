@@ -51,7 +51,7 @@ function harness(sheet = fixture()) {
     block,
     ...['normalizeSheetHeader', 'parseGoogleSheetReference', 'parseImportedBoolean', 'resolveErrorEditor', 'getFreelancerId',
       'filterErrorRowsForUser', 'canManagerManageField', 'assertManagerCanManageField', 'runWithConcurrency',
-      'validateFreelancerErrorUpdatePayload', 'validateErrorUpdatePayload', 'parseBooleanInput'].map(extract)
+      'validateFreelancerErrorUpdatePayload', 'validateErrorUpdatePayload', 'parseBooleanInput', 'nullableText'].map(extract)
   ].join('\n'), context);
   return { context, writes, dbWrites, rows, sheet };
 }
@@ -146,6 +146,46 @@ test('Freelancer cannot refresh or tick another assignee; QC cannot tick another
   assert.throws(() => context.validateFreelancerErrorUpdatePayload({ title: 'X', fixCheck: true }, current, { freelancerId: 9 }), /Fix\/Check/);
   await assert.rejects(context.validateErrorUpdatePayload({ fixCheck: true }, { role: 'QC', fields: ['Korea'] }, current), /quyền/);
   assert.equal(dbWrites.length, 0);
+});
+
+test('Freelancer can edit, clear, or use an image Note on their assigned error', () => {
+  const { context } = harness();
+  const user = { role: 'Freelancer', freelancerId: '9' };
+  for (const [note, expected] of [['  Đã sửa lỗi  ', 'Đã sửa lỗi'], ['', null], [null, null], ['data:image/png;base64,aGVsbG8=', 'data:image/png;base64,aGVsbG8=']]) {
+    assert.deepEqual(plain(context.validateFreelancerErrorUpdatePayload({ note }, current, user)), { note: expected });
+  }
+  assert.deepEqual(plain(context.validateFreelancerErrorUpdatePayload({ note: 'Đã sửa', fixCheck: true }, current, user)), { note: 'Đã sửa', fixCheck: true });
+});
+
+test('Freelancer Note edits reject other assignments, missing profiles, and protected fields', () => {
+  const { context } = harness();
+  assert.throws(() => context.validateFreelancerErrorUpdatePayload({ note: 'Changed' }, current, { freelancerId: 10 }), /được giao/);
+  assert.throws(() => context.validateFreelancerErrorUpdatePayload({ note: 'Changed' }, { ...current, editorFreelancerId: null }, {}), /được giao/);
+  for (const key of ['field', 'title', 'chapter', 'errorType', 'screenshot', 'error', 'editor', 'editorFreelancerId', 'sourceRow', 'sourceUrl']) {
+    assert.throws(() => context.validateFreelancerErrorUpdatePayload({ note: 'Changed', [key]: 'Changed' }, current, { freelancerId: 9 }), /chỉ được cập nhật/);
+  }
+  assert.throws(() => context.validateFreelancerErrorUpdatePayload({}, current, { freelancerId: 9 }), /Cần có/);
+});
+
+test('PATCH Note saves only Note and timestamp; unauthorized edits do not write', async () => {
+  for (const [freelancerId, body, expectedCode] of [[9, { note: 'Đã sửa' }, 200], [10, { note: 'Changed' }, 403], [9, { note: 'Changed', title: 'Changed' }, 403]]) {
+    const { context, rows, writes, dbWrites } = harness();
+    let route;
+    context.app = { patch: (_path, _auth, handler) => { route = handler; } };
+    context.requireAuth = () => {};
+    vm.runInContext(source.slice(source.indexOf("app.patch('/api/errors/:id'"), source.indexOf("app.delete('/api/errors/:id'")), context);
+    const response = { code: 200, status(code) { this.code = code; return this; }, json(value) { this.body = value; return this; } };
+    await route({ params: { id: '42' }, authUser: { role: 'Freelancer', freelancerId }, body }, response);
+    assert.equal(response.code, expectedCode);
+    assert.equal(writes.length, 0);
+    assert.equal(dbWrites.length, expectedCode === 200 ? 1 : 0);
+    assert.equal(rows[0].title, current.title);
+    assert.equal(rows[0].fixCheck, current.fixCheck);
+    if (expectedCode === 200) {
+      assert.equal(rows[0].note, body.note);
+      assert.deepEqual(Object.keys(dbWrites[0].updates).sort(), ['note', 'updatedAt']);
+    }
+  }
 });
 
 test('operation queue keeps old reads ahead of later writes and recovers after failure', async () => {

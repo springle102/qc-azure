@@ -4719,15 +4719,16 @@ async function validateErrorUpdatePayload(payload, user, current) {
 }
 
 function validateFreelancerErrorUpdatePayload(payload, current, user) {
-  if (String(current.editorFreelancerId ?? '') !== String(user.freelancerId ?? '')) {
+  if (!String(user.freelancerId ?? '').trim() || String(current.editorFreelancerId ?? '') !== String(user.freelancerId)) {
     throw authorizationError('Bạn chỉ được cập nhật lỗi được giao cho mình.');
   }
   if (!payload || typeof payload !== 'object') throw validationError('Dữ liệu cập nhật lỗi không hợp lệ.');
   const updates = {};
+  if (Object.prototype.hasOwnProperty.call(payload, 'note')) updates.note = nullableText(payload.note);
   if (Object.prototype.hasOwnProperty.call(payload, 'fixCheck')) updates.fixCheck = parseBooleanInput(payload.fixCheck, 'Fix/Check');
-  const unsupported = Object.keys(payload).filter((key) => key !== 'fixCheck');
-  if (unsupported.length > 0) throw authorizationError('Freelancer chỉ được cập nhật Fix/Check.');
-  if (Object.keys(updates).length === 0) throw validationError('Cần có Fix/Check để cập nhật.');
+  const unsupported = Object.keys(payload).filter((key) => !['note', 'fixCheck'].includes(key));
+  if (unsupported.length > 0) throw authorizationError('Freelancer chỉ được cập nhật Note và Fix/Check.');
+  if (Object.keys(updates).length === 0) throw validationError('Cần có Note hoặc Fix/Check để cập nhật.');
   return updates;
 }
 
